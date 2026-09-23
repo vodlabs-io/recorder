@@ -63,8 +63,10 @@ import { desktopLogPath, installFileLogging } from "./log-file";
 // Before anything else logs: everything above this point lands only on stdout.
 installFileLogging();
 
+// IPv4 explicitly, matching Vite's server.host: "localhost" can resolve to a
+// different server holding the same port on ::1.
 const DEV_SERVER_PORT = 5173;
-const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+const DEV_SERVER_URL = `http://127.0.0.1:${DEV_SERVER_PORT}`;
 const NATS_URL = process.env.VLREC_NATS_URL ?? "nats://127.0.0.1:4222";
 // A few requests make the daemon wait on a remote answer before it can reply,
 // so they need a ceiling above the daemon's own. Time out below it and the user
