@@ -63,7 +63,7 @@ bun run dev                 # rebuilds and relaunches on changes to desktop/src/
 bun run build:stable        # a release build, in ./artifacts
 ```
 
-`bun run dev:hmr` serves the interface from Vite on `http://localhost:5173`,
+`bun run dev:hmr` serves the interface from Vite on `http://127.0.0.1:5173`,
 and the app window loads it from there instead of from the bundle.
 
 Only one daemon can run at a time, so quit the installed app first. The
