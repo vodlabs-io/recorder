@@ -1,0 +1,207 @@
+name: Build and Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# permissions:
+#   contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    env:
+      # Developer ID Application certificate (.p12) and App Store Connect API
+      # key (.p8), both base64-encoded. goreleaser signs and notarizes the darwin
+      # vod/vlrecd binaries with them (see the notarize block in
+      # .goreleaser.yaml); the desktop job signs the macOS app with the same pair.
+      MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+      MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+      MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+      MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+      MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+    steps:
+      # A tag push publishes, so check before anything is built. Manual
+      # snapshot runs sign only when the secrets are set.
+      - name: Require macOS signing secrets
+        if: github.event_name == 'push'
+        run: |
+          for name in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_KEY MACOS_NOTARY_KEY_ID MACOS_NOTARY_ISSUER_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret $name is not set; refusing to publish unsigned macOS builds"
+              exit 1
+            fi
+          done
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          # The module names the toolchain; see the toolchain directive in go.mod.
+          go-version-file: go.mod
+
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: >-
+            release --clean
+            ${{ github.event_name == 'workflow_dispatch' && '--snapshot' || '' }}
+        env:
+          # RELEASE_PAT: fine-grained PAT with:
+          #   - Contents: read/write on vodlabs-io/assets (publish releases there)
+          # Releases land on vodlabs-io/assets so artifacts are publicly downloadable
+          # while this repo remains private.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
+          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload snapshot artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: snapshot
+          path: |
+            dist/cli_*
+            dist/daemon_*
+            dist/checksums.txt
+          retention-days: 7
+
+  # Build the Electrobun desktop app natively on each platform. The app is
+  # independent of the Go binaries above; it downloads the daemon at runtime
+  # from vodlabs-io/assets, so this only needs Bun + `electrobun build`.
+  # Runs after goreleaser so the vodlabs-io/assets release already exists; each
+  # matrix leg appends its installer + update metadata to that same v* release.
+  desktop:
+    needs: goreleaser
+    strategy:
+      # One platform failing shouldn't abort the others' uploads.
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-14, name: macos-arm64 }     # Apple Silicon
+          - { runner: macos-15-intel, name: macos-x64 } # Intel
+          - { runner: windows-latest, name: win-x64 }
+          - { runner: ubuntu-latest, name: linux-x64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Tag pushes carry the release version; manual runs build a dev snapshot.
+      - name: Resolve app version
+        id: version
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Puts the Developer ID identity in a throwaway keychain and exports the
+      # ELECTROBUN_* variables that make electrobun.config.ts turn on signing
+      # and notarization. Tag pushes never build unsigned; manual runs do when
+      # the secrets are absent.
+      - name: Set up macOS signing
+        id: signing
+        if: runner.os == 'macOS'
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MACOS_SIGN_P12" ]; then
+            if [ "$GITHUB_EVENT_NAME" = push ]; then
+              echo "::error::Secret MACOS_SIGN_P12 is not set; refusing to publish an unsigned macOS build"
+              exit 1
+            fi
+            echo "::notice::No signing secrets; building the macOS app unsigned"
+            exit 0
+          fi
+
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -base64 24)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          echo "$MACOS_SIGN_P12" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$MACOS_SIGN_PASSWORD" -f pkcs12 -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/signing.p12"
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain"
+
+          identity="$(security find-identity -v -p codesigning "$keychain" | awk -F'"' '/Developer ID Application/ { print $2; exit }')"
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_SIGN_P12 holds no valid Developer ID Application identity"
+            exit 1
+          fi
+          echo "$MACOS_NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          {
+            echo "ELECTROBUN_DEVELOPER_ID=$identity"
+            echo "ELECTROBUN_APPLEAPIKEYPATH=$RUNNER_TEMP/notary.p8"
+            echo "ELECTROBUN_APPLEAPIKEY=$MACOS_NOTARY_KEY_ID"
+            echo "ELECTROBUN_APPLEAPIISSUER=$MACOS_NOTARY_ISSUER_ID"
+          } >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      # build:stable = `vite build && electrobun build --env=stable`. Bun runs
+      # the script cross-platform; Electrobun builds for this runner's OS/arch
+      # and emits artifacts/stable-<os>-<arch>-* (installer, .app.tar.zst, update.json).
+      - name: Build desktop app
+        run: bun run build:stable
+        env:
+          ELECTROBUN_APP_VERSION: ${{ steps.version.outputs.value }}
+
+      # Electrobun fails the build only on an "Invalid" notarization verdict,
+      # so confirm the DMG users download passes Gatekeeper.
+      - name: Verify macOS notarization
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          set -euo pipefail
+          for dmg in artifacts/*.dmg; do
+            xcrun stapler validate "$dmg"
+            spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+          done
+
+      # Tag push: publish installers to the same vodlabs-io/assets release that
+      # goreleaser created, so they're publicly downloadable while this repo stays private.
+      - name: Publish to release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v3
+        with:
+          repository: vodlabs-io/assets
+          tag_name: ${{ github.ref_name }}
+          files: artifacts/*
+          # Don't touch the notes/flags goreleaser already set on the release.
+          append_body: false
+          # This step UPDATES the release goreleaser created, and softprops sends
+          # `prerelease` (default false) on update — which would re-flip an rc
+          # release back to a full release, undoing goreleaser's prerelease:auto.
+          # Mirror that rule here: a SemVer pre-release tag contains a hyphen
+          # (e.g. v1.2.3-rc.4), so keep those flagged as pre-releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          token: ${{ secrets.RELEASE_PAT }}
+
+      # Manual run: goreleaser only built a snapshot (no release), so keep the
+      # desktop artifacts on the workflow run instead.
+      - name: Upload snapshot artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.name }}
+          path: artifacts/*
+          retention-days: 7

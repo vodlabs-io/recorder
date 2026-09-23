@@ -1,0 +1,121 @@
+version: 2
+
+project_name: recorder
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: vod
+    main: ./cmd/cli
+    binary: vod
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/vodlabs-io/recorder/internal/version.Version={{.Version}}
+      - -X github.com/vodlabs-io/recorder/internal/version.Commit={{.FullCommit}}
+    # The CLI embeds ffmpeg too: `vod queue` pulls in internal/encoding ->
+    # internal/processing -> internal/ffmpeg, whose //go:embed needs
+    # internal/ffmpeg/bin/<platform>/ populated before the build. Keep this in
+    # step with the identical hook on vlrecd below — dropping it fails the
+    # build on a clean checkout with "pattern bin/<platform>/ffmpeg: no
+    # matching files found".
+    hooks:
+      pre:
+        - cmd: bash internal/ffmpeg/download.sh
+          env:
+            - GOOS={{ .Os }}
+            - GOARCH={{ .Arch }}
+            - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
+
+  - id: vlrecd
+    main: ./cmd/daemon
+    binary: vlrecd
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/vodlabs-io/recorder/internal/version.Version={{.Version}}
+      - -X github.com/vodlabs-io/recorder/internal/version.Commit={{.FullCommit}}
+    hooks:
+      pre:
+        - cmd: bash internal/ffmpeg/download.sh
+          env:
+            - GOOS={{ .Os }}
+            - GOARCH={{ .Arch }}
+            - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
+
+# Developer ID signs and notarizes the darwin binaries before they're archived,
+# using the certificate and API key the release workflow passes in. Runs on
+# the Linux runner (quill, no Xcode). A bare binary can't carry a stapled
+# ticket, so Gatekeeper looks it up online.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids: [vod, vlrecd]
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
+
+archives:
+  - id: cli
+    ids: [vod]
+    name_template: "cli_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+  - id: daemon
+    ids: [vlrecd]
+    name_template: "daemon_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "build-{{ .ShortCommit }}"
+
+changelog:
+  use: git
+
+release:
+  draft: false
+  # auto: mark the GitHub release as a pre-release when the tag carries a SemVer
+  # pre-release segment (e.g. v1.2.3-rc.4). This keeps rc tags out of GitHub's
+  # "Latest" release, which every updater path resolves via the token-free
+  # <repo>/releases/latest redirect (desktop self-update baseUrl, the daemon
+  # bootstrap download, the daemon update endpoint, and the CLI update command —
+  # see internal/vlupdate.LatestVersion). With prerelease:false an rc could
+  # become "Latest" and get pushed to all users.
+  prerelease: auto
+  github:
+    owner: vodlabs-io
+    name: assets
+  # The CLI installers, served from <assets>/releases/latest/download/ like
+  # every other artifact. See the Install section of README.md.
+  extra_files:
+    - glob: ./scripts/install.sh
+    - glob: ./scripts/install.ps1

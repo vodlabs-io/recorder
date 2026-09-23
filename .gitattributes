@@ -1,0 +1,6 @@
+# Normalize text in the repo; the working tree follows the platform default.
+* text=auto
+
+# Anything a POSIX shell or Linux container reads must keep LF — a CRLF
+# shebang makes bash report "bad interpreter" on a Windows checkout.
+*.sh text eol=lf

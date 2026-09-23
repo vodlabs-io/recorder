@@ -1,0 +1,23 @@
+[streamers]
+tiktok = [
+	# "example",
+]
+urls = [
+	# "https://www.tiktok.com/@example/live",
+]
+
+# Per-streamer options. Each rule applies its options to the streamers it
+# lists. Supported flags:
+#   monitor           = false   → one-shot: subscribe, record one broadcast, then drop the rule
+#   record            = false   → keep monitoring, but record nothing: cancels any in-progress
+#                                 recording and skips new ones until cleared
+#   variant           = "..."   → override the global [session] variant (e.g. "best", "worst", "720p")
+#   output_template   = "..."   → override the global [session] output_template (e.g. "{platform}/{username}/{date}")
+#   delete_part_files = false   → override the global [processing] delete_part_files setting
+#   split_size        = "2GB"   → override the global [session] split_size ("off" = never split by size for this streamer)
+#   split_duration    = "1h30m" → override the global [session] split_duration ("off" = never split by duration)
+#   archive_dir       = "..."   → override the global [processing] archive_dir ("off" = keep VODs in the download folder)
+#
+# [[rules]]
+# tiktok = ["example1", "example2"]
+# record = false

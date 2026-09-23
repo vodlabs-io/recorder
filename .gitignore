@@ -1,0 +1,84 @@
+# Standard Go .gitignore
+
+# Go binaries (only in root directory)
+/vod
+/vlrecd
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Patched Electrobun native wrappers, deliberately committed: Windows and Linux
+# builds need them or platform sign-in cannot capture cookies (see
+# patches/README.md).
+# NB: not under a top-level vendor/ — that name puts the Go build into vendor
+# mode and breaks it.
+!desktop/native/win-x64/libNativeWrapper.dll
+!desktop/native/linux-x64/libNativeWrapper.so
+
+# Test binary, built with 'go test -c'
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Profiling data
+*.prof
+*.pprof
+
+# Go workspace files
+go.work
+go.work.sum
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Node-like lock files (if present from tooling)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Dependency directories (uncomment if you vendor deps)
+# vendor/
+
+# Project-specific ignores
+recordings/
+config/
+
+# FFmpeg binaries (download separately via ffmpeg/download.sh)
+/internal/ffmpeg/bin/*/
+/internal/ffmpeg/bin/**/
+
+# Local configuration files
+config.toml
+
+# Dependencies
+node_modules/
+
+# Bun specific
+.bun/
+
+# Build and output directories
+build/
+dist/
+out/
+artifacts/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# MacOS Finder
+.DS_Store
