@@ -1,120 +1,81 @@
-# recorder
+# VodLabs Recorder
 
-A tool for automatically monitoring and recording live streams from various social media platforms. Includes a desktop app and a CLI, both driving the same recording daemon.
+**Record livestreams automatically, on your own computer.**
 
-## Install the CLI
+Add the streamers you follow, and VodLabs Recorder records each broadcast the
+moment it goes live, straight from the platform to your disk. It is a desktop
+app for macOS, Windows and Linux, plus a command-line tool, `vod`.
 
-macOS and Linux:
+It records from TikTok, YouTube, Twitch, Kick, SOOP, CHZZK, PandaLive, Bigo and
+Douyin.
+
+## Download
+
+| Platform | Download |
+| --- | --- |
+| macOS, Apple Silicon | [VodLabs-Recorder-macOS-arm64.dmg](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-macOS-arm64.dmg) |
+| macOS, Intel | [VodLabs-Recorder-macOS-x64.dmg](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-macOS-x64.dmg) |
+| Windows 10 and 11 | [VodLabs-Recorder-Windows-x64-Setup.exe](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-Windows-x64-Setup.exe) |
+| Linux, x64 | [VodLabs-Recorder-Linux-x64-Setup.tar.gz](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-Linux-x64-Setup.tar.gz) |
+
+The app updates itself. [Installing](docs/install.md) covers the first-launch
+warnings on each system.
+
+To install only the command-line tool, on macOS or Linux:
 
 ```sh
 curl -fsSL https://vodlabs.io/install.sh | sh
 ```
 
-Windows (PowerShell):
+On Windows, in PowerShell:
 
 ```powershell
 irm https://vodlabs.io/install.ps1 | iex
 ```
 
-Both install `vod` for your user only, so no admin rights are needed: to
-`~/.local/bin` on macOS and Linux, or `%LOCALAPPDATA%\Programs\VodLabs\bin` on
-Windows, which the installer adds to your Path. `vod` downloads the recorder
-daemon matching its version the first time it needs one, and `vod update`
-upgrades the CLI. To choose the version or the directory, set `VOD_VERSION` or
-`VOD_INSTALL_DIR`:
+Then see [Getting started](docs/getting-started.md).
 
-```sh
-curl -fsSL https://vodlabs.io/install.sh | VOD_VERSION=0.1.2 VOD_INSTALL_DIR="$HOME/bin" sh
-```
+## How it works, and what VodLabs sees
 
-```powershell
-$env:VOD_VERSION = '0.1.2'; irm https://vodlabs.io/install.ps1 | iex
-```
+- **Recording happens on your machine.** Video goes straight from the
+  platform to your disk. It never passes through VodLabs.
+- **Live checks come from the VodLabs service.** It tells your recorder when a
+  streamer goes live, so the app needs it to start recordings.
+- **Your platform logins never leave your device.** They are stored encrypted
+  and used only on this machine.
+- **There is no telemetry**: no analytics, no crash reports.
+- **The free plan is an exchange.** Your recorder also runs some live checks
+  for other users, from your IP address. The service keeps your list of
+  streamers, your IP address and your app version, to run the service fairly
+  and to stop abuse.
+
+[What the recorder sends to VodLabs](docs/privacy.md) has the details, and
+links the code that does each part.
 
 ## Build from source
 
-### Prerequisites
-
-* Go 1.25.4 or newer
-
-### Steps
+You need [Go](https://go.dev/dl/) (it fetches the exact version `go.mod`
+names) and [Bun](https://bun.sh).
 
 ```sh
-# Clone the repository
 git clone https://github.com/vodlabs-io/recorder.git
-
-# Build the daemon and cli binaries
 cd recorder
-./scripts/build.sh
-
-# Run the CLI
-./vod --help
-```
-
-## CLI Usage
-
-```sh
-vod [global options] [command [command options]]
-```
-
-### Example Commands
-
-```sh
-# Record a TikTok live stream
-vod record https://www.tiktok.com/@example/live
-
-# Show current recording status
-vod status
-
-# Stop all recordings and end the daemon process
-vod quit
-```
-
-## Desktop app
-
-The desktop app (Electrobun + React) is a front end for the daemon, which it
-talks to over NATS on the loopback interface. It is built from the root
-`package.json`.
-
-### JS Prerequisites
-
-* [Bun](https://bun.sh)
-* The daemon and CLI built (see [Build from source](#build-from-source))
-
-### Desktop app
-
-```sh
+./scripts/build.sh    # downloads the pinned FFmpeg, then builds ./vlrecd and ./vod
 bun install
-
-# Recommended for UI work: hot-reloads React changes instantly
-bun run dev:hmr
-
-# One-off build + launch, no watching
-bun run start
-
-# Watch mode: auto-rebuilds and relaunches on changes to the Bun main-process
-# code (desktop/src/bun/**). Does not pick up ui/mainview (React) changes.
-bun run dev
-
-# Release build (stable channel; CI signs and notarizes the macOS one)
-bun run build:stable
+bun run dev:hmr       # the desktop app, reloading as you edit the UI
 ```
 
-`bun run dev:hmr` runs a Vite dev server on `http://localhost:5173` (`bun run
-hmr`) alongside `bun run start`. The Electrobun window detects the running
-Vite server and loads the UI from it instead of the bundled assets, so React
-edits appear instantly with no rebuild or relaunch.
+Builds from source use the same VodLabs service as the released app.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the development setup.
 
-#### Debugging the desktop app
+## More
 
-A dev build (`bun run dev:hmr`, `dev`, `start`) never starts a daemon: it waits,
-banner showing, until one is serving, so the daemon under test is always the one
-you built and launched yourself (`./scripts/build.sh && ./vlrecd --logger.mode
-console`). Set
-`VLREC_DEV_SPAWN_DAEMON=1` to exercise the release behaviour instead — the app
-connects to any daemon already running, and otherwise spawns one, checking
-`VLREC_DAEMON_PATH`/`VLREC_DAEMON_BIN`, then `vlrecd` on `PATH`, then its own
-download cache, before downloading the latest release as a last resort. Confirm
-the connection with socket evidence, e.g.
-`lsof -nP -iTCP:4222 -sTCP:ESTABLISHED`.
+- [User guide](docs/README.md)
+- [Contributing](CONTRIBUTING.md) and the [security policy](SECURITY.md)
+- [License](LICENSE): PolyForm Noncommercial 1.0.0. [LICENSING.md](LICENSING.md)
+  explains what that allows and how to get a commercial license.
+- [Third-party notices](THIRD_PARTY_NOTICES.md), including the source of the
+  embedded FFmpeg
 
+VodLabs is not affiliated with, or endorsed by, any of the platforms it records
+from. Their names are trademarks of their owners.
