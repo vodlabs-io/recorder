@@ -1,5 +1,5 @@
 import { loadPreferences, savePreferences } from "@/lib/preferences"
-import { VisibilityState } from '@tanstack/react-table'
+import type { ColumnVisibilityState } from '@tanstack/react-table'
 import { Preferences } from '../lib/preferences'
 
 export interface PreferenceSlice {
@@ -9,7 +9,7 @@ export interface PreferenceSlice {
     persistPrefs: (prefs: Partial<Preferences>) => Promise<void>
 }
 
-export const DEFAULT_COLUMN_VIS: VisibilityState = {
+export const DEFAULT_COLUMN_VIS: ColumnVisibilityState = {
     platform: true,
     status: true,
     last_live: false,
@@ -19,9 +19,12 @@ export const DEFAULT_COLUMN_VIS: VisibilityState = {
     record: true,
 }
 
+export const DEFAULT_PAGE_SIZE = 10
+
 export const DEFAULT_PREFS: Partial<Preferences> = {
     theme: 'system',
     dashboard_column_visibility: DEFAULT_COLUMN_VIS,
+    dashboard_page_size: DEFAULT_PAGE_SIZE,
     welcome_seen: false,
 }
 
