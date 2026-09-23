@@ -83,6 +83,10 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files: &notices
+      - LICENSE
+      - LICENSING.md
+      - THIRD_PARTY_NOTICES.md
 
   - id: daemon
     ids: [vlrecd]
@@ -91,6 +95,7 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files: *notices
 
 checksum:
   name_template: "checksums.txt"

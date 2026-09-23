@@ -31,6 +31,9 @@ export default {
 			// LoadImage(IMAGE_ICON), which only reads .ico, so on Windows the
 			// tray reuses the colour app icon instead of the silhouette png.
 			"desktop/icon.ico": "views/icon.ico",
+			// The license and the notices of what the app bundles travel with it.
+			"LICENSE": "LICENSE",
+			"THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
 		},
 		// Ignore Vite output in watch mode — HMR handles view rebuilds separately.
 		watchIgnore: ["ui/mainview/dist/**"],
