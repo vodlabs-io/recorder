@@ -1,0 +1,94 @@
+[logger]
+# Default log level for all components. 
+# Override per-component with e.g. [daemon.logger] level = "debug".
+level = "info"
+# Directory for all log files.
+# Defaults to OS user cache dir (e.g. ~/.cache/vodlabs/recorder/logs on Linux).
+# Override per-component with e.g. [daemon.logger] directory = "/custom/path".
+directory = ""
+# Output mode for all components: off | file | console | both.
+# console = stdout + stderr (WARN/ERROR -> stderr).
+# Override per-component with e.g. [cloud.logger] mode = "off".
+mode = "file"
+
+[daemon]
+# Embedded NATS server IP and port
+host = "127.0.0.1"
+port = 4222
+
+[session]
+# Where recordings are downloaded to while they are being captured, organized
+# into sub-folders. Keep this on a local disk for best recording performance.
+# Defaults to the user's Downloads folder (e.g. ~/Downloads) when empty.
+download_dir = ""
+# Quality variant to record (e.g. best, worst, 720p, etc).
+variant = "best"
+# Directory layout for each session's files, relative to download_dir.
+# Available placeholders:
+#   {platform} {username} {session_id}
+#   {datetime}   -> 2006-01-02_15-04-05-0700 (local time)
+#   {date}       -> 2006-01-02      {time}   -> 15-04-05
+#   {year} {month} {day} {hour} {minute} {second}  (local, zero-padded)
+#   {utc_offset} -> ±0700           {timestamp} -> Unix epoch seconds (UTC)
+# Unrecognized placeholders are left in the path verbatim.
+# Override per streamer with an output_template rule in streamers.toml.
+output_template = "{platform}/{username}/{datetime}"
+# Maximum raw recording size per VOD file (e.g. "2GB", "500MB").
+# When a recording part reaches this limit, a new part is started and
+# processing produces vod1.mp4, vod2.mp4, … instead of vod.mp4.
+# Note: the limit applies to raw recorded bytes; the final mp4 may differ
+# slightly after remux. Leave margin for hard caps like FAT32's 4 GB.
+# Minimum: 10MB. Empty = no size-based splitting.
+# Override per streamer with a split_size rule in streamers.toml ("off" disables).
+split_size = ""
+# Maximum duration per VOD file (e.g. "1h30m", "45m").
+# When a recording part reaches this limit, a new part is started.
+# Minimum: 1m. Empty = no duration-based splitting.
+# Override per streamer with a split_duration rule in streamers.toml ("off" disables).
+split_duration = ""
+# Clean up FLV live streams while recording: drop garbage and duplicate
+# (replayed) data and repair timestamps, so unstable streams still produce
+# clean, seekable recordings. If the stream's codec configuration changes
+# mid-session (e.g. the encoder switches resolution on a bad connection),
+# each configuration produces its own VOD file.
+# Set false to record the raw stream bytes unmodified.
+sanitize_flv = true
+
+[processing]
+# Path to the processing queue database (processing.db), which tracks
+# post-processing jobs. Defaults to processing.db under the OS user config
+# dir when empty (e.g. ~/.config/vodlabs/recorder/processing.db on Linux).
+db_path = ""
+# Video encoder for merge/re-encode jobs: "auto" picks the first working
+# hardware encoder (verified by a quick self-test) and falls back to software;
+# "software" forces libx264; or name a specific encoder id such as
+# "h264_videotoolbox" (macOS), "h264_nvenc" (NVIDIA), "h264_qsv" (Intel),
+# "h264_amf" (AMD), or "h264_mf" (Windows Media Foundation).
+encoder = "auto"
+# Delete the raw recording part files once the final recording has finished
+# processing into vod.mp4. Set to false to keep the source parts.
+# Override per streamer with a delete_part_files rule in streamers.toml.
+delete_part_files = true
+# Long-term archive folder. When set, each VOD is moved out of the download
+# folder into here (e.g. an external drive or NAS) once processing finishes,
+# freeing space on the download disk. Split VOD files (vod1.mp4, vod2.mp4, …)
+# move as each one is processed; the rest of the folder follows once processing
+# completes. The copy is verified before the downloaded files are deleted, and
+# failed moves retry automatically. Only a local or network folder path is
+# supported. Empty = keep VODs in the download folder.
+# Override per streamer with an archive_dir rule in streamers.toml ("off" keeps
+# a streamer's VODs in the download folder).
+archive_dir = ""
+# Extra read-only folders to list VODs from in the VOD Archive - an archive left
+# behind on a retired disk, a second drive, a folder of imports. They are only
+# read: no VOD is ever moved into one, they get no free-space warning, and
+# merging a VOD that lives in one is refused. Each must be an absolute folder
+# path that is not the download or archive folder and does not sit inside or
+# contain either. An unreachable folder (an unplugged drive) is reported in the
+# VOD Archive rather than failing the scan.
+# e.g. scan_dirs = ["/Volumes/OldHDD/vods", "/mnt/nas2/recordings"]
+scan_dirs = []
+# Free space, in GiB, below which a storage root is reported as running low.
+# Absolute rather than a percentage: the question is always whether the next
+# VOD fits. 0 disables the warning.
+low_space_warn_gb = 20

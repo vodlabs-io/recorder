@@ -1,0 +1,92 @@
+# Builds the patched Windows native wrapper for electrobun.
+#
+# Upstream's Session cookie API is a no-op on Windows, which blocks desktop
+# platform login there; patches/electrobun-1.18.1-win-cookie-api.patch fixes it.
+# This mirrors the Windows leg of electrobun's own release workflow closely
+# enough to produce the one artefact we need: libNativeWrapper.dll.
+#
+# Manual only — it is slow (it vendors CEF) and only needs re-running when the
+# patch or the pinned electrobun version changes. See patches/README.md.
+name: Build patched electrobun native (Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      electrobun_tag:
+        description: "electrobun tag to patch and build"
+        required: true
+        default: "v1.18.1"
+
+jobs:
+  build:
+    # Not windows-2025: GitHub moved that label onto Visual Studio 2026 (v18)
+    # without a version bump of its own, and electrobun v1.18.1's build.ts
+    # hardcodes the CMake generator string "Visual Studio 17 2022" — CMake then
+    # fails with "could not find any instance of Visual Studio" since only v18
+    # is installed. windows-2022 still ships the matching VS2022 toolchain.
+    runs-on: windows-2022
+    # A full run (nothing cached) took ~9 minutes to reach the CEF cmake step
+    # in a working attempt; a hung runner otherwise burns hours silently
+    # (GitHub's own default is 6h) before anyone notices.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout recorder (for the patch)
+        uses: actions/checkout@v4
+        with:
+          path: recorder
+
+      - name: Checkout electrobun
+        uses: actions/checkout@v4
+        with:
+          repository: blackboardsh/electrobun
+          ref: ${{ github.event.inputs.electrobun_tag }}
+          submodules: recursive
+          path: electrobun
+
+      - name: Apply patch
+        shell: bash
+        working-directory: electrobun
+        run: |
+          set -euo pipefail
+          patch_file="../recorder/patches/electrobun-1.18.1-win-cookie-api.patch"
+          git apply --check "$patch_file"
+          git apply "$patch_file"
+          git --no-pager diff --stat
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Install dependencies
+        run: bun install
+        working-directory: electrobun/package
+
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Get CEF version for cache key
+        id: cef-version
+        shell: bash
+        working-directory: electrobun
+        run: |
+          CEF_VER=$(grep "const CEF_VERSION " package/src/shared/cef-version.ts | head -1 | sed "s/.*\`\(.*\)\`.*/\1/" | tr '+' '-')
+          echo "version=$CEF_VER" >> $GITHUB_OUTPUT
+
+      - name: Cache CEF vendor directory
+        uses: actions/cache@v4
+        with:
+          path: electrobun/package/vendors/cef
+          key: cef-win-x64-${{ steps.cef-version.outputs.version }}
+
+      - name: Build
+        run: bun build.ts --release
+        working-directory: electrobun/package
+
+      - name: Upload libNativeWrapper.dll
+        uses: actions/upload-artifact@v4
+        with:
+          name: libNativeWrapper-win-x64
+          path: electrobun/package/dist/libNativeWrapper.dll
+          if-no-files-found: error

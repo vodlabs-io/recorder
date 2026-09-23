@@ -1,0 +1,413 @@
+diff --git a/package/src/native/linux/nativeWrapper.cpp b/package/src/native/linux/nativeWrapper.cpp
+index c3765d7..15542a8 100644
+--- a/package/src/native/linux/nativeWrapper.cpp
++++ b/package/src/native/linux/nativeWrapper.cpp
+@@ -10903,63 +10903,49 @@ ELECTROBUN_EXPORT uint64_t getMouseButtons() {
+  * =============================================================================
+  */
+ 
+-// Store for partition-specific data managers (for cookie access)
+-static std::map<std::string, WebKitWebsiteDataManager*> g_partitionDataManagers;
+-
+-// Get or create a data manager for a partition
++// Get the data manager for a partition.
++//
++// It has to be the one owned by the partition's own web context. That context is
++// what the partition's webviews render in, and the cookie jar they read and
++// write lives in its network session. A manager built separately over the same
++// directories is a second, independent network session: its jar is whatever the
++// SQLite file held at the moment it was constructed, and it never sees a cookie
++// set afterwards. Cookie reads then answer from a snapshot frozen at first use,
++// which silently breaks any sign-in flow that waits for a session cookie to
++// appear.
+ static WebKitWebsiteDataManager* getDataManagerForPartition(const char* partitionIdentifier) {
+     std::string partition = partitionIdentifier ? partitionIdentifier : "";
+ 
+-    auto it = g_partitionDataManagers.find(partition);
+-    if (it != g_partitionDataManagers.end()) {
+-        return it->second;
+-    }
+-
+-    WebKitWebsiteDataManager* dataManager = nullptr;
+-
+     if (partition.empty()) {
+-        // Default: use default context's data manager
+         WebKitWebContext* context = webkit_web_context_get_default();
+-        dataManager = webkit_web_context_get_website_data_manager(context);
+-    } else {
+-        bool isPersistent = partition.substr(0, 8) == "persist:";
+-
+-        if (isPersistent) {
+-            std::string partitionName = partition.substr(8);
+-
+-            // Build paths with identifier/channel structure (consistent with CLI and updater)
+-            char* home = getenv("HOME");
+-            std::string homeStr = home ? std::string(home) : "/tmp";
+-            std::string dataPath = buildPartitionPath(homeStr + "/.local/share", g_electrobunIdentifier, g_electrobunChannel, "WebKit", partitionName);
+-            std::string cachePath = buildPartitionPath(homeStr + "/.cache", g_electrobunIdentifier, g_electrobunChannel, "WebKit", partitionName);
+-
+-            g_mkdir_with_parents(dataPath.c_str(), 0755);
+-            g_mkdir_with_parents(cachePath.c_str(), 0755);
+-
+-            dataManager = webkit_website_data_manager_new(
+-                "base-data-directory", dataPath.c_str(),
+-                "base-cache-directory", cachePath.c_str(),
+-                NULL
+-            );
++        return context ? webkit_web_context_get_website_data_manager(context) : nullptr;
++    }
+ 
+-            // Enable persistent cookie storage (SQLite-backed)
+-            WebKitCookieManager* cookieManager = webkit_website_data_manager_get_cookie_manager(dataManager);
+-            if (cookieManager) {
+-                std::string cookiePath = dataPath + "/cookies.sqlite";
+-                webkit_cookie_manager_set_persistent_storage(
+-                    cookieManager,
+-                    cookiePath.c_str(),
+-                    WEBKIT_COOKIE_PERSISTENT_STORAGE_SQLITE
+-                );
++    auto it = g_partitionContexts.find(partition);
++    if (it == g_partitionContexts.end()) {
++        // No webview has opened this partition yet. Build its context here so
++        // the manager handed out now is the one those webviews will use.
++        if (!getContextForPartition(partition.c_str())) {
++            return nullptr;
++        }
++        // getContextForPartition counts each call as a webview holding an
++        // ephemeral partition's context open. A cookie read is not a webview, so
++        // give that lease straight back: the context stays cached and unheld,
++        // just as a persistent partition's is, and the next webview to take it
++        // still balances its own release.
++        if (!isPersistentWebKitPartition(partition)) {
++            auto refIt = g_ephemeralPartitionContextRefCounts.find(partition);
++            if (refIt != g_ephemeralPartitionContextRefCounts.end() && refIt->second > 0) {
++                refIt->second--;
+             }
+-        } else {
+-            dataManager = webkit_website_data_manager_new_ephemeral();
+         }
+-
+-        g_partitionDataManagers[partition] = dataManager;
++        it = g_partitionContexts.find(partition);
++        if (it == g_partitionContexts.end()) {
++            return nullptr;
++        }
+     }
+ 
+-    return dataManager;
++    return it->second ? webkit_web_context_get_website_data_manager(it->second) : nullptr;
+ }
+ 
+ 
+@@ -10970,29 +10956,76 @@ struct CookieCallbackData {
+     GMainLoop* loop;
+ };
+ 
++// JSON-escape one cookie field. Cookie values routinely carry quotes and
++// backslashes; interpolated raw they produce a document the caller cannot parse,
++// and one bad cookie takes the whole jar down with it.
++static std::string jsonEscapeCookieField(const char* raw) {
++    std::string out;
++    if (!raw) {
++        return out;
++    }
++    for (const unsigned char* p = reinterpret_cast<const unsigned char*>(raw); *p; ++p) {
++        switch (*p) {
++            case '"':  out += "\\\""; break;
++            case '\\': out += "\\\\"; break;
++            case '\b': out += "\\b";  break;
++            case '\f': out += "\\f";  break;
++            case '\n': out += "\\n";  break;
++            case '\r': out += "\\r";  break;
++            case '\t': out += "\\t";  break;
++            default:
++                if (*p < 0x20) {
++                    static const char* kHex = "0123456789abcdef";
++                    out += "\\u00";
++                    out += kHex[(*p >> 4) & 0xF];
++                    out += kHex[*p & 0xF];
++                } else {
++                    out += static_cast<char>(*p);
++                }
++        }
++    }
++    return out;
++}
++
++// Collects the cookies of one or more per-URI queries, de-duplicated on the
++// triple a cookie store keys on, so overlapping queries return each cookie once.
++//
++// Heap-allocated and owned jointly with its callback: a query that outlives the
++// caller's wait leaves `abandoned` set, and the callback frees this instead of
++// writing through pointers to a dead stack frame.
++struct CookieAccumulator {
++    std::vector<std::string>* objects;
++    std::set<std::string>* seen;
++    GMainLoop* loop;
++    bool done;
++    bool abandoned;
++};
++
+ // Callback for getting cookies
+ static void onGetCookiesFinished(GObject* source, GAsyncResult* result, gpointer user_data) {
+-    CookieCallbackData* data = static_cast<CookieCallbackData*>(user_data);
++    CookieAccumulator* data = static_cast<CookieAccumulator*>(user_data);
+     GError* error = nullptr;
+     GList* cookies = webkit_cookie_manager_get_cookies_finish(
+         WEBKIT_COOKIE_MANAGER(source), result, &error);
+ 
+-    std::ostringstream json;
+-    json << "[";
+-
+-    if (!error && cookies) {
+-        GList* item = cookies;
+-        bool first = true;
+-        while (item) {
++    if (!error && !data->abandoned) {
++        for (GList* item = cookies; item; item = item->next) {
+             SoupCookie* cookie = static_cast<SoupCookie*>(item->data);
+-            if (!first) json << ",";
+-            first = false;
++            const char* name = soup_cookie_get_name(cookie) ?: "";
++            const char* domain = soup_cookie_get_domain(cookie) ?: "";
++            const char* path = soup_cookie_get_path(cookie) ?: "";
+ 
++            std::string key = std::string(name) + "\n" + domain + "\n" + path;
++            if (!data->seen->insert(key).second) {
++                continue;
++            }
++
++            std::ostringstream json;
+             json << "{";
+-            json << "\"name\":\"" << (soup_cookie_get_name(cookie) ?: "") << "\",";
+-            json << "\"value\":\"" << (soup_cookie_get_value(cookie) ?: "") << "\",";
+-            json << "\"domain\":\"" << (soup_cookie_get_domain(cookie) ?: "") << "\",";
+-            json << "\"path\":\"" << (soup_cookie_get_path(cookie) ?: "") << "\",";
++            json << "\"name\":\"" << jsonEscapeCookieField(name) << "\",";
++            json << "\"value\":\"" << jsonEscapeCookieField(soup_cookie_get_value(cookie)) << "\",";
++            json << "\"domain\":\"" << jsonEscapeCookieField(domain) << "\",";
++            json << "\"path\":\"" << jsonEscapeCookieField(path) << "\",";
+             json << "\"secure\":" << (soup_cookie_get_secure(cookie) ? "true" : "false") << ",";
+             json << "\"httpOnly\":" << (soup_cookie_get_http_only(cookie) ? "true" : "false");
+ 
+@@ -11002,25 +11035,143 @@ static void onGetCookiesFinished(GObject* source, GAsyncResult* result, gpointer
+             }
+ 
+             json << "}";
+-
+-            item = item->next;
++            data->objects->push_back(json.str());
+         }
+-        g_list_free_full(cookies, (GDestroyNotify)soup_cookie_free);
+     }
+ 
++    if (cookies) {
++        g_list_free_full(cookies, (GDestroyNotify)soup_cookie_free);
++    }
+     if (error) {
+         g_error_free(error);
+     }
+ 
+-    json << "]";
+-    *(data->result) = json.str();
+-    *(data->done) = true;
++    if (data->abandoned) {
++        delete data;
++        return;
++    }
++    data->done = true;
++    if (data->loop) {
++        g_main_loop_quit(data->loop);
++    }
++}
++
++// How long one cookie query waits before giving up on its callback.
++static const guint kCookieQueryTimeoutMs = 5000;
++
++// Runs a nested main loop until `loop` is quit, bounded by a timeout so a
++// callback that never arrives cannot wedge the caller.
++static void runBoundedLoop(GMainLoop* loop) {
++    GSource* timeout = g_timeout_source_new(kCookieQueryTimeoutMs);
++    g_source_set_callback(timeout, [](gpointer data) -> gboolean {
++        g_main_loop_quit(static_cast<GMainLoop*>(data));
++        return G_SOURCE_REMOVE;
++    }, loop, nullptr);
++    g_source_attach(timeout, g_main_loop_get_context(loop));
++
++    g_main_loop_run(loop);
++
++    g_source_destroy(timeout);
++    g_source_unref(timeout);
++}
++
++// Appends the cookies visible at `uri` to `objects`.
++static void collectCookiesForURI(WebKitCookieManager* cookieManager,
++                                 const std::string& uri,
++                                 std::vector<std::string>& objects,
++                                 std::set<std::string>& seen) {
++    CookieAccumulator* acc = new CookieAccumulator();
++    acc->objects = &objects;
++    acc->seen = &seen;
++    acc->loop = g_main_loop_new(NULL, FALSE);
++    acc->done = false;
++    acc->abandoned = false;
++
++    webkit_cookie_manager_get_cookies(cookieManager, uri.c_str(), nullptr,
++                                      onGetCookiesFinished, acc);
++    runBoundedLoop(acc->loop);
++    g_main_loop_unref(acc->loop);
++
++    if (acc->done) {
++        delete acc;
++    } else {
++        // Timed out. The callback may still fire; hand it ownership and cut its
++        // reference to our stack.
++        acc->abandoned = true;
++        acc->objects = nullptr;
++        acc->seen = nullptr;
++        acc->loop = nullptr;
++    }
++}
++
++// Carries the domain list out of the website-data fetch, on the same joint
++// ownership terms as CookieAccumulator.
++struct CookieDomainFetch {
++    std::vector<std::string>* domains;
++    GMainLoop* loop;
++    bool done;
++    bool abandoned;
++};
+ 
++static void onFetchCookieDomainsFinished(GObject* source, GAsyncResult* result, gpointer user_data) {
++    CookieDomainFetch* data = static_cast<CookieDomainFetch*>(user_data);
++    GError* error = nullptr;
++    GList* items = webkit_website_data_manager_fetch_finish(
++        WEBKIT_WEBSITE_DATA_MANAGER(source), result, &error);
++
++    if (!error && !data->abandoned) {
++        for (GList* item = items; item; item = item->next) {
++            WebKitWebsiteData* entry = static_cast<WebKitWebsiteData*>(item->data);
++            const char* name = webkit_website_data_get_name(entry);
++            if (name && *name) {
++                data->domains->push_back(name);
++            }
++        }
++    }
++
++    if (items) {
++        g_list_free_full(items, (GDestroyNotify)webkit_website_data_unref);
++    }
++    if (error) {
++        g_error_free(error);
++    }
++
++    if (data->abandoned) {
++        delete data;
++        return;
++    }
++    data->done = true;
+     if (data->loop) {
+         g_main_loop_quit(data->loop);
+     }
+ }
+ 
++// Returns the domains the partition holds cookies for.
++static std::vector<std::string> fetchCookieDomains(WebKitWebsiteDataManager* dataManager) {
++    std::vector<std::string> domains;
++
++    CookieDomainFetch* fetch = new CookieDomainFetch();
++    fetch->domains = &domains;
++    fetch->loop = g_main_loop_new(NULL, FALSE);
++    fetch->done = false;
++    fetch->abandoned = false;
++
++    webkit_website_data_manager_fetch(dataManager, WEBKIT_WEBSITE_DATA_COOKIES, nullptr,
++                                      onFetchCookieDomainsFinished, fetch);
++    runBoundedLoop(fetch->loop);
++    g_main_loop_unref(fetch->loop);
++
++    if (fetch->done) {
++        delete fetch;
++    } else {
++        fetch->abandoned = true;
++        fetch->domains = nullptr;
++        fetch->loop = nullptr;
++    }
++
++    return domains;
++}
++
+ // Get cookies for a partition (WebKit2GTK)
+ ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier, const char* filterJson) {
+     // Copy arguments before dispatching to main thread
+@@ -11051,31 +11202,48 @@ ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier,
+             }
+         }
+ 
+-        std::string result = "[]";
+-        bool done = false;
+-
+-        CookieCallbackData callbackData;
+-        callbackData.result = &result;
+-        callbackData.done = &done;
+-        callbackData.loop = g_main_loop_new(NULL, FALSE);
+-
+-        const char* uri = filterUrl.empty() ? "https://localhost" : filterUrl.c_str();
+-        webkit_cookie_manager_get_cookies(cookieManager, uri, nullptr, onGetCookiesFinished, &callbackData);
++        std::vector<std::string> objects;
++        std::set<std::string> seen;
+ 
+-        // Run main loop until done or timeout
+-        GSource* timeout = g_timeout_source_new(5000);
+-        g_source_set_callback(timeout, [](gpointer data) -> gboolean {
+-            g_main_loop_quit(static_cast<GMainLoop*>(data));
+-            return G_SOURCE_REMOVE;
+-        }, callbackData.loop, nullptr);
+-        g_source_attach(timeout, g_main_loop_get_context(callbackData.loop));
++        if (!filterUrl.empty()) {
++            collectCookiesForURI(cookieManager, filterUrl, objects, seen);
++        } else {
++            // No url filter means every cookie the partition holds. WebKitGTK
++            // only answers per-URI, so ask the data manager which domains have
++            // cookies and query each in turn. Cookies scoped to a path below the
++            // root are the one thing this cannot reach.
++            //
++            // The fetch reports one entry per registrable domain, while a
++            // per-URI query returns the domain cookies covering that host plus
++            // the ones set host-only on it. Asking only for the bare domain
++            // therefore drops whatever a site set host-only on its www host, so
++            // ask for both and let the de-duplication fold the overlap.
++            for (const std::string& domain : fetchCookieDomains(dataManager)) {
++                std::string host = domain;
++                if (!host.empty() && host[0] == '.') {
++                    host.erase(0, 1);
++                }
++                if (host.empty()) {
++                    continue;
++                }
++                collectCookiesForURI(cookieManager, "https://" + host + "/", objects, seen);
++                if (host.compare(0, 4, "www.") != 0) {
++                    collectCookiesForURI(cookieManager, "https://www." + host + "/", objects, seen);
++                }
++            }
++        }
+ 
+-        g_main_loop_run(callbackData.loop);
+-        g_source_destroy(timeout);
+-        g_source_unref(timeout);
+-        g_main_loop_unref(callbackData.loop);
++        std::ostringstream json;
++        json << "[";
++        for (size_t i = 0; i < objects.size(); ++i) {
++            if (i > 0) {
++                json << ",";
++            }
++            json << objects[i];
++        }
++        json << "]";
+ 
+-        return strdup(result.c_str());
++        return strdup(json.str().c_str());
+     });
+ }
+ 

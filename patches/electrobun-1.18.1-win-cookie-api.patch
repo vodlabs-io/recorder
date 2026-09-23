@@ -1,0 +1,861 @@
+diff --git a/package/src/native/win/nativeWrapper.cpp b/package/src/native/win/nativeWrapper.cpp
+index 098e022..36ae2fc 100644
+--- a/package/src/native/win/nativeWrapper.cpp
++++ b/package/src/native/win/nativeWrapper.cpp
+@@ -36,6 +36,8 @@
+ #include <shobjidl.h>  // For IFileOpenDialog
+ #include <shlobj.h>    // For SHGetKnownFolderPath, FOLDERID_Downloads
+ #include <shlguid.h>   // For CLSID_FileOpenDialog
++#include <objbase.h>   // For CoWaitForMultipleHandles and COWAIT_* flags
++#include <cstdio>      // For snprintf
+ #include <commdlg.h>   // For COMDLG_FILTERSPEC
+ #include <dcomp.h>     // For DirectComposition
+ #include <dxgi1_2.h>   // For DXGI 1.2 (CreateSwapChainForComposition)
+@@ -458,8 +460,10 @@ static std::mutex browserMapMutex;
+ 
+ // Global map to store CEFViews by container window handle (using void* to avoid forward declaration issues)
+ static std::map<HWND, void*> g_cefViews;
+-// Global map to store WebView2Views by container window handle (using void* to avoid forward declaration issues)
+-static std::map<HWND, void*> g_webview2Views;
++// Global map to store WebView2Views by webview id (using void* to avoid forward
++// declaration issues). It used to be keyed by the container HWND, which every
++// view in a window shares, so a second view silently evicted the first.
++static std::map<uint32_t, void*> g_webview2Views;
+ 
+ // Global map to store pending CEF navigations for timing workaround - use browser ID instead of pointer
+ static std::map<int, std::string> g_pendingCefNavigations;
+@@ -3060,6 +3064,10 @@ private:
+     HWND containerHwnd = nullptr;  // Container window for masking
+ 
+ public:
++    // The partition this view was created with ("persist:<name>", or empty for
++    // the shared default). Each partition is its own WebView2 environment with
++    // its own cookie jar, so the session APIs match on this.
++    std::string partition;
+     std::string pendingUrl;
+     std::string pendingHtml;  // Stored inline HTML for loading after async creation
+     std::string electrobunScript;
+@@ -3092,6 +3100,10 @@ public:
+         containerHwnd = hwnd;
+     }
+ 
++    HWND getContainerHwnd() const {
++        return containerHwnd;
++    }
++
+     ComPtr<ICoreWebView2> getWebView() const {
+         return webview;
+     }
+@@ -3117,6 +3129,75 @@ public:
+         webview->AddHostObjectToScript(L"eventBridge", &eventBridgeVariant);
+         VariantClear(&eventBridgeVariant);
+ 
++        // Sandboxed views reach the event bridge through chrome.webview.postMessage
++        // instead of the host object.
++        //
++        // Touching chrome.webview.hostObjects AT ALL breaks some sites: TikTok's
++        // QR login, for one, starts rejecting its own polling endpoint the moment
++        // the page's JS environment has been through that proxy, which made
++        // desktop sign-in impossible on Windows. Reading the bare container
++        // property is enough to trigger it; a plain injected script, plain
++        // globals, and chrome.webview.postMessage are all fine. A lazy getter is
++        // not an option either -- fingerprinting code enumerates window and fires
++        // it.
++        //
++        // The preload assigns the bridge with a "||" chain that starts at
++        // window.__electrobunEventBridge, so defining that here, in a script
++        // registered BEFORE the preload, short-circuits the chain and the
++        // hostObjects fallback is never evaluated. Trusted views keep the host
++        // object: they carry our own pages and need the RPC bridges.
++        //
++        // Note this is not a trust boundary. Page script could always call the
++        // bridge itself, exactly as it could reach the host object before.
++        if (isSandboxed) {
++            const wchar_t* bridgeShim =
++                L"(function(){var post=function(m){try{window.chrome.webview.postMessage("
++                L"\"__eb_event:\"+(typeof m===\"string\"?m:JSON.stringify(m)));}catch(e){}};"
++                L"var b={postMessage:post};window.__electrobunEventBridge=b;"
++                L"window.__electrobunInternalBridge=b;})();";
++            webview->AddScriptToExecuteOnDocumentCreated(bridgeShim, nullptr);
++
++            HandlePostMessage handler = eventBridgeCallbackHandler;
++            uint32_t id = webviewId;
++            webview->add_WebMessageReceived(
++                Callback<ICoreWebView2WebMessageReceivedEventHandler>(
++                    [handler, id](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
++                        if (!handler || !args) return S_OK;
++                        LPWSTR raw = nullptr;
++                        if (FAILED(args->TryGetWebMessageAsString(&raw)) || !raw) return S_OK;
++
++                        std::wstring w(raw);
++                        CoTaskMemFree(raw);
++                        const std::wstring prefix = L"__eb_event:";
++                        if (w.compare(0, prefix.size(), prefix) != 0) return S_OK;
++                        w = w.substr(prefix.size());
++
++                        int size = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
++                        if (size <= 0) return S_OK;
++                        char* message = new char[size];
++                        if (WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, message, size, nullptr, nullptr) == 0) {
++                            delete[] message;
++                            return S_OK;
++                        }
++
++                        try {
++                            handler(id, message);
++                        } catch (...) {
++                            ::log("ERROR: Exception in webmessage event bridge");
++                            delete[] message;
++                            return S_OK;
++                        }
++                        // Freed on a delay, matching BridgeHandler: the bun side
++                        // reads the string after this returns.
++                        std::thread([message]() {
++                            std::this_thread::sleep_for(std::chrono::seconds(1));
++                            delete[] message;
++                        }).detach();
++                        return S_OK;
++                    }).Get(),
++                nullptr);
++        }
++
+         // bunBridge and internalBridge - RPC bridges (only for non-sandboxed webviews)
+         if (!isSandboxed) {
+             // Create COM objects for the bridge handlers
+@@ -3232,6 +3313,9 @@ public:
+             controller = nullptr;
+         }
+         webview = nullptr;
++        // Drop the raw pointer the session APIs walk; this object is owned by a
++        // shared_ptr elsewhere and may be freed right after this returns.
++        g_webview2Views.erase(this->webviewId);
+     }
+ 
+     // Override transparency implementation for WebView2
+@@ -4190,7 +4274,11 @@ void SetBrowserOnCEFView(HWND parentWindow, CefRefPtr<CefBrowser> browser) {
+ // Helper function to set webview on WebView2View (defined after WebView2View class)
+ void SetWebViewOnWebView2View(HWND containerWindow, void* webview) {
+     std::cout << "[WebView2] Looking for WebView2View with containerWindow: " << containerWindow << std::endl;
+-    auto viewIt = g_webview2Views.find(containerWindow);
++    auto viewIt = std::find_if(g_webview2Views.begin(), g_webview2Views.end(),
++        [containerWindow](const std::pair<const uint32_t, void*>& entry) {
++            auto candidate = static_cast<WebView2View*>(entry.second);
++            return candidate && candidate->getContainerHwnd() == containerWindow;
++        });
+     if (viewIt != g_webview2Views.end()) {
+         auto view = static_cast<WebView2View*>(viewIt->second);
+         if (view) {
+@@ -5961,6 +6049,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+     auto view = std::make_shared<WebView2View>(webviewId, eventBridgeHandler, bunBridgeHandler, internalBridgeHandler, sandbox);
+     view->hwnd = hwnd;
+     view->fullSize = autoResize;
++    view->partition = partitionStr;
+     view->webviewEventHandler = webviewEventHandler;
+ 
+     // Store URL and scripts in view to survive async callbacks
+@@ -6606,8 +6695,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+                             }
+ 
+                             // Store WebView2View in global map for JavaScript execution
+-                            HWND containerHwnd = container->GetHwnd();
+-                            g_webview2Views[containerHwnd] = view.get();
++                            g_webview2Views[view->webviewId] = view.get();
+ 
+ 
+                             return S_OK;
+@@ -6619,7 +6707,29 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+         // Create WebView2 environment with custom scheme support
+         try {
+             auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
+-            options->put_AdditionalBrowserArguments(L"--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --allow-insecure-localhost --disable-web-security");
++            // --disable-web-security really does switch off the same-origin
++            // policy in WebView2 (unlike current Chrome, which now ignores the
++            // flag), so it is given only to the default partition — where the
++            // app's own trusted pages live, and where the views:// scheme and
++            // file dialogs were set up against that behaviour.
++            //
++            // A named partition exists to isolate somebody else's site, and
++            // handing that page a disabled same-origin policy lets it read any
++            // origin it likes with the user's cookies attached. A login page can
++            // also detect the relaxed policy in three lines and treat the
++            // browser as automated.
++            //
++            // The condition is deliberately the partition and not the view's
++            // sandbox flag: WebView2 keys an environment by its user data folder,
++            // which is derived from the partition, and creating a second
++            // environment for the same folder with different options fails. Only
++            // a per-partition decision is guaranteed to stay consistent.
++            const bool isDefaultPartition =
++                partitionStr.empty() || partitionStr == "persist:default";
++            options->put_AdditionalBrowserArguments(
++                isDefaultPartition
++                    ? L"--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --allow-insecure-localhost --disable-web-security"
++                    : L"--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --allow-insecure-localhost");
+ 
+             // Get the interface that supports custom scheme registration
+             Microsoft::WRL::ComPtr<ICoreWebView2EnvironmentOptions4> options4;
+@@ -11828,21 +11938,167 @@ static WebView2View* findWebView2ById(uint32_t webviewId) {
+     return nullptr;
+ }
+ 
+-// Get cookies for a webview (WebView2)
+-// Note: WebView2 requires a live webview to access cookies. Pass webviewId of an existing webview.
++// onUIThread runs fn on the thread that owns the WebView2 objects.
++//
++// Every ICoreWebView2 interface is apartment-threaded and belongs to the thread
++// that created the environment - the one running the message loop in
++// startEventLoop. These exported functions are called over FFI from the app's
++// bun Worker, a different thread, so touching a cookie manager from here is a
++// cross-apartment call on a raw pointer: it does not marshal, and the completion
++// handlers it schedules are delivered to the UI thread's queue, which the caller
++// is not draining. Every other webview API in this file already hops across with
++// MainThreadDispatcher; the cookie API did not, which is why it returned nothing
++// at all.
++template <typename Func>
++static auto onUIThread(Func&& fn) -> decltype(fn()) {
++    if (GetCurrentThreadId() == g_mainThreadId) {
++        return fn();
++    }
++    return MainThreadDispatcher::dispatch_sync(std::forward<Func>(fn));
++}
++
++// awaitCompletion blocks the UI thread for one async WebView2 completion without
++// stalling it. WebView2 delivers completion handlers through this thread's
++// message queue, so a plain WaitForSingleObject would be waiting on a callback it
++// is itself preventing from arriving. Returns false on timeout.
++static bool awaitCompletion(HANDLE completed, DWORD timeoutMs) {
++    const ULONGLONG deadline = GetTickCount64() + timeoutMs;
++    for (;;) {
++        const ULONGLONG now = GetTickCount64();
++        if (now >= deadline) return false;
++        DWORD remaining = static_cast<DWORD>(deadline - now);
++        DWORD signalled = 0;
++        HRESULT hr = CoWaitForMultipleHandles(
++            COWAIT_DISPATCH_CALLS | COWAIT_DISPATCH_WINDOW_MESSAGES,
++            remaining, 1, &completed, &signalled);
++        if (hr == S_OK) return true;
++        if (FAILED(hr)) return false; // RPC_S_CALLPENDING on timeout
++    }
++}
++
++// cookieManagerFor resolves the cookie manager of the webview belonging to
++// partitionIdentifier.
++//
++// Each partition is its own WebView2 environment with its own jar, so the old
++// "use whichever view is first in the map" would happily read another
++// partition's cookies - or, far more often, a view that has none. Must be called
++// on the UI thread.
++static ComPtr<ICoreWebView2CookieManager> cookieManagerFor(const std::string& partitionIdentifier) {
++    for (auto& pair : g_webview2Views) {
++        WebView2View* view = static_cast<WebView2View*>(pair.second);
++        if (!view || view->partition != partitionIdentifier) continue;
++        ComPtr<ICoreWebView2> webview = view->getWebView();
++        if (!webview) continue;
++
++        ComPtr<ICoreWebView2_2> webview2;
++        if (FAILED(webview->QueryInterface(IID_PPV_ARGS(&webview2)))) continue;
++
++        ComPtr<ICoreWebView2CookieManager> cookieManager;
++        if (SUCCEEDED(webview2->get_CookieManager(&cookieManager)) && cookieManager) {
++            return cookieManager;
++        }
++    }
++    return nullptr;
++}
++
++// profileFor resolves the profile of the webview belonging to
++// partitionIdentifier, for the browsing-data APIs. Must be called on the UI
++// thread.
++static ComPtr<ICoreWebView2Profile2> profileFor(const std::string& partitionIdentifier) {
++    for (auto& pair : g_webview2Views) {
++        WebView2View* view = static_cast<WebView2View*>(pair.second);
++        if (!view || view->partition != partitionIdentifier) continue;
++        ComPtr<ICoreWebView2> webview = view->getWebView();
++        if (!webview) continue;
++
++        ComPtr<ICoreWebView2_13> webview13;
++        if (FAILED(webview->QueryInterface(IID_PPV_ARGS(&webview13)))) continue;
++
++        ComPtr<ICoreWebView2Profile> profile;
++        if (FAILED(webview13->get_Profile(&profile)) || !profile) continue;
++
++        ComPtr<ICoreWebView2Profile2> profile2;
++        if (SUCCEEDED(profile->QueryInterface(IID_PPV_ARGS(&profile2))) && profile2) {
++            return profile2;
++        }
++    }
++    return nullptr;
++}
++
++static std::string cookieWideToUtf8(LPCWSTR wstr) {
++    if (!wstr) return "";
++    int size = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
++    if (size <= 1) return "";
++    std::string str(size - 1, 0);
++    WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &str[0], size, nullptr, nullptr);
++    return str;
++}
++
++static std::wstring cookieUtf8ToWide(const std::string& str) {
++    int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
++    if (size <= 1) return L"";
++    std::wstring wstr(size - 1, 0);
++    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wstr[0], size);
++    return wstr;
++}
++
++// appendJsonString writes value as a JSON string literal. Cookie values are
++// arbitrary bytes: interpolating them raw produced invalid JSON whenever one held
++// a quote or a backslash, and the JS side then parsed the whole response as an
++// empty array.
++static void appendJsonString(std::ostringstream& out, const std::string& value) {
++    out << '"';
++    for (unsigned char c : value) {
++        switch (c) {
++            case '"':  out << "\\\""; break;
++            case '\\': out << "\\\\"; break;
++            case '\b': out << "\\b"; break;
++            case '\f': out << "\\f"; break;
++            case '\n': out << "\\n"; break;
++            case '\r': out << "\\r"; break;
++            case '\t': out << "\\t"; break;
++            default:
++                if (c < 0x20) {
++                    char buf[8];
++                    snprintf(buf, sizeof(buf), "\\u%04x", c);
++                    out << buf;
++                } else {
++                    out << static_cast<char>(c);
++                }
++        }
++    }
++    out << '"';
++}
++
++// State shared between a session call and its completion handler. The handler
++// captures it by value, so a callback that arrives after the wait timed out
++// writes to memory that is still alive and signals a handle that is still open,
++// instead of scribbling over the caller's stack.
++struct SessionCallState {
++    HANDLE completed = NULL;
++    std::string json = "[]";
++    bool found = false;
++
++    SessionCallState() { completed = CreateEvent(NULL, FALSE, FALSE, NULL); }
++    ~SessionCallState() { if (completed) CloseHandle(completed); }
++    SessionCallState(const SessionCallState&) = delete;
++    SessionCallState& operator=(const SessionCallState&) = delete;
++};
++
++// How long a session call waits for WebView2 to answer. Generous: the UI thread
++// keeps dispatching while it waits, so this bounds a lost callback, not normal
++// latency.
++static const DWORD kSessionCallTimeoutMs = 5000;
++static const DWORD kClearStorageTimeoutMs = 10000;
++
++// Get cookies for a partition (WebView2).
+ // filterJson: {"url": "https://example.com"} or {} for all
+ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier, const char* filterJson) {
+-    // For WebView2, we need a webview to access cookies
+-    // We'll try to find any webview with the matching partition
+-    // For now, return empty array - full implementation requires webview access
++    const std::string partition = partitionIdentifier ? partitionIdentifier : "";
+ 
+-    std::string result = "[]";
+-
+-    // Parse filter to get URL
++    // Simple JSON parsing for the url field
+     std::string filterStr = filterJson ? filterJson : "{}";
+     std::string filterUrl;
+-
+-    // Simple JSON parsing for url field
+     size_t urlPos = filterStr.find("\"url\"");
+     if (urlPos != std::string::npos) {
+         size_t colonPos = filterStr.find(':', urlPos);
+@@ -11853,59 +12109,33 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+         }
+     }
+ 
+-    // Find a WebView2 instance (ideally matching partition)
+-    WebView2View* view = nullptr;
+-    for (auto& pair : g_webview2Views) {
+-        if (pair.second) {
+-            view = static_cast<WebView2View*>(pair.second);
+-            break; // Use first available view
+-        }
+-    }
+-
+-    if (!view || !view->getWebView()) {
+-        return _strdup("[]");
+-    }
++    std::string cookiesJson = onUIThread([&partition, &filterUrl]() -> std::string {
++        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
++        if (!cookieManager) return "[]";
+ 
+-    // Get cookie manager
+-    ComPtr<ICoreWebView2_2> webview2;
+-    if (FAILED(view->getWebView()->QueryInterface(IID_PPV_ARGS(&webview2)))) {
+-        return _strdup("[]");
+-    }
++        std::wstring wFilterUrl = cookieUtf8ToWide(filterUrl);
++        LPCWSTR uri = filterUrl.empty() ? nullptr : wFilterUrl.c_str();
+ 
+-    ComPtr<ICoreWebView2CookieManager> cookieManager;
+-    if (FAILED(webview2->get_CookieManager(&cookieManager)) || !cookieManager) {
+-        return _strdup("[]");
+-    }
++        auto call = std::make_shared<SessionCallState>();
++        if (!call->completed) return "[]";
+ 
+-    // Get cookies synchronously using event
+-    std::string cookiesJson = "[]";
+-    HANDLE event = CreateEvent(NULL, FALSE, FALSE, NULL);
++        HRESULT hr = cookieManager->GetCookies(uri,
++            Callback<ICoreWebView2GetCookiesCompletedHandler>(
++                [call](HRESULT status, ICoreWebView2CookieList* cookieList) -> HRESULT {
++                    if (SUCCEEDED(status) && cookieList) {
++                        UINT count = 0;
++                        cookieList->get_Count(&count);
+ 
+-    std::wstring wFilterUrl;
+-    if (!filterUrl.empty()) {
+-        int wideSize = MultiByteToWideChar(CP_UTF8, 0, filterUrl.c_str(), -1, nullptr, 0);
+-        wFilterUrl.resize(wideSize - 1);
+-        MultiByteToWideChar(CP_UTF8, 0, filterUrl.c_str(), -1, &wFilterUrl[0], wideSize);
+-    }
+-
+-    LPCWSTR uri = filterUrl.empty() ? nullptr : wFilterUrl.c_str();
+-
+-    cookieManager->GetCookies(uri,
+-        Callback<ICoreWebView2GetCookiesCompletedHandler>(
+-            [&cookiesJson, event](HRESULT result, ICoreWebView2CookieList* cookieList) -> HRESULT {
+-                if (SUCCEEDED(result) && cookieList) {
+-                    UINT count;
+-                    cookieList->get_Count(&count);
+-
+-                    std::ostringstream json;
+-                    json << "[";
+-                    for (UINT i = 0; i < count; i++) {
+-                        ComPtr<ICoreWebView2Cookie> cookie;
+-                        if (SUCCEEDED(cookieList->GetValueAtIndex(i, &cookie))) {
+-                            LPWSTR name, value, domain, path;
+-                            BOOL secure, httpOnly;
+-                            double expires;
++                        std::ostringstream json;
++                        json << "[";
++                        bool first = true;
++                        for (UINT i = 0; i < count; i++) {
++                            ComPtr<ICoreWebView2Cookie> cookie;
++                            if (FAILED(cookieList->GetValueAtIndex(i, &cookie)) || !cookie) continue;
+ 
++                            LPWSTR name = nullptr, value = nullptr, domain = nullptr, path = nullptr;
++                            BOOL secure = FALSE, httpOnly = FALSE;
++                            double expires = 0;
+                             cookie->get_Name(&name);
+                             cookie->get_Value(&value);
+                             cookie->get_Domain(&domain);
+@@ -11914,25 +12144,20 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+                             cookie->get_IsHttpOnly(&httpOnly);
+                             cookie->get_Expires(&expires);
+ 
+-                            // Convert to UTF-8
+-                            auto toUtf8 = [](LPWSTR wstr) -> std::string {
+-                                if (!wstr) return "";
+-                                int size = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
+-                                std::string str(size - 1, '\0');
+-                                WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &str[0], size, nullptr, nullptr);
+-                                return str;
+-                            };
+-
+-                            if (i > 0) json << ",";
+-                            json << "{";
+-                            json << "\"name\":\"" << toUtf8(name) << "\",";
+-                            json << "\"value\":\"" << toUtf8(value) << "\",";
+-                            json << "\"domain\":\"" << toUtf8(domain) << "\",";
+-                            json << "\"path\":\"" << toUtf8(path) << "\",";
+-                            json << "\"secure\":" << (secure ? "true" : "false") << ",";
+-                            json << "\"httpOnly\":" << (httpOnly ? "true" : "false");
++                            if (!first) json << ",";
++                            first = false;
++                            json << "{\"name\":";
++                            appendJsonString(json, cookieWideToUtf8(name));
++                            json << ",\"value\":";
++                            appendJsonString(json, cookieWideToUtf8(value));
++                            json << ",\"domain\":";
++                            appendJsonString(json, cookieWideToUtf8(domain));
++                            json << ",\"path\":";
++                            appendJsonString(json, cookieWideToUtf8(path));
++                            json << ",\"secure\":" << (secure ? "true" : "false");
++                            json << ",\"httpOnly\":" << (httpOnly ? "true" : "false");
+                             if (expires > 0) {
+-                                json << ",\"expirationDate\":" << expires;
++                                json << ",\"expirationDate\":" << std::fixed << expires;
+                             }
+                             json << "}";
+ 
+@@ -11941,47 +12166,26 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+                             CoTaskMemFree(domain);
+                             CoTaskMemFree(path);
+                         }
++                        json << "]";
++                        call->json = json.str();
+                     }
+-                    json << "]";
+-                    cookiesJson = json.str();
+-                }
+-                SetEvent(event);
+-                return S_OK;
+-            }).Get());
++                    SetEvent(call->completed);
++                    return S_OK;
++                }).Get());
+ 
+-    WaitForSingleObject(event, 5000);
+-    CloseHandle(event);
++        if (SUCCEEDED(hr)) {
++            awaitCompletion(call->completed, kSessionCallTimeoutMs);
++        }
++        return call->json;
++    });
+ 
+     return _strdup(cookiesJson.c_str());
+ }
+ 
+-// Set a cookie (WebView2)
++// Set a cookie in a partition (WebView2)
+ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifier, const char* cookieJson) {
+     if (!cookieJson) return false;
+-
+-    // Find a WebView2 instance
+-    WebView2View* view = nullptr;
+-    for (auto& pair : g_webview2Views) {
+-        if (pair.second) {
+-            view = static_cast<WebView2View*>(pair.second);
+-            break;
+-        }
+-    }
+-
+-    if (!view || !view->getWebView()) {
+-        return false;
+-    }
+-
+-    // Get cookie manager
+-    ComPtr<ICoreWebView2_2> webview2;
+-    if (FAILED(view->getWebView()->QueryInterface(IID_PPV_ARGS(&webview2)))) {
+-        return false;
+-    }
+-
+-    ComPtr<ICoreWebView2CookieManager> cookieManager;
+-    if (FAILED(webview2->get_CookieManager(&cookieManager)) || !cookieManager) {
+-        return false;
+-    }
++    const std::string partition = partitionIdentifier ? partitionIdentifier : "";
+ 
+     // Parse JSON
+     std::string jsonStr = cookieJson;
+@@ -12012,7 +12216,11 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
+         size_t colonPos = jsonStr.find(':', pos);
+         size_t numStart = colonPos + 1;
+         while (numStart < jsonStr.size() && (jsonStr[numStart] == ' ' || jsonStr[numStart] == '\t')) numStart++;
+-        return std::stod(jsonStr.substr(numStart));
++        try {
++            return std::stod(jsonStr.substr(numStart));
++        } catch (...) {
++            return 0;
++        }
+     };
+ 
+     std::string name = extractString("name");
+@@ -12040,197 +12248,126 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
+ 
+     if (path.empty()) path = "/";
+ 
+-    // Convert to wide strings
+-    auto toWide = [](const std::string& str) -> std::wstring {
+-        int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
+-        std::wstring wstr(size - 1, L'\0');
+-        MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wstr[0], size);
+-        return wstr;
+-    };
+-
+-    // Create cookie - need to use CreateCookie which requires a URI
+-    std::string cookieUrl = url.empty() ? ("https://" + domain + "/") : url;
+-    std::wstring wUrl = toWide(cookieUrl);
++    return onUIThread([&]() -> bool {
++        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
++        if (!cookieManager) return false;
+ 
+-    ComPtr<ICoreWebView2Cookie> cookie;
+-    if (FAILED(cookieManager->CreateCookie(toWide(name).c_str(), toWide(value).c_str(),
+-                                           toWide(domain).c_str(), toWide(path).c_str(), &cookie))) {
+-        return false;
+-    }
+-
+-    cookie->put_IsSecure(secure);
+-    cookie->put_IsHttpOnly(httpOnly);
+-    if (expirationDate > 0) {
+-        cookie->put_Expires(expirationDate);
+-    }
+-
+-    bool success = false;
+-    HANDLE event = CreateEvent(NULL, FALSE, FALSE, NULL);
++        ComPtr<ICoreWebView2Cookie> cookie;
++        if (FAILED(cookieManager->CreateCookie(cookieUtf8ToWide(name).c_str(),
++                                               cookieUtf8ToWide(value).c_str(),
++                                               cookieUtf8ToWide(domain).c_str(),
++                                               cookieUtf8ToWide(path).c_str(),
++                                               &cookie)) || !cookie) {
++            return false;
++        }
+ 
+-    cookieManager->AddOrUpdateCookie(cookie.Get());
+-    success = true; // AddOrUpdateCookie doesn't have a callback
++        cookie->put_IsSecure(secure);
++        cookie->put_IsHttpOnly(httpOnly);
++        if (expirationDate > 0) {
++            cookie->put_Expires(expirationDate);
++        }
+ 
+-    return success;
++        // AddOrUpdateCookie has no completion handler; it either takes or it does not.
++        return SUCCEEDED(cookieManager->AddOrUpdateCookie(cookie.Get()));
++    });
+ }
+ 
+-// Remove a specific cookie (WebView2)
++// Remove a specific cookie from a partition (WebView2)
+ extern "C" ELECTROBUN_EXPORT bool sessionRemoveCookie(const char* partitionIdentifier, const char* urlStr, const char* cookieName) {
+     if (!urlStr || !cookieName) return false;
+-
+-    // Find a WebView2 instance
+-    WebView2View* view = nullptr;
+-    for (auto& pair : g_webview2Views) {
+-        if (pair.second) {
+-            view = static_cast<WebView2View*>(pair.second);
+-            break;
+-        }
+-    }
+-
+-    if (!view || !view->getWebView()) {
+-        return false;
+-    }
+-
+-    // Get cookie manager
+-    ComPtr<ICoreWebView2_2> webview2;
+-    if (FAILED(view->getWebView()->QueryInterface(IID_PPV_ARGS(&webview2)))) {
+-        return false;
+-    }
+-
+-    ComPtr<ICoreWebView2CookieManager> cookieManager;
+-    if (FAILED(webview2->get_CookieManager(&cookieManager)) || !cookieManager) {
+-        return false;
+-    }
+-
+-    std::string url = urlStr;
+-    std::string name = cookieName;
+-
+-    // Convert to wide strings
+-    int wideSize = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
+-    std::wstring wUrl(wideSize - 1, L'\0');
+-    MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, &wUrl[0], wideSize);
+-
+-    wideSize = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
+-    std::wstring wName(wideSize - 1, L'\0');
+-    MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, &wName[0], wideSize);
+-
+-    // Get cookies matching URL, then delete the one with matching name
+-    bool found = false;
+-    HANDLE event = CreateEvent(NULL, FALSE, FALSE, NULL);
+-
+-    cookieManager->GetCookies(wUrl.c_str(),
+-        Callback<ICoreWebView2GetCookiesCompletedHandler>(
+-            [&found, &wName, &cookieManager, event](HRESULT result, ICoreWebView2CookieList* cookieList) -> HRESULT {
+-                if (SUCCEEDED(result) && cookieList) {
+-                    UINT count;
+-                    cookieList->get_Count(&count);
+-
+-                    for (UINT i = 0; i < count; i++) {
+-                        ComPtr<ICoreWebView2Cookie> cookie;
+-                        if (SUCCEEDED(cookieList->GetValueAtIndex(i, &cookie))) {
+-                            LPWSTR cookieName;
++    const std::string partition = partitionIdentifier ? partitionIdentifier : "";
++    const std::wstring wUrl = cookieUtf8ToWide(urlStr);
++    const std::wstring wName = cookieUtf8ToWide(cookieName);
++
++    return onUIThread([&partition, &wUrl, &wName]() -> bool {
++        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
++        if (!cookieManager) return false;
++
++        auto call = std::make_shared<SessionCallState>();
++        if (!call->completed) return false;
++
++        // Get the cookies matching the URL, then delete the one with this name.
++        // Everything the handler touches is captured by value: it may run after
++        // this frame is gone.
++        const std::wstring name = wName;
++        HRESULT hr = cookieManager->GetCookies(wUrl.c_str(),
++            Callback<ICoreWebView2GetCookiesCompletedHandler>(
++                [call, name, cookieManager](HRESULT status, ICoreWebView2CookieList* cookieList) -> HRESULT {
++                    if (SUCCEEDED(status) && cookieList) {
++                        UINT count = 0;
++                        cookieList->get_Count(&count);
++                        for (UINT i = 0; i < count; i++) {
++                            ComPtr<ICoreWebView2Cookie> cookie;
++                            if (FAILED(cookieList->GetValueAtIndex(i, &cookie)) || !cookie) continue;
++                            LPWSTR cookieName = nullptr;
+                             cookie->get_Name(&cookieName);
+-                            if (wcscmp(cookieName, wName.c_str()) == 0) {
++                            if (cookieName && wcscmp(cookieName, name.c_str()) == 0) {
+                                 cookieManager->DeleteCookie(cookie.Get());
+-                                found = true;
++                                call->found = true;
+                             }
+                             CoTaskMemFree(cookieName);
+                         }
+                     }
+-                }
+-                SetEvent(event);
+-                return S_OK;
+-            }).Get());
+-
+-    WaitForSingleObject(event, 5000);
+-    CloseHandle(event);
++                    SetEvent(call->completed);
++                    return S_OK;
++                }).Get());
+ 
+-    return found;
++        if (SUCCEEDED(hr)) {
++            awaitCompletion(call->completed, kSessionCallTimeoutMs);
++        }
++        return call->found;
++    });
+ }
+ 
+-// Clear all cookies (WebView2)
++// Clear all cookies in a partition (WebView2)
+ extern "C" ELECTROBUN_EXPORT void sessionClearCookies(const char* partitionIdentifier) {
+-    // Find a WebView2 instance
+-    WebView2View* view = nullptr;
+-    for (auto& pair : g_webview2Views) {
+-        if (pair.second) {
+-            view = static_cast<WebView2View*>(pair.second);
+-            break;
++    const std::string partition = partitionIdentifier ? partitionIdentifier : "";
++    onUIThread([&partition]() {
++        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
++        if (cookieManager) {
++            cookieManager->DeleteAllCookies();
+         }
+-    }
+-
+-    if (!view || !view->getWebView()) {
+-        return;
+-    }
+-
+-    // Get cookie manager
+-    ComPtr<ICoreWebView2_2> webview2;
+-    if (FAILED(view->getWebView()->QueryInterface(IID_PPV_ARGS(&webview2)))) {
+-        return;
+-    }
+-
+-    ComPtr<ICoreWebView2CookieManager> cookieManager;
+-    if (FAILED(webview2->get_CookieManager(&cookieManager)) || !cookieManager) {
+-        return;
+-    }
+-
+-    // DeleteAllCookies deletes all cookies
+-    cookieManager->DeleteAllCookies();
++    });
+ }
+ 
+-// Clear storage data (WebView2) - uses Profile API
++// Clear storage data for a partition (WebView2) - uses Profile API
+ extern "C" ELECTROBUN_EXPORT void sessionClearStorageData(const char* partitionIdentifier, const char* storageTypesJson) {
+-    // Find a WebView2 instance
+-    WebView2View* view = nullptr;
+-    for (auto& pair : g_webview2Views) {
+-        if (pair.second) {
+-            view = static_cast<WebView2View*>(pair.second);
+-            break;
+-        }
+-    }
+-
+-    if (!view || !view->getWebView()) {
+-        return;
+-    }
++    const std::string partition = partitionIdentifier ? partitionIdentifier : "";
++    const std::string types = storageTypesJson ? storageTypesJson : "";
+ 
+-    // Try to get Profile interface for clearing browsing data
+-    ComPtr<ICoreWebView2_13> webview13;
+-    if (SUCCEEDED(view->getWebView()->QueryInterface(IID_PPV_ARGS(&webview13)))) {
+-        ComPtr<ICoreWebView2Profile> profile;
+-        if (SUCCEEDED(webview13->get_Profile(&profile))) {
+-            ComPtr<ICoreWebView2Profile2> profile2;
+-            if (SUCCEEDED(profile->QueryInterface(IID_PPV_ARGS(&profile2)))) {
+-                // Determine what to clear
+-                COREWEBVIEW2_BROWSING_DATA_KINDS dataKinds = COREWEBVIEW2_BROWSING_DATA_KINDS_ALL_SITE;
+-
+-                if (storageTypesJson && strlen(storageTypesJson) > 2) {
+-                    dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)0;
+-                    std::string types = storageTypesJson;
+-
+-                    if (types.find("cookies") != std::string::npos) {
+-                        dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)(dataKinds | COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES);
+-                    }
+-                    if (types.find("cache") != std::string::npos) {
+-                        dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)(dataKinds | COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE);
+-                    }
+-                    if (types.find("localStorage") != std::string::npos ||
+-                        types.find("sessionStorage") != std::string::npos ||
+-                        types.find("indexedDB") != std::string::npos) {
+-                        dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)(dataKinds | COREWEBVIEW2_BROWSING_DATA_KINDS_ALL_SITE);
+-                    }
+-                }
++    onUIThread([&partition, &types]() {
++        ComPtr<ICoreWebView2Profile2> profile2 = profileFor(partition);
++        if (!profile2) return;
+ 
+-                HANDLE event = CreateEvent(NULL, FALSE, FALSE, NULL);
+-                profile2->ClearBrowsingData(dataKinds,
+-                    Callback<ICoreWebView2ClearBrowsingDataCompletedHandler>(
+-                        [event](HRESULT result) -> HRESULT {
+-                            SetEvent(event);
+-                            return S_OK;
+-                        }).Get());
+-                WaitForSingleObject(event, 10000);
+-                CloseHandle(event);
++        // Determine what to clear
++        COREWEBVIEW2_BROWSING_DATA_KINDS dataKinds = COREWEBVIEW2_BROWSING_DATA_KINDS_ALL_SITE;
++        if (types.size() > 2) {
++            dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)0;
++            if (types.find("cookies") != std::string::npos) {
++                dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)(dataKinds | COREWEBVIEW2_BROWSING_DATA_KINDS_COOKIES);
++            }
++            if (types.find("cache") != std::string::npos) {
++                dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)(dataKinds | COREWEBVIEW2_BROWSING_DATA_KINDS_DISK_CACHE);
++            }
++            if (types.find("localStorage") != std::string::npos ||
++                types.find("sessionStorage") != std::string::npos ||
++                types.find("indexedDB") != std::string::npos) {
++                dataKinds = (COREWEBVIEW2_BROWSING_DATA_KINDS)(dataKinds | COREWEBVIEW2_BROWSING_DATA_KINDS_ALL_SITE);
+             }
+         }
+-    }
++
++        auto call = std::make_shared<SessionCallState>();
++        if (!call->completed) return;
++        HRESULT hr = profile2->ClearBrowsingData(dataKinds,
++            Callback<ICoreWebView2ClearBrowsingDataCompletedHandler>(
++                [call](HRESULT) -> HRESULT {
++                    SetEvent(call->completed);
++                    return S_OK;
++                }).Get());
++        if (SUCCEEDED(hr)) {
++            awaitCompletion(call->completed, kClearStorageTimeoutMs);
++        }
++    });
+ }
+ 
+ // URL scheme handler - macOS only, stub for Windows

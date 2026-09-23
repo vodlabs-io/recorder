@@ -1,0 +1,85 @@
+[
+	{
+		"name": "tiktok",
+		"display_name": "TikTok",
+		"channel_url": "https://www.tiktok.com/@{username}/live",
+		"login": {
+			"url": "https://www.tiktok.com/login",
+			"cookie_domains": ["tiktok.com"],
+			"success_url_pattern": "^https?://(?:www\\.)?tiktok\\.com/(?:foryou|following|@|$|\\?)",
+			"session_cookie": "sessionid"
+		}
+	},
+	{
+		"name": "pandalive",
+		"display_name": "PandaLive",
+		"channel_url": "https://www.pandalive.co.kr/live/play/{username}"
+	},
+	{
+		"name": "bigo",
+		"display_name": "Bigo",
+		"channel_url": "https://www.bigo.tv/{username}",
+		"login": {
+			"url": "https://www.bigo.tv/en/mobileLoginPage",
+			"refresh_url": "https://www.bigo.tv/",
+			"cookie_domains": ["bigo.tv"],
+			"success_url_pattern": "^https?://(?:www\\.)?bigo\\.tv/(?:[a-z]{2}(?:-[A-Za-z]{2,4})?/)?live-mobile-page/login-success",
+			"session_cookie": "yyuid"
+		}
+	},
+	{
+		"name": "twitch",
+		"display_name": "Twitch",
+		"channel_url": "https://www.twitch.tv/{username}",
+		"login": {
+			"url": "https://www.twitch.tv/login",
+			"refresh_url": "https://www.twitch.tv/settings/profile",
+			"cookie_domains": ["twitch.tv"],
+			"success_url_pattern": "^https?://(?:www\\.|m\\.)?twitch\\.tv/(?:$|\\?|directory|following)",
+			"session_cookie": "auth-token",
+			"account_cookie": "login",
+			"auth": {
+				"scheme": "oauth-cookie",
+				"cookies": ["auth-token"]
+			}
+		}
+	},
+	{
+		"name": "kick",
+		"display_name": "Kick",
+		"channel_url": "https://kick.com/{username}"
+	},
+	{
+		"name": "douyin",
+		"display_name": "Douyin",
+		"channel_url": "https://live.douyin.com/{username}"
+	},
+	{
+		"name": "youtube",
+		"display_name": "YouTube",
+		"channel_url": "https://www.youtube.com/@{username}/live",
+		"stream_limit": { "burst": 4, "interval_ms": 1500 },
+		"login": {
+			"url": "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fwww.youtube.com%2F",
+			"refresh_url": "https://www.youtube.com/",
+			"cookie_domains": ["youtube.com"],
+			"success_url_pattern": "^https?://(?:www\\.|m\\.)?youtube\\.com/",
+			"session_cookie": "LOGIN_INFO",
+			"auth": {
+				"scheme": "sapisidhash",
+				"cookies": ["__Secure-3PAPISID", "SAPISID"],
+				"origin": "https://www.youtube.com"
+			}
+		}
+	},
+	{
+		"name": "soop",
+		"display_name": "SOOP",
+		"channel_url": "https://play.sooplive.com/{username}"
+	},
+	{
+		"name": "chzzk",
+		"display_name": "CHZZK",
+		"channel_url": "https://chzzk.naver.com/live/{username}"
+	}
+]
