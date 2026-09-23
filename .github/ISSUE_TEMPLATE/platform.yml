@@ -1,0 +1,61 @@
+name: A platform stopped working
+description: Streamers on one platform are no longer detected or recorded.
+labels: [platform]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Most platform problems are fixed in the VodLabs service without a new release, so a report helps even if you can't debug it yourself.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - TikTok
+        - YouTube
+        - Twitch
+        - Kick
+        - SOOP
+        - CHZZK
+        - PandaLive
+        - Bigo
+        - Douyin
+    validations:
+      required: true
+  - type: input
+    id: streamer
+    attributes:
+      label: A streamer who shows the problem
+      description: A link to their channel, so it can be reproduced.
+      placeholder: https://…
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happens
+      description: For example, shown as offline while live, or recording stops after a few minutes.
+    validations:
+      required: true
+  - type: dropdown
+    id: signed-in
+    attributes:
+      label: Is the recorder signed in to this platform?
+      options:
+        - "No"
+        - "Yes"
+        - The platform doesn't support sign-in
+  - type: textarea
+    id: details
+    attributes:
+      label: Versions and system
+      description: In the app, About → Copy diagnostics, then paste.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Anything relevant from the logs. Check it holds nothing you'd rather keep private.
+      render: text

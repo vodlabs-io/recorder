@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in the app or the command-line tool doesn't work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If a platform stopped working altogether, use "A platform stopped working" instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: |
+        1. …
+        2. …
+  - type: dropdown
+    id: front-end
+    attributes:
+      label: Where
+      options:
+        - The desktop app
+        - The command-line tool (vod)
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Versions and system
+      description: In the app, About → Copy diagnostics, then paste. With the command-line tool, paste the first lines of `vod info`.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Anything relevant from the logs (About → Open logs folder, or the paths `vod info` prints). Check it holds nothing you'd rather keep private.
+      render: text

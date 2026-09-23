@@ -154,23 +154,17 @@ export function About() {
 
   // A bug report needs the build and the machine, and asking a user to find
   // them is how reports arrive without them. Nothing is uploaded: this opens
-  // a prefilled issue in the browser, which the user reads before posting.
+  // the bug report form with its versions field filled in, which the user
+  // reads before posting.
   const reportBug = () => {
-    const body = [
-      "### What happened",
-      "",
-      "",
-      "### What you expected",
-      "",
-      "",
-      "### Details",
-      `- App: ${appVersion ?? "—"}`,
-      `- Daemon: ${info?.version ?? daemon.version ?? "—"}${info?.commit ? ` (${info.commit.slice(0, 12)})` : ""}`,
-      `- System: ${info ? `${info.os}/${info.arch}` : "—"}`,
+    const details = [
+      `App: ${appVersion ?? "—"}`,
+      `Daemon: ${info?.version ?? daemon.version ?? "—"}${info?.commit ? ` (${info.commit.slice(0, 12)})` : ""}`,
+      `System: ${info ? `${info.os}/${info.arch}` : "—"}`,
     ].join("\n")
     getDaemonClient().openExternal(
-      "https://github.com/vodlabs-io/recorder/issues/new?body=" +
-        encodeURIComponent(body),
+      "https://github.com/vodlabs-io/recorder/issues/new?template=bug.yml&details=" +
+        encodeURIComponent(details),
     )
   }
 
