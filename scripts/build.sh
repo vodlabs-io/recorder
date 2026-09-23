@@ -74,7 +74,7 @@ cd "$REPO_ROOT"
 # A fresh clone, or a shallow one, has no tags. Build anyway and say so in the
 # version rather than failing under `set -e`.
 GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0-dev")
-SEMVER_STRING=$(echo "$GIT_TAG" | sed 's/v//g')
+SEMVER_STRING="${GIT_TAG#v}"
 VERSION_PATH="github.com/vodlabs-io/recorder/internal/version.Version=$SEMVER_STRING"
 COMMIT_PATH="github.com/vodlabs-io/recorder/internal/version.Commit=$(git rev-parse HEAD)"
 DAEMON_BINARY_NAME="vlrecd"
