@@ -13,7 +13,7 @@
 
 set -eu
 
-RELEASES="https://github.com/vodlabs-io/assets/releases"
+RELEASES="https://github.com/vodlabs-io/recorder/releases"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }

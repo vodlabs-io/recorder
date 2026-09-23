@@ -21,7 +21,7 @@
     [Net.ServicePointManager]::SecurityProtocol =
         [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-    $releases = 'https://github.com/vodlabs-io/assets/releases'
+    $releases = 'https://github.com/vodlabs-io/recorder/releases'
     $base = if ($env:VOD_VERSION) {
         "$releases/download/v$($env:VOD_VERSION.TrimStart('v'))"
     } else {

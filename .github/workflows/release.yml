@@ -1,16 +1,25 @@
-name: Build and Release
+name: Release
 
 on:
   push:
     tags: ['v*']
+  # A manual run builds an unsigned snapshot of everything and keeps it on the
+  # run, without publishing a release.
   workflow_dispatch:
 
-# permissions:
-#   contents: write
+permissions:
+  contents: read
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # A tag push signs and publishes, so it runs in the protected `release`
+    # environment, which holds the signing secrets and admits only v* tags.
+    environment: ${{ github.event_name == 'push' && 'release' || '' }}
+    permissions:
+      contents: write     # create the release
+      id-token: write     # sign the provenance attestations
+      attestations: write
     env:
       # Developer ID Application certificate (.p12) and App Store Connect API
       # key (.p8), both base64-encoded. goreleaser signs and notarizes the darwin
@@ -22,8 +31,7 @@ jobs:
       MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
       MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
     steps:
-      # A tag push publishes, so check before anything is built. Manual
-      # snapshot runs sign only when the secrets are set.
+      # A tag push publishes, so check before anything is built.
       - name: Require macOS signing secrets
         if: github.event_name == 'push'
         run: |
@@ -34,33 +42,42 @@ jobs:
             fi
           done
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           # The module names the toolchain; see the toolchain directive in go.mod.
           go-version-file: go.mod
 
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
-          version: '~> v2'
+          version: v2.18.2
           args: >-
             release --clean
             ${{ github.event_name == 'workflow_dispatch' && '--snapshot' || '' }}
         env:
-          # RELEASE_PAT: fine-grained PAT with:
-          #   - Contents: read/write on vodlabs-io/assets (publish releases there)
-          # Releases land on vodlabs-io/assets so artifacts are publicly downloadable
-          # while this repo remains private.
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # Ties each published file to this repository, this workflow and this
+      # commit; `gh attestation verify <file> --repo vodlabs-io/recorder`
+      # checks it.
+      - name: Attest build provenance
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            scripts/install.sh
+            scripts/install.ps1
 
       - name: Upload snapshot artifacts
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: snapshot
           path: |
@@ -70,30 +87,48 @@ jobs:
           retention-days: 7
 
   # Build the Electrobun desktop app natively on each platform. The app is
-  # independent of the Go binaries above; it downloads the daemon at runtime
-  # from vodlabs-io/assets, so this only needs Bun + `electrobun build`.
-  # Runs after goreleaser so the vodlabs-io/assets release already exists; each
-  # matrix leg appends its installer + update metadata to that same v* release.
+  # independent of the Go binaries above: it downloads the daemon at runtime
+  # from this repository's releases. Runs after goreleaser so the release
+  # already exists; each matrix leg adds its installer and update files to it.
   desktop:
     needs: goreleaser
+    environment: ${{ github.event_name == 'push' && 'release' || '' }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
       # One platform failing shouldn't abort the others' uploads.
       fail-fast: false
       matrix:
         include:
-          - { runner: macos-14, name: macos-arm64 }     # Apple Silicon
-          - { runner: macos-15-intel, name: macos-x64 } # Intel
-          - { runner: windows-latest, name: win-x64 }
-          - { runner: ubuntu-latest, name: linux-x64 }
+          - runner: macos-14 # Apple Silicon
+            name: macos-arm64
+            installer: '*macos-arm64*.dmg'
+            friendly: VodLabs-Recorder-macOS-arm64.dmg
+          - runner: macos-15-intel
+            name: macos-x64
+            installer: '*macos-x64*.dmg'
+            friendly: VodLabs-Recorder-macOS-x64.dmg
+          # The Setup program reads its payload from the .installer folder
+          # beside it, so Windows ships as the zip that holds both.
+          - runner: windows-latest
+            name: win-x64
+            installer: '*win-x64*Setup*.zip'
+            friendly: VodLabs-Recorder-Windows-x64-Setup.zip
+          - runner: ubuntu-latest
+            name: linux-x64
+            installer: '*linux-x64*-Setup.tar.gz'
+            friendly: VodLabs-Recorder-Linux-x64-Setup.tar.gz
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: latest
+          bun-version: 1.3.11
 
       # Tag pushes carry the release version; manual runs build a dev snapshot.
       - name: Resolve app version
@@ -177,13 +212,33 @@ jobs:
             spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           done
 
-      # Tag push: publish installers to the same vodlabs-io/assets release that
-      # goreleaser created, so they're publicly downloadable while this repo stays private.
+      # A copy of the installer under a stable, readable name, which the README
+      # and the website link through releases/latest/download/. Electrobun's
+      # own files keep their names: its updater looks them up by those.
+      - name: Add the download name
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          found=(artifacts/${{ matrix.installer }})
+          if [ "${#found[@]}" -ne 1 ]; then
+            echo "::error::Expected one installer matching ${{ matrix.installer }}, found ${#found[@]}"
+            ls artifacts
+            exit 1
+          fi
+          cp "${found[0]}" "artifacts/${{ matrix.friendly }}"
+
+      - name: Attest build provenance
+        if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: artifacts/*
+
+      # Adds the installers to the release goreleaser created.
       - name: Publish to release
         if: github.event_name == 'push'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          repository: vodlabs-io/assets
           tag_name: ${{ github.ref_name }}
           files: artifacts/*
           # Don't touch the notes/flags goreleaser already set on the release.
@@ -194,13 +249,13 @@ jobs:
           # Mirror that rule here: a SemVer pre-release tag contains a hyphen
           # (e.g. v1.2.3-rc.4), so keep those flagged as pre-releases.
           prerelease: ${{ contains(github.ref_name, '-') }}
-          token: ${{ secrets.RELEASE_PAT }}
+          token: ${{ github.token }}
 
       # Manual run: goreleaser only built a snapshot (no release), so keep the
       # desktop artifacts on the workflow run instead.
       - name: Upload snapshot artifacts
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-${{ matrix.name }}
           path: artifacts/*

@@ -4,7 +4,8 @@ project_name: recorder
 
 before:
   hooks:
-    - go mod tidy
+    # A release builds exactly what go.mod and go.sum record.
+    - go mod verify
 
 builds:
   - id: vod
@@ -17,8 +18,12 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+    # Reproducible: the same commit builds byte-identical binaries, so anyone
+    # can rebuild a release and compare it with the published one.
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
-      - -s -w
+      - -s -w -buildid=
       - -X github.com/vodlabs-io/recorder/internal/version.Version={{.Version}}
       - -X github.com/vodlabs-io/recorder/internal/version.Commit={{.FullCommit}}
     # The CLI embeds ffmpeg too: `vod queue` pulls in internal/encoding ->
@@ -45,8 +50,12 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+    # Reproducible: the same commit builds byte-identical binaries, so anyone
+    # can rebuild a release and compare it with the published one.
+    flags: [-trimpath]
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
-      - -s -w
+      - -s -w -buildid=
       - -X github.com/vodlabs-io/recorder/internal/version.Version={{.Version}}
       - -X github.com/vodlabs-io/recorder/internal/version.Commit={{.FullCommit}}
     hooks:
@@ -118,9 +127,10 @@ release:
   prerelease: auto
   github:
     owner: vodlabs-io
-    name: assets
-  # The CLI installers, served from <assets>/releases/latest/download/ like
-  # every other artifact. See the Install section of README.md.
+    name: recorder
+  # The CLI installers, served from releases/latest/download/ like every other
+  # artifact, which is where the vodlabs.io/install.sh and install.ps1
+  # redirects point. See docs/install.md.
   extra_files:
     - glob: ./scripts/install.sh
     - glob: ./scripts/install.ps1

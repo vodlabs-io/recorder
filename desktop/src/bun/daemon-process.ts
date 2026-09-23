@@ -14,7 +14,7 @@ import { basename, join } from "path";
 // DEFAULT_BIN_REPO is the GitHub repo that publishes the daemon releases (the
 // same source the CLI/daemon download from — see internal/vlconfig default
 // bin_repo). Overridable via VLREC_BIN_REPO for testing against a fork.
-export const DEFAULT_BIN_REPO = "https://github.com/vodlabs-io/assets";
+export const DEFAULT_BIN_REPO = "https://github.com/vodlabs-io/recorder";
 
 // goPlatform mirrors Go's runtime.GOOS_GOARCH, which is how release archives and
 // the cache directory are named (see internal/vlupdate). node's process.platform

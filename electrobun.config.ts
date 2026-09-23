@@ -85,6 +85,6 @@ export default {
 	// (see .github/workflows/release.yml). generatePatch (default true) diffs each
 	// release against the previous one for small delta updates.
 	release: {
-		baseUrl: "https://github.com/vodlabs-io/assets/releases/latest/download",
+		baseUrl: "https://github.com/vodlabs-io/recorder/releases/latest/download",
 	},
 } satisfies ElectrobunConfig;

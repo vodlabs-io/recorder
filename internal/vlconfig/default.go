@@ -8,7 +8,7 @@ var Default = map[string]any{
 		"port":       4222,
 		"auto_start": true,
 		"exe_path":   "",
-		"bin_repo":   "https://github.com/vodlabs-io/assets",
+		"bin_repo":   "https://github.com/vodlabs-io/recorder",
 	},
 	"session": map[string]any{
 		"logger":          map[string]any{"file_name": "session.log"},
