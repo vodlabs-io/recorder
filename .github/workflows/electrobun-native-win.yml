@@ -31,12 +31,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout recorder (for the patch)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: recorder
 
       - name: Checkout electrobun
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: blackboardsh/electrobun
           ref: ${{ github.event.inputs.electrobun_tag }}
@@ -75,7 +75,7 @@ jobs:
           echo "version=$CEF_VER" >> $GITHUB_OUTPUT
 
       - name: Cache CEF vendor directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: electrobun/package/vendors/cef
           key: cef-win-x64-${{ steps.cef-version.outputs.version }}
@@ -85,7 +85,7 @@ jobs:
         working-directory: electrobun/package
 
       - name: Upload libNativeWrapper.dll
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: libNativeWrapper-win-x64
           path: electrobun/package/dist/libNativeWrapper.dll
