@@ -1,5 +1,21 @@
 import * as React from "react"
-import { ColumnDef, RowData, SortDirection } from "@tanstack/react-table"
+import {
+  columnFilteringFeature,
+  columnVisibilityFeature,
+  createFilteredRowModel,
+  createPaginatedRowModel,
+  createSortedRowModel,
+  filterFn_equalsString,
+  filterFn_includesString,
+  metaHelper,
+  rowPaginationFeature,
+  rowSortingFeature,
+  sortFn_alphanumeric,
+  sortFn_text,
+  tableFeatures,
+  type ColumnDef,
+  type SortDirection,
+} from "@tanstack/react-table"
 import {
   ChevronDown,
   ChevronsUpDown,
@@ -62,12 +78,25 @@ import {
   streamerIndicator,
 } from "./status"
 
-declare module "@tanstack/react-table" {
-  // Enable per-column cell styling through column meta
-  interface ColumnMeta<TData extends RowData, TValue> {
-    cellClassName?: string
-  }
-}
+// dashboardFeatures is the dashboard table's feature set. Filter and sort
+// functions resolve only if registered here, including the ones "auto" picks:
+// includesString for the search box, alphanumeric/text for string columns.
+export const dashboardFeatures = tableFeatures({
+  columnFilteringFeature,
+  columnVisibilityFeature,
+  rowPaginationFeature,
+  rowSortingFeature,
+  filteredRowModel: createFilteredRowModel(),
+  paginatedRowModel: createPaginatedRowModel(),
+  sortedRowModel: createSortedRowModel(),
+  filterFns: {
+    equalsString: filterFn_equalsString,
+    includesString: filterFn_includesString,
+  },
+  sortFns: { alphanumeric: sortFn_alphanumeric, text: sortFn_text },
+  // Per-column cell styling.
+  columnMeta: metaHelper<{ cellClassName?: string }>(),
+})
 
 const client = getDaemonClient()
 
@@ -224,7 +253,7 @@ export function buildColumns({
   onEditOptions: (s: StreamerView) => void
   onCancelMove: (s: StreamerView) => void
   vodsLoaded: boolean
-}): ColumnDef<DashboardRow>[] {
+}): ColumnDef<typeof dashboardFeatures, DashboardRow>[] {
   return [
     {
       id: "indicator",
@@ -297,7 +326,7 @@ export function buildColumns({
       accessorFn: (row) => statusKey(row),
       enableHiding: false,
       header: sortableHeader("Status"),
-      sortingFn: (a, b) =>
+      sortFn: (a, b) =>
         STATUS_SORT_ORDER.indexOf(statusKey(a.original)) -
         STATUS_SORT_ORDER.indexOf(statusKey(b.original)),
       cell: ({ row }) => <StatusCell s={row.original} />,

@@ -1,8 +1,9 @@
-// Client-local UI preferences (theme, table column visibility).
+// Client-local UI preferences (theme, table column visibility and page size).
 
 export interface Preferences {
   theme: string
   dashboard_column_visibility: { [key: string]: boolean }
+  dashboard_page_size: number
   // Whether the first-run welcome has been through. Stored per client rather
   // than in the daemon's config: it is about this front end having explained
   // itself, and a second machine's app should explain itself too.

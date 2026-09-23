@@ -1,14 +1,11 @@
 import * as React from "react"
 import {
-  ColumnFiltersState,
   flexRender,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  SortingState,
-  useReactTable,
-  VisibilityState,
+  useTable,
+  type ColumnFiltersState,
+  type ColumnVisibilityState,
+  type PaginationState,
+  type SortingState,
 } from "@tanstack/react-table"
 import { ChevronDown, CirclePlay, CircleSlash, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -50,26 +47,28 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog"
+import { TablePagination } from "@/components/table-pagination"
 import { ConnectionBanner } from "@/components/connection-banner"
 import { RegistrationBanner } from "@/components/registration-banner"
 import { ServiceBanner } from "@/components/service-banner"
 import { UpdateRequiredBanner } from "@/components/update-required-banner"
 import { StreamerOptionsDialog } from "@/components/streamer-options-dialog"
 import { appStore } from "@/state/app-state"
-import { DEFAULT_COLUMN_VIS } from "@/state/prefs"
+import { DEFAULT_COLUMN_VIS, DEFAULT_PAGE_SIZE } from "@/state/prefs"
 import { useVodCounts, vodCountKey } from "@/state/vods"
 import { getDaemonClient, type StreamerView } from "@/lib/daemon"
 import { platformDisplayName } from "@/data/supported-platforms"
 import AddStreamer from "../AddStreamer"
-import { buildColumns, type DashboardRow } from "./columns"
+import { buildColumns, dashboardFeatures, type DashboardRow } from "./columns"
 import { DashboardEmpty } from "./empty-state"
 import { JobCards } from "./job-cards"
 import { isMoving } from "./status"
 
 const client = getDaemonClient()
 
-// Survives navigation within the session but not app restarts.
+// Survive navigation within the session but not app restarts.
 let sessionSorting: SortingState | null = null
+let sessionPageIndex = 0
 const DEFAULT_SORTING: SortingState = [{ id: "added", desc: true }]
 
 function columnTitleForId(columnId: string): string {
@@ -107,20 +106,25 @@ function Dashboard() {
     [],
   )
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>(DEFAULT_COLUMN_VIS)
-  const [appliedColumnVisPrefs, setAppliedColumnVisPrefs] =
-    React.useState(false)
+    React.useState<ColumnVisibilityState>(DEFAULT_COLUMN_VIS)
+  const [pagination, setPagination] = React.useState<PaginationState>({
+    pageIndex: sessionPageIndex,
+    pageSize: DEFAULT_PAGE_SIZE,
+  })
+  const [appliedPrefs, setAppliedPrefs] = React.useState(false)
   const prefsHydrated = appStore((state) => state.prefsHydrated)
   const persistPrefs = appStore((state) => state.persistPrefs)
 
   React.useEffect(() => {
     const state = appStore.getState()
-    if (state.prefsHydrated && !appliedColumnVisPrefs) {
+    if (state.prefsHydrated && !appliedPrefs) {
       const vis = state.prefs.dashboard_column_visibility
-      if (vis) setColumnVisibility(vis as VisibilityState)
-      setAppliedColumnVisPrefs(true)
+      if (vis) setColumnVisibility(vis)
+      const pageSize = state.prefs.dashboard_page_size
+      if (pageSize) setPagination((p) => ({ ...p, pageSize }))
+      setAppliedPrefs(true)
     }
-  }, [prefsHydrated, appliedColumnVisPrefs])
+  }, [prefsHydrated, appliedPrefs])
 
   function openOptions(s: StreamerView) {
     setOptionsStreamer(s)
@@ -192,7 +196,8 @@ function Dashboard() {
     client.enableAllStreamers()
   }
 
-  const table = useReactTable<DashboardRow>({
+  const table = useTable({
+    features: dashboardFeatures,
     data: rows,
     columns,
     onSortingChange: (updater) => {
@@ -202,26 +207,47 @@ function Dashboard() {
       setSorting(next)
     },
     onColumnFiltersChange: setColumnFilters,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: (updater) => {
       const nextState =
         typeof updater === "function" ? updater(columnVisibility) : updater
       setColumnVisibility(nextState)
       persistPrefs({ dashboard_column_visibility: nextState })
     },
-    state: { sorting, columnFilters, columnVisibility },
-    initialState: { pagination: { pageIndex: 0, pageSize: 8 } },
+    onPaginationChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(pagination) : updater
+      sessionPageIndex = next.pageIndex
+      setPagination(next)
+      if (next.pageSize !== pagination.pageSize) {
+        persistPrefs({ dashboard_page_size: next.pageSize })
+      }
+    },
+    state: { sorting, columnFilters, columnVisibility, pagination },
     // A streamer going live/offline or having an option toggled replaces the
     // `data` array; without this the page index would snap back to 0, bouncing
     // the user off their current page whenever a row's state changes.
     autoResetPageIndex: false,
   })
 
-  const currentPage = table.getState().pagination.pageIndex + 1
-  const totalPages = Math.max(1, table.getPageCount())
+  const pageCount = table.getPageCount()
+
+  // Removing streamers can leave the current page past the end (see
+  // autoResetPageIndex), so step back to the last page that still has rows.
+  React.useEffect(() => {
+    if (pagination.pageIndex > 0 && pagination.pageIndex >= pageCount) {
+      table.setPageIndex(Math.max(0, pageCount - 1))
+    }
+  }, [pagination.pageIndex, pageCount, table])
+
+  // A new page size keeps the first row on screen rather than jumping back to
+  // page one.
+  function changePageSize(pageSize: number) {
+    const firstRow = pagination.pageIndex * pagination.pageSize
+    table.setPagination({
+      pageIndex: Math.floor(firstRow / pageSize),
+      pageSize,
+    })
+  }
 
   const usernameFilter =
     (table.getColumn("username")?.getFilterValue() as string) ?? ""
@@ -499,29 +525,16 @@ function Dashboard() {
               </Table>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 py-4">
-              <div className="text-muted-foreground flex-1 text-sm">
-                {currentPage} / {totalPages}
-              </div>
-              <div className="space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => table.previousPage()}
-                  disabled={!table.getCanPreviousPage()}
-                >
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => table.nextPage()}
-                  disabled={!table.getCanNextPage()}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
+            <TablePagination
+              pageIndex={pagination.pageIndex}
+              pageCount={pageCount}
+              pageSize={pagination.pageSize}
+              rowCount={table.getRowCount()}
+              totalCount={rows.length}
+              noun="streamer"
+              onPageChange={(pageIndex) => table.setPageIndex(pageIndex)}
+              onPageSizeChange={changePageSize}
+            />
           </div>
 
           <StreamerOptionsDialog
