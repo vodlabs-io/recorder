@@ -5,7 +5,7 @@
 Please report security problems privately, not in a public issue:
 
 - on GitHub, with **Report a vulnerability** on this repository's
-  [Security tab](https://github.com/vodlabs-io/recorder/security/advisories/new);
+  [Security tab](https://github.com/vodlabs-io/recorder/security);
 - or by email to dev@vodlabs.io.
 
 Say what the problem is, how to reproduce it, and which version you tested.
