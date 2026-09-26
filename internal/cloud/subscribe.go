@@ -104,7 +104,7 @@ func (c *Client) subscribe(ctx context.Context, strIDs streamer.StreamerRefs) (s
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
-	req.Header.Set("X-Client-Version", c.clientVersion)
+	c.setClientHeaders(req)
 	req.Header.Set("X-Client-ID", c.clientID)
 
 	if err := c.signRequest(req, bodyBytes); err != nil {

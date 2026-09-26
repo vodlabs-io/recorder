@@ -49,6 +49,8 @@ func Spawn(ctx context.Context, exePath, configFilePath, logPath string) error {
 	}
 
 	c := exec.Command(exePath, args...)
+	// Tell the daemon the CLI started it; it reports this to the backend.
+	c.Env = append(os.Environ(), "VLREC_LAUNCHER=cli")
 	c.Stdin = devNull
 	c.Stdout = out
 	c.Stderr = out

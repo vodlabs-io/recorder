@@ -90,7 +90,7 @@ func (c *Client) fetchStatus(ctx context.Context, opts statusOpts, id ...streame
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("X-Timestamp", fmt.Sprintf("%d", timestamp))
-	req.Header.Set("X-Client-Version", c.clientVersion)
+	c.setClientHeaders(req)
 	req.Header.Set("X-Client-ID", c.clientID)
 
 	if err := c.signRequest(req, nil); err != nil {

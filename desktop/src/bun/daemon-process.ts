@@ -365,6 +365,8 @@ export function spawnDaemon(exePath: string): void {
     stdout: "ignore",
     stderr,
     stdin: "ignore",
+    // Tell the daemon the app started it; it reports this to the backend.
+    env: { ...process.env, VLREC_LAUNCHER: "desktop" },
   });
   // The child holds its own copy; ours would otherwise stay open for the life
   // of the app.
