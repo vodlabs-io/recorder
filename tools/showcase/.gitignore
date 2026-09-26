@@ -1,0 +1,6 @@
+out/
+harness/node_modules/
+harness/dist/
+*.stage.html
+# Dataset images live in B2; fetch-images.ts restores them from images.lock.
+datasets/*/images/

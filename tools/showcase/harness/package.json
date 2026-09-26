@@ -1,0 +1,13 @@
+{
+  "name": "vodlabs-showcase-harness",
+  "private": true,
+  "type": "module",
+  "description": "Renders Shots of the recorder UI against a Demo daemon. See ../README.md.",
+  "scripts": {
+    "dev": "vite",
+    "render": "bun render.ts"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}
