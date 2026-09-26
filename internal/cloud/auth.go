@@ -175,7 +175,7 @@ func (c *Client) fetchPoWChallenge(ctx context.Context) (challengeResponse, erro
 	if err != nil {
 		return challengeResponse{}, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("X-Client-Version", c.clientVersion)
+	c.setClientHeaders(req)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -262,7 +262,7 @@ func (c *Client) register(ctx context.Context) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Client-Version", c.clientVersion)
+	c.setClientHeaders(req)
 	req.Header.Set("X-PoW-Nonce", challenge.Nonce)
 	req.Header.Set("X-PoW-Solution", solution)
 	req.Header.Set("X-NKey-Public", publicKey)
