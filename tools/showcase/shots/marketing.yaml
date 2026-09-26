@@ -1,0 +1,34 @@
+# Marketing Shots: the Dashboard and the VOD Archive, and the hero that stacks
+# them. Render with:
+#   bun tools/showcase/harness/render.ts tools/showcase/shots/marketing.yaml
+dataset: default
+now: 2026-09-24T20:30:00-07:00
+timezone: America/Los_Angeles
+app_version: 1.0.0
+
+defaults:
+  size: [1280, 800]
+  scale: 2
+  themes: [light, dark]
+  prefs:
+    dashboard_page_size: 20
+
+scenes:
+  - name: dashboard
+    route: /dashboard
+    steps:
+      - wait: text=lanternfox_tv
+
+  - name: vod-archive
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+
+compositions:
+  - name: hero
+    windows:
+      - scene: dashboard
+        at: [0, 0]
+      - scene: vod-archive
+        at: [440, 350]
+    backdrop: true
