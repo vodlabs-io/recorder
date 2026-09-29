@@ -145,7 +145,8 @@ func (a *archive) VODThumbnail(_ context.Context, dir, file string) ([]byte, err
 		return nil, fmt.Errorf("%w: no VOD at %s", vlapi.ErrNotFound, dir)
 	}
 	for i := range v.Files {
-		if fileName(v, i) == file {
+		// "" asks for any screenshot of a busy VOD; the first will do.
+		if file == "" || fileName(v, i) == file {
 			return os.ReadFile(a.thumbPath(v, i))
 		}
 	}

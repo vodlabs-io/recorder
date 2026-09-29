@@ -144,7 +144,9 @@ export const VodCard = React.memo(function VodCard({
               : "Show parts"
         }
       >
-        <LazyThumb dir={s.dir} file={busy || files.length === 0 ? null : files[0].name} />
+        {/* A busy session with nothing produced yet asks for any screenshot
+            of it (""), which the daemon takes from its raw parts. */}
+        <LazyThumb dir={s.dir} file={files[0]?.name ?? (busy ? "" : null)} />
         {files.length > 1 && (
           <Badge
             variant="secondary"

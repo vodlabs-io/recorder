@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -286,7 +287,8 @@ func (a *App) RescanVODs(ctx context.Context) {
 // VODThumbnail implements vlapi.VODController: it returns the JPEG screenshot
 // for one file of a listed session, generating and caching it on first request
 // when processing left none. Only files the scan actually listed are touched,
-// so the endpoint can't read arbitrary paths.
+// so the endpoint can't read arbitrary paths. An empty file asks for any
+// screenshot of a session still being processed or moved.
 func (a *App) VODThumbnail(ctx context.Context, dir, file string) ([]byte, error) {
 	session, ok := a.vodIndex.Find(ctx, dir)
 	if !ok {
@@ -299,8 +301,14 @@ func (a *App) VODThumbnail(ctx context.Context, dir, file string) ([]byte, error
 			break
 		}
 	}
-	if !found {
+	if file != "" && !found {
 		return nil, fmt.Errorf("%w: no such file in session: %s", vlapi.ErrNotFound, file)
+	}
+	if session.State != vodindex.StateReady {
+		return a.busyVODThumbnail(ctx, session, file)
+	}
+	if file == "" {
+		return nil, fmt.Errorf("%w: no file named for a finished session", vlapi.ErrNotFound)
 	}
 
 	// Local cache first: everything below this point touches the archive
@@ -342,6 +350,19 @@ func (a *App) VODThumbnail(ctx context.Context, dir, file string) ([]byte, error
 // folder. The JPEG goes to a temp file, into the local cache, and back to the
 // caller; nothing is left in the session folder.
 func (a *App) thumbnailWithoutSidecar(ctx context.Context, key, file, videoPath string) ([]byte, error) {
+	jpeg, err := a.grabThumbnail(ctx, videoPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.thumbCache.Put(key, file, jpeg); err != nil {
+		a.log.Debug("Failed to cache thumbnail", "session", key, "file", file, "error", err)
+	}
+	return jpeg, nil
+}
+
+// grabThumbnail generates a screenshot of videoPath through a temp file and
+// returns its bytes.
+func (a *App) grabThumbnail(ctx context.Context, videoPath string) ([]byte, error) {
 	tmp, err := os.CreateTemp("", "vlrec-thumb-*.jpg")
 	if err != nil {
 		return nil, err
@@ -353,14 +374,132 @@ func (a *App) thumbnailWithoutSidecar(ctx context.Context, key, file, videoPath 
 	if err := processing.GenerateThumbnail(ctx, a.log.With("service", "recordings"), videoPath, tmpPath); err != nil {
 		return nil, err
 	}
-	jpeg, err := os.ReadFile(tmpPath)
+	return os.ReadFile(tmpPath)
+}
+
+// Bounds for screenshots of a busy session's media. Each attempt is capped
+// because a Part left unterminated by a crash reads as a live playlist, which
+// ffmpeg waits on; the source count is capped so an ffmpeg that cannot write
+// JPEGs at all fails fast rather than once per Part.
+const (
+	busyThumbAttemptTimeout = 15 * time.Second
+	busyThumbMaxSources     = 3
+)
+
+// busyVODThumbnail returns a screenshot for a session the queue is still
+// processing or moving. The file asked for may not exist yet or may already
+// have moved, so any screenshot of the session will do: a cached or sidecar
+// one first, then a frame from whatever media the folder still holds. Nothing
+// is written into the folder or the cache while the queue is working there, so
+// processing's own screenshot is the one that sticks.
+func (a *App) busyVODThumbnail(ctx context.Context, session vodindex.VOD, file string) ([]byte, error) {
+	key := thumbCacheKey(session)
+	names := make([]string, 0, len(session.Files)+1)
+	if file != "" {
+		names = append(names, file)
+	}
+	for _, f := range session.Files {
+		if f.Name != file {
+			names = append(names, f.Name)
+		}
+	}
+	for _, name := range names {
+		if jpeg, ok := a.thumbCache.Get(key, name); ok {
+			return jpeg, nil
+		}
+		// A sidecar processing is still writing is skipped until it is whole.
+		jpeg, err := os.ReadFile(filepath.Join(session.Dir, processing.ThumbnailName(name)))
+		if err == nil && completeJPEG(jpeg) {
+			return jpeg, nil
+		}
+	}
+
+	err := fmt.Errorf("%w: no local media to take a screenshot from", vlapi.ErrNotFound)
+	for _, src := range busyThumbSources(session.Dir, names) {
+		attemptCtx, cancel := context.WithTimeout(ctx, busyThumbAttemptTimeout)
+		jpeg, grabErr := a.grabThumbnail(attemptCtx, src)
+		cancel()
+		if grabErr == nil {
+			return jpeg, nil
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		err = grabErr
+	}
+	return nil, err
+}
+
+// busyThumbSources lists the local media a busy session's screenshot can come
+// from, best first: its produced files (one still being written fails and is
+// passed over), then its raw Parts — FLV captures, HLS playlists, then
+// converted intermediates, which may be half written — in Part order.
+func busyThumbSources(dir string, names []string) []string {
+	var sources []string
+	for _, name := range names {
+		if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.Mode().IsRegular() && info.Size() > 0 {
+			sources = append(sources, filepath.Join(dir, name))
+		}
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err == nil {
+		var raw, converted []string
+		for _, e := range entries {
+			name := e.Name()
+			if !strings.HasPrefix(name, "pt") {
+				continue
+			}
+			p := filepath.Join(dir, name)
+			switch {
+			case e.IsDir():
+				if _, err := os.Stat(filepath.Join(p, "index.m3u8")); err == nil {
+					raw = append(raw, filepath.Join(p, "index.m3u8"))
+				}
+			case strings.HasSuffix(name, ".ts"):
+				raw = append(raw, p)
+			case strings.HasSuffix(name, ".mp4"):
+				converted = append(converted, p)
+			}
+		}
+		byPart := func(s []string) {
+			sort.SliceStable(s, func(i, j int) bool { return partIndex(s[i], dir) < partIndex(s[j], dir) })
+		}
+		byPart(raw)
+		byPart(converted)
+		sources = append(sources, raw...)
+		sources = append(sources, converted...)
+	}
+
+	if len(sources) > busyThumbMaxSources {
+		sources = sources[:busyThumbMaxSources]
+	}
+	return sources
+}
+
+// partIndex reads N from a Part path under dir named ptN_<quality>…; paths
+// that don't parse sort last.
+func partIndex(p, dir string) int {
+	rel, err := filepath.Rel(dir, p)
 	if err != nil {
-		return nil, err
+		return int(^uint(0) >> 1)
 	}
-	if err := a.thumbCache.Put(key, file, jpeg); err != nil {
-		a.log.Debug("Failed to cache thumbnail", "session", key, "file", file, "error", err)
+	name := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
+	digits := strings.TrimPrefix(name, "pt")
+	if i := strings.IndexFunc(digits, func(r rune) bool { return r < '0' || r > '9' }); i >= 0 {
+		digits = digits[:i]
 	}
-	return jpeg, nil
+	n, err := strconv.Atoi(digits)
+	if err != nil {
+		return int(^uint(0) >> 1)
+	}
+	return n
+}
+
+// completeJPEG reports whether b is a whole JPEG: it starts with SOI and ends
+// with EOI.
+func completeJPEG(b []byte) bool {
+	return len(b) > 4 && b[0] == 0xFF && b[1] == 0xD8 && b[len(b)-2] == 0xFF && b[len(b)-1] == 0xD9
 }
 
 // thumbCacheKey identifies a session for the thumbnail cache. The session ID is
