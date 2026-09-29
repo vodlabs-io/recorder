@@ -190,15 +190,16 @@ func (s *Service) handleListVODs(req micro.Request) {
 // VODS_THUMBNAIL_TIMEOUT_MS, so ffmpeg never outlives a client that gave up.
 const vodThumbnailTimeout = 55 * time.Second
 
-// handleVODThumbnail returns (generating on demand) one file's screenshot.
+// handleVODThumbnail returns (generating on demand) one file's screenshot. An
+// empty file asks for any screenshot of a session still being worked on.
 func (s *Service) handleVODThumbnail(req micro.Request) {
 	if s.vodsCtl == nil {
 		respond(req, fail(errInternal, "vod controller unavailable"))
 		return
 	}
 	var r vodThumbnailRequest
-	if err := json.Unmarshal(req.Data(), &r); err != nil || r.Dir == "" || r.File == "" {
-		respond(req, fail(errInvalidArg, "dir and file are required"))
+	if err := json.Unmarshal(req.Data(), &r); err != nil || r.Dir == "" {
+		respond(req, fail(errInvalidArg, "dir is required"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), vodThumbnailTimeout)

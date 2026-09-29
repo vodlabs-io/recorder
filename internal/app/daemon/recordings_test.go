@@ -294,3 +294,63 @@ func contains(hay []string, needle string) bool {
 	}
 	return false
 }
+
+// jpegBytes is the smallest byte string completeJPEG accepts.
+var jpegBytes = []byte{0xFF, 0xD8, 0x00, 0x00, 0xFF, 0xD9}
+
+// A busy session serves any part's screenshot, not just the one asked for:
+// the part named may not exist yet, or may already have moved away.
+func TestBusyThumbnailFallsBackToAnotherPartsSidecar(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "vod1.jpg"), jpegBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A sidecar still being written is passed over.
+	if err := os.WriteFile(filepath.Join(dir, "vod2.jpg"), jpegBytes[:3], 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := newVODTestApp(t, dir)
+	session := vodindex.VOD{
+		Dir:   dir,
+		State: vodindex.StateMoving,
+		Files: []vodindex.File{{Name: "vod1.mp4"}, {Name: "vod2.mp4"}},
+	}
+	for _, file := range []string{"vod2.mp4", ""} {
+		got, err := a.busyVODThumbnail(context.Background(), session, file)
+		if err != nil || string(got) != string(jpegBytes) {
+			t.Errorf("busyVODThumbnail(%q) = %v, %v; want vod1's sidecar", file, got, err)
+		}
+	}
+}
+
+// Raw Parts are the fallback when nothing has been produced yet: finished
+// captures before converted intermediates, each in Part order.
+func TestBusyThumbSourcesOrder(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"pt10_best.ts", "pt2_best.ts", "pt1_best.mp4", "session.log", "vod1.mp4"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "pt3_720p"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pt3_720p", "index.m3u8"), []byte("#EXTM3U"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := busyThumbSources(dir, []string{"vod2.mp4", "vod1.mp4"})
+	want := []string{
+		filepath.Join(dir, "vod1.mp4"),
+		filepath.Join(dir, "pt2_best.ts"),
+		filepath.Join(dir, "pt3_720p", "index.m3u8"),
+	}
+	if len(got) != len(want) {
+		t.Fatalf("busyThumbSources = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("busyThumbSources = %q, want %q", got, want)
+		}
+	}
+}

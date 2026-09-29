@@ -134,7 +134,8 @@ function subscribeGeneration(onChange: () => void): () => void {
 // view, holding the result in its own state so a thumbnail arriving never
 // re-renders anything but this one card. The daemon generates missing
 // thumbnails on demand, which can take a moment — hence the
-// per-card spinner.
+// per-card spinner. file "" asks for any screenshot of a session still being
+// worked on; null means there is nothing to show.
 export function LazyThumb({ dir, file }: { dir: string; file: string | null }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [visible, setVisible] = useState(false)
@@ -167,7 +168,7 @@ export function LazyThumb({ dir, file }: { dir: string; file: string | null }) {
   }, [generation])
 
   useEffect(() => {
-    if (!visible || !file || url) return
+    if (!visible || file == null || url) return
     let alive = true
     void loadThumb(dir, file).then((loaded) => {
       if (!alive) return
@@ -199,7 +200,7 @@ export function LazyThumb({ dir, file }: { dir: string; file: string | null }) {
     >
       {url ? (
         <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
-      ) : failed || !file ? (
+      ) : failed || file == null ? (
         <Film className="h-8 w-8 text-muted-foreground/50" />
       ) : visible ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground/50" />
