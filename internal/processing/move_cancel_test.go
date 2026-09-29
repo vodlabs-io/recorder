@@ -181,6 +181,41 @@ func TestArchiveConfigChangedMakesPendingMovesDue(t *testing.T) {
 	}
 }
 
+// A folder coming back online brings forward only the moves aimed at it, with
+// their backoff restarted; moves to other destinations keep their schedule.
+func TestDestinationsRecoveredMakesItsMovesDue(t *testing.T) {
+	s := newTestService(t)
+	ctx := context.Background()
+	later := time.Now().Add(30 * time.Minute).Unix()
+	nas := insertPendingMoveFor(t, s, "tiktok", "alice", "a", t.TempDir(), "/Volumes/nas/recordings")
+	nested := insertPendingMoveFor(t, s, "tiktok", "bob", "b", t.TempDir(), "/Volumes/nas/recordings/bob")
+	other := insertPendingMoveFor(t, s, "tiktok", "carol", "c", t.TempDir(), "/Volumes/nas/recordings2")
+	for _, id := range []int64{nas, nested, other} {
+		if _, err := s.db.Exec(
+			`UPDATE move_jobs SET next_retry_at=?, attempts=4 WHERE id=?`, later, id); err != nil {
+			t.Fatalf("push out retry: %v", err)
+		}
+	}
+
+	s.DestinationsRecovered(ctx, []string{"/Volumes/nas/recordings"})
+
+	for id, wantDue := range map[int64]bool{nas: true, nested: true, other: false} {
+		var next int64
+		var attempts int
+		if err := s.db.QueryRow(
+			`SELECT next_retry_at, attempts FROM move_jobs WHERE id=?`, id).
+			Scan(&next, &attempts); err != nil {
+			t.Fatalf("read move row: %v", err)
+		}
+		if due := next <= time.Now().Unix(); due != wantDue {
+			t.Errorf("move %d due = %v, want %v", id, due, wantDue)
+		}
+		if wantAttempts := map[bool]int{true: 0, false: 4}[wantDue]; attempts != wantAttempts {
+			t.Errorf("move %d attempts = %d, want %d", id, attempts, wantAttempts)
+		}
+	}
+}
+
 // A manual cancel scoped to one streamer must leave every other streamer's
 // queued moves alone.
 func TestCancelMovesForOneStreamer(t *testing.T) {
