@@ -45,9 +45,15 @@ func (a *App) runDiskMonitor(ctx context.Context) {
 		// A root coming back (or dropping out) changes which VODs the VOD
 		// Archive should list, and the index's processing hooks never see it,
 		// so rescan on the transition rather than waiting for the TTL.
-		if unreachable != nil && *unreachable != nowUnreachable && a.vodIndex != nil {
-			a.log.Info("Storage root reachability changed; rescanning the VOD Archive")
-			a.vodIndex.Rescan()
+		if unreachable != nil && *unreachable != nowUnreachable {
+			if a.vodIndex != nil {
+				a.log.Info("Storage root reachability changed; rescanning the VOD Archive")
+				a.vodIndex.Rescan()
+			}
+			// Moves waiting out a backoff on a folder that is back retry now.
+			if back := recoveredPaths(*unreachable, nowUnreachable); len(back) > 0 && a.procSvc != nil {
+				a.procSvc.DestinationsRecovered(ctx, back)
+			}
 		}
 		unreachable = &nowUnreachable
 
@@ -63,6 +69,27 @@ func (a *App) runDiskMonitor(ctx context.Context) {
 		case <-timer.C:
 		}
 	}
+}
+
+// recoveredPaths returns the paths in the before key that are absent from the
+// after key: folders that could not be probed and now can.
+func recoveredPaths(before, after string) []string {
+	if before == "" {
+		return nil
+	}
+	still := make(map[string]bool)
+	if after != "" {
+		for _, p := range strings.Split(after, "\x00") {
+			still[p] = true
+		}
+	}
+	var back []string
+	for _, p := range strings.Split(before, "\x00") {
+		if !still[p] {
+			back = append(back, p)
+		}
+	}
+	return back
 }
 
 // sampleAndPublishDisk probes every Storage root, acts on the download root if

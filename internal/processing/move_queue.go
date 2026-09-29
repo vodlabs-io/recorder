@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/recording"
@@ -157,6 +158,58 @@ func (s *Service) ArchiveConfigChanged(ctx context.Context) {
 		return
 	}
 	s.signalMove()
+}
+
+// DestinationsRecovered makes every pending move aimed at or under one of dirs
+// due now, with its backoff restarted, and wakes the worker. The disk monitor
+// calls it when a folder it could not probe becomes reachable again, so moves
+// stranded by an offline drive resume within seconds.
+func (s *Service) DestinationsRecovered(ctx context.Context, dirs []string) {
+	if s.db == nil || len(dirs) == 0 {
+		return
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, dest FROM move_jobs WHERE status='pending' AND next_retry_at > 0`)
+	if err != nil {
+		s.logger.Error("Failed to list moves for a recovered destination", "error", err)
+		return
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		var dest string
+		if err := rows.Scan(&id, &dest); err != nil {
+			rows.Close()
+			s.logger.Error("Failed to read move for a recovered destination", "error", err)
+			return
+		}
+		for _, dir := range dirs {
+			if pathWithin(dest, dir) {
+				ids = append(ids, id)
+				break
+			}
+		}
+	}
+	rows.Close()
+	if len(ids) == 0 {
+		return
+	}
+	for _, id := range ids {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE move_jobs SET next_retry_at=0, attempts=0 WHERE id=? AND status='pending'`,
+			id); err != nil {
+			s.logger.Error("Failed to reschedule move", "id", id, "error", err)
+		}
+	}
+	s.logger.Info("Destination reachable again; retrying its moves now",
+		"dirs", dirs, "moves", len(ids))
+	s.signalMove()
+}
+
+// pathWithin reports whether p is dir or lies beneath it.
+func pathWithin(p, dir string) bool {
+	rel, err := filepath.Rel(filepath.Clean(dir), filepath.Clean(p))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // CancelMoves retires every pending move matching scope and returns how many
