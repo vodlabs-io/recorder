@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/cookiejar"
 	"time"
 
 	m3u8 "github.com/Eyevinn/hls-m3u8/m3u8"
@@ -183,7 +184,7 @@ func Run(
 	logger *slog.Logger,
 	sink Sink,
 ) (err error) {
-	o := &ingest{cfg: cfg, client: client, logger: logger, sink: sink}
+	o := &ingest{cfg: cfg, client: withCookieJar(client), logger: logger, sink: sink}
 
 	defer func() {
 		if ferr := sink.Finish(err); ferr != nil {
@@ -199,6 +200,29 @@ func Run(
 		return err
 	}
 	return o.run(ctx, playlistURL)
+}
+
+// withCookieJar returns client with a cookie jar of this ingest's own, unless
+// it already carries one.
+//
+// Some Origins hand out a session cookie with the playlist and refuse segments
+// without it (TwitCasting answers 401). The jar is per ingest because the
+// client is shared by every Session: a jar on it would carry one Session's
+// cookies into another's requests.
+func withCookieJar(client *http.Client) *http.Client {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	if client.Jar != nil {
+		return client
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return client
+	}
+	c := *client
+	c.Jar = jar
+	return &c
 }
 
 type ingest struct {

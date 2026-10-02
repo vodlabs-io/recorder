@@ -357,3 +357,46 @@ func TestSinkFailureSurfacesAsSinkError(t *testing.T) {
 		t.Errorf("SinkError must unwrap to the Sink's own error, got %v", err)
 	}
 }
+
+// TestOriginSessionCookieIsKept pins that a cookie the playlist response sets
+// is sent with the segment requests behind it. TwitCasting answers 401 to a
+// segment fetched without the session cookie its playlist hands out.
+func TestOriginSessionCookieIsKept(t *testing.T) {
+	srv := liveOrigin(t, 2, func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("ssid"); err != nil || c.Value != "s1" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		fmt.Fprintf(w, "TSDATA:%s", r.URL.Path)
+	})
+	srv.Config.Handler = cookieSetter(srv.Config.Handler)
+
+	sink := &capture{}
+	if err := ingestOrigin(t, srv, sink, 1); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	assertBodies(t, sink.bodies(), "TSDATA:/live/a0.ts", "TSDATA:/live/a1.ts")
+}
+
+// TestCookieJarIsPerIngest pins that one ingest's cookies never reach another's
+// requests, though both share a client.
+func TestCookieJarIsPerIngest(t *testing.T) {
+	shared := &http.Client{}
+	a, b := withCookieJar(shared), withCookieJar(shared)
+	if a.Jar == nil || b.Jar == nil || a.Jar == b.Jar {
+		t.Fatal("each ingest should get a jar of its own")
+	}
+	if shared.Jar != nil {
+		t.Error("the shared client must be left without a jar")
+	}
+}
+
+// cookieSetter sets the session cookie on every playlist response.
+func cookieSetter(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".m3u8") {
+			http.SetCookie(w, &http.Cookie{Name: "ssid", Value: "s1", Path: "/live/"})
+		}
+		next.ServeHTTP(w, r)
+	})
+}
