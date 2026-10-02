@@ -84,6 +84,12 @@ var scrapeDomains = map[string][]string{
 		"flextv.co.kr",
 		"naverncp.com",
 	},
+	"bilibili": {
+		"bilibili.com",
+		"bilivideo.com",
+		"hdslb.com",
+		"b23.tv",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host

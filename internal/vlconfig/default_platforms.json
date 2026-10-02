@@ -81,5 +81,10 @@
 		"name": "chzzk",
 		"display_name": "CHZZK",
 		"channel_url": "https://chzzk.naver.com/live/{username}"
+	},
+	{
+		"name": "bilibili",
+		"display_name": "Bilibili",
+		"channel_url": "https://live.bilibili.com/{username}"
 	}
 ]
