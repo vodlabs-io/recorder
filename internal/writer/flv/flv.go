@@ -44,6 +44,10 @@ type Config struct {
 	// across a codec-configuration change. One per session; nil disables the
 	// carry-over and every configuration change costs a reconnect.
 	Handoff *Handoff
+	// URLTTL and RefreshURL cover an Origin that grants an FLV URL for less
+	// than a Broadcast lasts; see URLRenewer.
+	URLTTL     time.Duration
+	RefreshURL func(context.Context) (string, error)
 }
 
 // Handoff holds the live stream a codec-configuration change interrupted, so
@@ -172,7 +176,7 @@ func (w *flvWriter) closeOutputFile() {
 // can outlive the part that opened it (see Handoff). guardStream ties it back
 // to the part for every other kind of ending — including the dial, which a
 // cancelled part must still abort.
-func (w *flvWriter) openStream(ctx context.Context) (io.ReadCloser, error) {
+func (w *flvWriter) openStream(ctx context.Context, url string) (io.ReadCloser, error) {
 	streamCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	w.streamCancel = cancel
 	release := w.guardStream(ctx)
@@ -183,7 +187,7 @@ func (w *flvWriter) openStream(ctx context.Context) (io.ReadCloser, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(streamCtx, "GET", w.config.URL, nil)
+	req, err := http.NewRequestWithContext(streamCtx, "GET", url, nil)
 	if err != nil {
 		return fail(fmt.Errorf("failed to create request: %w", err))
 	}
@@ -399,6 +403,12 @@ func (w *flvWriter) Run(ctx context.Context) error {
 	w.sink = w.sanitizer
 	defer w.finishPart()
 
+	urls := NewURLRenewer(ctx, w.config.URL, w.config.URLTTL, w.config.RefreshURL, w.logger)
+	defer urls.Close()
+	if resumed != nil {
+		urls.MarkUsed()
+	}
+
 	consecutiveErrors := 0
 
 	for {
@@ -422,7 +432,7 @@ func (w *flvWriter) Run(ctx context.Context) error {
 			}
 
 			var err error
-			stream, err = w.openStream(ctx)
+			stream, err = w.openStream(ctx, urls.Next(ctx))
 			if err != nil {
 				consecutiveErrors++
 				w.logger.Warn("Failed to open stream",

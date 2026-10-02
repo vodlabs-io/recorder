@@ -34,7 +34,7 @@ type Config struct {
 	Variant string
 	// StreamURLTTL is how long StreamURL stays usable, zero when it outlives the
 	// Session, and RefreshStreamURL re-resolves it when it does not. Set together
-	// (hlswriter only; see hlsingest.Config.URLTTL).
+	// (see hlsingest.Config.URLTTL and flv.URLRenewer).
 	StreamURLTTL     time.Duration
 	RefreshStreamURL func(context.Context) (string, error)
 	// Provenance describes the build and session that produced this Part, for
@@ -212,6 +212,8 @@ func (f *flvWriter) Record(
 		Sanitize:       cfg.Sanitize,
 		OnConfigKey:    cfg.OnConfigKey,
 		Handoff:        handoff,
+		URLTTL:         cfg.StreamURLTTL,
+		RefreshURL:     cfg.RefreshStreamURL,
 	}
 
 	return flv.Record(ctx, flvConfig, client, logger, progressCh)
