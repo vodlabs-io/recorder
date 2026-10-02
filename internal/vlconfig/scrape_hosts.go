@@ -95,6 +95,10 @@ var scrapeDomains = map[string][]string{
 		"esxscloud.com",
 		"linkv.fun",
 	},
+	"twitcasting": {
+		"twitcasting.tv",
+		"cas.st",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
