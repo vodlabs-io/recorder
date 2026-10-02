@@ -101,5 +101,10 @@
 		"name": "douyu",
 		"display_name": "Douyu",
 		"channel_url": "https://www.douyu.com/{username}"
+	},
+	{
+		"name": "mixch",
+		"display_name": "Mixch",
+		"channel_url": "https://mixch.tv/u/{username}/live"
 	}
 ]
