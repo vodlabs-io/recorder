@@ -107,6 +107,9 @@ var scrapeDomains = map[string][]string{
 		"mixch.tv",
 		"live-video.net",
 	},
+	"kuaishou": {
+		"kuaishou.com",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host

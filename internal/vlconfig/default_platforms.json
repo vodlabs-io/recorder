@@ -106,5 +106,11 @@
 		"name": "mixch",
 		"display_name": "Mixch",
 		"channel_url": "https://mixch.tv/u/{username}/live"
+	},
+	{
+		"name": "kuaishou",
+		"display_name": "Kuaishou",
+		"status_limit": { "burst": 2, "interval_ms": 20000 },
+		"channel_url": "https://live.kuaishou.com/u/{username}"
 	}
 ]
