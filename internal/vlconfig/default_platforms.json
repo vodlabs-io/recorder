@@ -86,5 +86,10 @@
 		"name": "bilibili",
 		"display_name": "Bilibili",
 		"channel_url": "https://live.bilibili.com/{username}"
+	},
+	{
+		"name": "liveme",
+		"display_name": "LiveMe",
+		"channel_url": "https://www.liveme.com/livehot/streaming/{username}"
 	}
 ]

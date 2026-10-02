@@ -21,6 +21,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   soop: "SOOP",
   chzzk: "CHZZK",
   bilibili: "Bilibili",
+  liveme: "LiveMe",
 }
 
 // Runtime labels from the daemon's platform list, keyed by lowercase name. Held
