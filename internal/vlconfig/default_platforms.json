@@ -106,5 +106,10 @@
 		"name": "mixch",
 		"display_name": "Mixch",
 		"channel_url": "https://mixch.tv/u/{username}/live"
+	},
+	{
+		"name": "rumble",
+		"display_name": "Rumble",
+		"channel_url": "https://api.vodlabs.io/channel/rumble/{username}"
 	}
 ]

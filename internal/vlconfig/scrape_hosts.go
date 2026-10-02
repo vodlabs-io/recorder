@@ -110,6 +110,10 @@ var scrapeDomains = map[string][]string{
 	"kuaishou": {
 		"kuaishou.com",
 	},
+	"rumble": {
+		"rumble.com",
+		"rumble.cloud",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
