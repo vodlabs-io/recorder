@@ -91,5 +91,10 @@
 		"name": "liveme",
 		"display_name": "LiveMe",
 		"channel_url": "https://www.liveme.com/livehot/streaming/{username}"
+	},
+	{
+		"name": "twitcasting",
+		"display_name": "TwitCasting",
+		"channel_url": "https://api.vodlabs.io/channel/twitcasting/{username}"
 	}
 ]

@@ -22,6 +22,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   chzzk: "CHZZK",
   bilibili: "Bilibili",
   liveme: "LiveMe",
+  twitcasting: "TwitCasting",
 }
 
 // Runtime labels from the daemon's platform list, keyed by lowercase name. Held
