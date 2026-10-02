@@ -26,6 +26,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   douyu: "Douyu",
   mixch: "Mixch",
   kuaishou: "Kuaishou",
+  rumble: "Rumble",
 }
 
 // Runtime labels from the daemon's platform list, keyed by lowercase name. Held
