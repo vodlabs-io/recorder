@@ -96,5 +96,10 @@
 		"name": "twitcasting",
 		"display_name": "TwitCasting",
 		"channel_url": "https://api.vodlabs.io/channel/twitcasting/{username}"
+	},
+	{
+		"name": "douyu",
+		"display_name": "Douyu",
+		"channel_url": "https://www.douyu.com/{username}"
 	}
 ]
