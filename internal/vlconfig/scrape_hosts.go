@@ -90,6 +90,11 @@ var scrapeDomains = map[string][]string{
 		"hdslb.com",
 		"b23.tv",
 	},
+	"liveme": {
+		"liveme.com",
+		"esxscloud.com",
+		"linkv.fun",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
