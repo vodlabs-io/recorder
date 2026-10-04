@@ -111,5 +111,10 @@
 		"name": "rumble",
 		"display_name": "Rumble",
 		"channel_url": "https://api.vodlabs.io/channel/rumble/{username}"
+	},
+	{
+		"name": "generic",
+		"display_name": "Web",
+		"no_monitor": true
 	}
 ]

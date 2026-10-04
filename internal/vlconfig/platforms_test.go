@@ -194,6 +194,10 @@ func contains(s []string, v string) bool {
 // "open in browser" action in every UI.
 func TestEmbeddedPlatformsHaveChannelURL(t *testing.T) {
 	for _, p := range defaultPlatforms() {
+		if p.NoMonitor {
+			// Its username is a digest of the page's URL, not a channel.
+			continue
+		}
 		if p.ChannelURL == "" {
 			t.Errorf("%s has no channel_url", p.Name)
 			continue
@@ -240,5 +244,19 @@ func TestSetPlatformsReportsChannelURLChange(t *testing.T) {
 	}
 	if !SetPlatforms([]Platform{{Name: "twitch", ChannelURL: "https://b.example/{username}"}}) {
 		t.Error("changed channel_url reported as unchanged")
+	}
+}
+
+// The cloud can mark a platform no_monitor but never unmark one the embedded
+// list marks.
+func TestNoMonitorOnlyRestricts(t *testing.T) {
+	saved := Platforms()
+	t.Cleanup(func() { SetPlatforms(saved) })
+
+	SetPlatforms([]Platform{{Name: "generic"}, {Name: "twitch"}, {Name: "newsite", NoMonitor: true}})
+	for name, want := range map[string]bool{"generic": true, "twitch": false, "newsite": true, "absent": false} {
+		if got := NoMonitor(name); got != want {
+			t.Errorf("NoMonitor(%s) = %v, want %v", name, got, want)
+		}
 	}
 }
