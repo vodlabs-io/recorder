@@ -36,6 +36,10 @@ type Platform struct {
 	// run on the cadence the platform signs its media URLs for rather than on a
 	// polling cadence. Absent means defaultStreamLimit.
 	StreamLimit *RateLimit `json:"stream_limit,omitempty"`
+	// NoMonitor means the platform's streamers can only be recorded once: there
+	// is no channel to watch, only what is playing now. The cloud may set it
+	// but never clear it for a platform the embedded list marks.
+	NoMonitor bool `json:"no_monitor,omitempty"`
 }
 
 // RateLimit paces one class of outgoing request: Burst tokens available at
@@ -300,6 +304,29 @@ var embeddedLimits = func() map[string]Platform {
 	return m
 }()
 
+// embeddedNoMonitor names the platforms the embedded list marks no_monitor.
+var embeddedNoMonitor = func() map[string]bool {
+	m := make(map[string]bool)
+	for _, p := range defaultPlatforms() {
+		if p.NoMonitor {
+			m[p.Name] = true
+		}
+	}
+	return m
+}()
+
+// NoMonitor reports whether a platform's streamers can only be recorded once.
+func NoMonitor(name string) bool {
+	platformsMu.RLock()
+	defer platformsMu.RUnlock()
+	for _, p := range platforms {
+		if p.Name == name {
+			return p.NoMonitor
+		}
+	}
+	return embeddedNoMonitor[name]
+}
+
 // withEmbeddedDefaults stamps each platform's Login from the embedded default
 // (matched by name) and backfills DisplayName, ChannelURL and the rate limits
 // when the incoming list omits them.
@@ -307,7 +334,8 @@ var embeddedLimits = func() map[string]Platform {
 // PRIVACY/SECURITY: login metadata, above all CookieDomains, is taken ONLY from
 // the embedded default and never from the cloud, so a compromised cloud cannot
 // widen the allowlist and leak cookies. The other fields are safe to take from
-// the cloud: limits are clamped at use, and the UI checks ChannelURL for https.
+// the cloud: limits are clamped at use, the UI checks ChannelURL for https,
+// and NoMonitor only ever restricts.
 func withEmbeddedDefaults(p []Platform) []Platform {
 	out := slices.Clone(p)
 	for i := range out {
@@ -317,6 +345,9 @@ func withEmbeddedDefaults(p []Platform) []Platform {
 		}
 		if out[i].ChannelURL == "" {
 			out[i].ChannelURL = embeddedChannelURLs[out[i].Name]
+		}
+		if embeddedNoMonitor[out[i].Name] {
+			out[i].NoMonitor = true
 		}
 		if e, ok := embeddedLimits[out[i].Name]; ok {
 			if out[i].StatusLimit == nil {
@@ -371,7 +402,7 @@ func SetPlatforms(p []Platform) bool {
 // pointers differing while the content is identical.
 func platformEqual(a, b Platform) bool {
 	if a.Name != b.Name || a.DisplayName != b.DisplayName ||
-		a.ChannelURL != b.ChannelURL {
+		a.ChannelURL != b.ChannelURL || a.NoMonitor != b.NoMonitor {
 		return false
 	}
 	if !rateLimitEqual(a.StatusLimit, b.StatusLimit) ||
