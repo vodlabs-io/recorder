@@ -31,6 +31,7 @@ import {
 } from "./start-at-login";
 import { connect } from "@nats-io/transport-node";
 import { DaemonSession } from "../../../shared/daemon/session";
+import { DaemonError } from "../../../shared/daemon/connection";
 import {
   PLATFORM_LOGIN_REFRESH_SUBJECT,
   Subjects,
@@ -50,6 +51,7 @@ import {
   signOutPlatform,
 } from "./platform-login";
 import { subscribeBrowserFetch } from "./browser-context";
+import { subscribeStreamSniff } from "./stream-sniff";
 import {
   DEFAULT_BIN_REPO,
   downloadDaemon,
@@ -72,7 +74,7 @@ const NATS_URL = process.env.VLREC_NATS_URL ?? "nats://127.0.0.1:4222";
 // so they need a ceiling above the daemon's own. Time out below it and the user
 // gets a generic local timeout instead of the daemon's own account of what
 // went wrong.
-const CLOUD_ROUNDTRIP_TIMEOUT_MS = 20_000;
+const CLOUD_ROUNDTRIP_TIMEOUT_MS = 40_000;
 
 // session owns the daemon connection: NATS transport, KV mirroring into the
 // snapshot, reconnect resync, and debounced snapshot delivery (see
@@ -263,12 +265,23 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
 
       // Not mutate(): the add replies with the resolved identity rather than
       // an acknowledgement string.
-      addStreamer: ({ monitor, ...ref }) =>
-        session.request<AddStreamerResult>(
-          monitor ? Subjects.streamerAdd : Subjects.streamerRecordOnce,
-          refPayload(ref),
-          CLOUD_ROUNDTRIP_TIMEOUT_MS,
-        ),
+      // A refusal to monitor a page that can only be recorded once comes back
+      // as a result: the UI offers to record it once, and an error's code does
+      // not cross the RPC boundary.
+      addStreamer: async ({ monitor, ...ref }) => {
+        try {
+          return await session.request<AddStreamerResult>(
+            monitor ? Subjects.streamerAdd : Subjects.streamerRecordOnce,
+            refPayload(ref),
+            CLOUD_ROUNDTRIP_TIMEOUT_MS,
+          );
+        } catch (e) {
+          if (e instanceof DaemonError && e.code === "monitor_unsupported") {
+            return { platform: "", username: "", refused: e.code, message: e.message };
+          }
+          throw e;
+        }
+      },
       removeStreamer: (ref: StreamerRef) =>
         mutate(Subjects.streamerRemove, refPayload(ref)),
       removeAllStreamers: () => mutate(Subjects.streamerRemoveAll, {}),
@@ -711,14 +724,18 @@ async function onConnected(info: DaemonInfo): Promise<void> {
 // startBrowserFetch (re)wires the LOCAL request-reply handler the daemon uses to
 // run signed platform requests in a login webview. Re-created on every connect,
 // like startLoginRefresh, since subscriptions die with the previous connection.
+// The stream sniffer is wired alongside it, for the same reason.
 let unsubscribeBrowserFetch: (() => void) | null = null;
+let unsubscribeStreamSniff: (() => void) | null = null;
 function startBrowserFetch(): void {
   try {
     unsubscribeBrowserFetch?.();
+    unsubscribeStreamSniff?.();
   } catch {
     /* previous connection already closed */
   }
   unsubscribeBrowserFetch = subscribeBrowserFetch(session);
+  unsubscribeStreamSniff = subscribeStreamSniff(session);
 }
 
 // MARK: Platform login refresh

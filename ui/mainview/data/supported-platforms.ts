@@ -27,6 +27,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   mixch: "Mixch",
   kuaishou: "Kuaishou",
   rumble: "Rumble",
+  generic: "Web",
 }
 
 // Runtime labels from the daemon's platform list, keyed by lowercase name. Held
@@ -69,3 +70,13 @@ export function streamerChannelURL(
 ): string | null {
   return buildChannelURL(runtimePlatforms, platform, username)
 }
+
+// platformNoMonitor reports a platform whose streamers can only be recorded
+// once (see PlatformInfo.no_monitor). generic carries it before the list loads.
+export function platformNoMonitor(name: string): boolean {
+  const p = runtimePlatforms.find((p) => p.name === name)
+  return p ? p.no_monitor === true : name === "generic"
+}
+
+// NO_MONITOR_REASON explains a Monitor switch locked for such a platform.
+export const NO_MONITOR_REASON = "Sites without their own support can only be recorded once"

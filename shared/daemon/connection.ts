@@ -30,6 +30,19 @@ export interface SessionKV {
 // platform-free.
 export type ConnectFn = (opts: ConnectionOptions) => Promise<NatsConnection>;
 
+// DaemonError is a daemon's refusal, with the code it gave. The code does not
+// survive the desktop app's RPC boundary (see request), so a handler on the bun
+// side that needs it reads it here.
+export class DaemonError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "DaemonError";
+  }
+}
+
 type Envelope<T> = {
   ok: boolean;
   data?: T;
@@ -91,7 +104,10 @@ export class DaemonConnection {
       // app, which does not carry custom Error properties, so anything a client
       // needs to SHOW has to already be in the message. The code stays on the
       // wire for logs and for callers on this side of that boundary.
-      throw new Error(env.error?.message || env.error?.code || "request failed");
+      throw new DaemonError(
+        env.error?.code ?? "",
+        env.error?.message || env.error?.code || "request failed",
+      );
     }
     return env.data as T;
   }

@@ -69,6 +69,15 @@ export const PLATFORM_BROWSERFETCH_SUBJECT = "platform.browserfetch.request";
 // want of one are asked again. Empty payload.
 export const PLATFORM_BROWSERFETCH_READY_SUBJECT = "platform.browserfetch.ready";
 
+// PLATFORM_BROWSERSNIFF_SUBJECT is a LOCAL NATS request-reply subject the daemon
+// uses to ask a running desktop app to load a page the user asked to record in a
+// throwaway browser and report the stream requests its player makes (see
+// internal/browserfetch.SniffSubject). Request: { url, timeout_ms? }; reply:
+// { title?, candidates: [{ url, format, frame? }], error? }.
+// PRIVACY: local-only — never bridged to the cloud; the browser shares nothing
+// with the platform login partitions.
+export const PLATFORM_BROWSERSNIFF_SUBJECT = "platform.browsersniff.request";
+
 // The KV key the daemon bumps when the VOD Archive's contents change (a VOD
 // produced, moved, or deleted). It rides the existing "daemon.>" KV watch, so
 // clients get change notifications without a dedicated subscription.

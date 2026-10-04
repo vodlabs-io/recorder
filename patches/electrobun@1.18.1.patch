@@ -1,17 +1,41 @@
 diff --git a/dist/api/bun/proc/native.ts b/dist/api/bun/proc/native.ts
-index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbbaf84f29d 100644
+index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802382149c4 100644
 --- a/dist/api/bun/proc/native.ts
 +++ b/dist/api/bun/proc/native.ts
-@@ -1915,7 +1915,7 @@ process.on("SIGTERM", () => {
+@@ -1304,9 +1304,17 @@ window.__electrobunBunBridge = window.__electrobunBunBridge || window.webkit?.me
+ 				selectedPreloadScript = preloadScript;
+ 			}
+ 
+-			const electrobunPreload = dynamicPreload + selectedPreloadScript;
++			let electrobunPreload = dynamicPreload + selectedPreloadScript;
+ 
+-			const customPreload = preload;
++			let customPreload = preload;
++			// The native custom preload runs in the main frame only on macOS, while
++			// Electrobun's own preload runs in every frame. A custom preload that
++			// opens with ALL_FRAMES_PRELOAD rides along with Electrobun's, so it
++			// reaches embedded players' frames too.
++			if (customPreload && customPreload.startsWith(ALL_FRAMES_PRELOAD)) {
++				electrobunPreload += "\n;" + customPreload;
++				customPreload = "";
++			}
+ 
+ 			// Pre-set flags before initWebview (workaround for FFI param count limits)
+ 			native_.symbols.setNextWebviewFlags(startTransparent, startPassthrough);
+@@ -1915,7 +1923,11 @@ process.on("SIGTERM", () => {
  //   }
  // );
  
 -const windowCloseCallback = new JSCallback(
++// ALL_FRAMES_PRELOAD marks an inline custom preload to inject into every frame
++// (see initWebview).
++export const ALL_FRAMES_PRELOAD = "/* electrobun:all-frames */";
++
 +const windowCloseCallback = guardedJSCallback("windowClose",
  	(id) => {
  		const handler = electrobunEventEmitter.events.window.close;
  		const event = handler({
-@@ -1934,7 +1934,7 @@ const windowCloseCallback = new JSCallback(
+@@ -1934,7 +1946,7 @@ const windowCloseCallback = new JSCallback(
  	},
  );
  
@@ -20,7 +44,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  	(id, x, y) => {
  		const handler = electrobunEventEmitter.events.window.move;
  		const event = handler({
-@@ -1954,7 +1954,7 @@ const windowMoveCallback = new JSCallback(
+@@ -1954,7 +1966,7 @@ const windowMoveCallback = new JSCallback(
  	},
  );
  
@@ -29,7 +53,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  	(id, x, y, width, height) => {
  		const handler = electrobunEventEmitter.events.window.resize;
  		const event = handler({
-@@ -1976,7 +1976,7 @@ const windowResizeCallback = new JSCallback(
+@@ -1976,7 +1988,7 @@ const windowResizeCallback = new JSCallback(
  	},
  );
  
@@ -38,7 +62,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  	(id) => {
  		const handler = electrobunEventEmitter.events.window.focus;
  		const event = handler({
-@@ -1994,7 +1994,7 @@ const windowFocusCallback = new JSCallback(
+@@ -1994,7 +2006,7 @@ const windowFocusCallback = new JSCallback(
  	},
  );
  
@@ -47,7 +71,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  	(id) => {
  		const handler = electrobunEventEmitter.events.window.blur;
  		const event = handler({
-@@ -2013,7 +2013,7 @@ const windowBlurCallback = new JSCallback(
+@@ -2013,7 +2025,7 @@ const windowBlurCallback = new JSCallback(
  );
  
  // global event
@@ -56,7 +80,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  	(id, keyCode, modifiers, isDown, isRepeat) => {
  		const handler = isDown
  			? electrobunEventEmitter.events.window.keyDown
-@@ -2036,7 +2036,7 @@ const windowKeyCallback = new JSCallback(
+@@ -2036,7 +2048,7 @@ const windowKeyCallback = new JSCallback(
  
  const getMimeType = new JSCallback(
  	(filePath) => {
@@ -65,7 +89,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  		const mimeType = Bun.file(_filePath).type; // || "application/octet-stream";
  
  		// For this usecase we generally don't want the charset included in the mimetype
-@@ -2072,9 +2072,9 @@ if (native) native_.symbols.setJSUtils(getMimeType, getHTMLForWebviewSync);
+@@ -2072,9 +2084,9 @@ if (native) native_.symbols.setJSUtils(getMimeType, getHTMLForWebviewSync);
  const globalShortcutHandlers = new Map<string, () => void>();
  
  if (native) {
@@ -77,7 +101,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  			const handler = electrobunEventEmitter.events.app.openUrl;
  			const event = handler({ url });
  			electrobunEventEmitter.emitEvent(event);
-@@ -2085,7 +2085,7 @@ if (native) {
+@@ -2085,7 +2097,7 @@ if (native) {
  		native_.symbols.setURLOpenHandler(urlOpenCallback);
  	}
  
@@ -86,7 +110,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  		() => {
  			if (process.platform === "darwin") {
  				native_.symbols.setDockIconVisible(true);
-@@ -2100,7 +2100,7 @@ if (native) {
+@@ -2100,7 +2112,7 @@ if (native) {
  		native_.symbols.setAppReopenHandler(appReopenCallback);
  	}
  
@@ -95,7 +119,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  		() => {
  			const { quit } = require("../core/Utils");
  			quit();
-@@ -2109,9 +2109,9 @@ if (native) {
+@@ -2109,9 +2121,9 @@ if (native) {
  	);
  	native_.symbols.setQuitRequestedHandler(quitRequestedCallback);
  
@@ -107,7 +131,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  			const handler = globalShortcutHandlers.get(accelerator);
  			if (handler) handler();
  		},
-@@ -2498,15 +2498,15 @@ const webviewEventHandler = (id: number, eventName: string, detail: string) => {
+@@ -2498,15 +2510,15 @@ const webviewEventHandler = (id: number, eventName: string, detail: string) => {
  	electrobunEventEmitter.emitEvent(event, id);
  };
  
@@ -126,7 +150,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  		} catch (err) {
  			console.error("[webviewEventJSCallback] Error converting strings:", err);
  			console.error("[webviewEventJSCallback] Raw values:", {
-@@ -2528,12 +2528,7 @@ const webviewEventJSCallback = new JSCallback(
+@@ -2528,12 +2540,7 @@ const webviewEventJSCallback = new JSCallback(
  const bunBridgePostmessageHandler = new JSCallback(
  	(id, msg) => {
  		try {
@@ -140,7 +164,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  			if (!rawMessage || (rawMessage[0] !== "{" && rawMessage[0] !== "[")) {
  				return;
  			}
-@@ -2564,8 +2559,7 @@ const bunBridgePostmessageHandler = new JSCallback(
+@@ -2564,8 +2571,7 @@ const bunBridgePostmessageHandler = new JSCallback(
  const eventBridgeHandler = new JSCallback(
  	(_id: number, msg: number) => {
  		try {
@@ -150,7 +174,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  			if (!rawMessage || (rawMessage[0] !== "{" && rawMessage[0] !== "[")) {
  				return;
  			}
-@@ -2593,8 +2587,7 @@ const eventBridgeHandler = new JSCallback(
+@@ -2593,8 +2599,7 @@ const eventBridgeHandler = new JSCallback(
  const internalBridgeHandler = new JSCallback(
  	(_id: number, msg: number) => {
  		try {
@@ -160,7 +184,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  
  			if (jsonBatch.id === "webviewEvent") {
  				// Note: Some WebviewEvents from inside the webview are routed through here
-@@ -2660,11 +2653,11 @@ const internalBridgeHandler = new JSCallback(
+@@ -2660,11 +2665,11 @@ const internalBridgeHandler = new JSCallback(
  	},
  );
  
@@ -174,7 +198,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  
  		// Use shared deserialization method
  		const { action: actualAction, data } = deserializeMenuAction(actionString);
-@@ -2686,9 +2679,9 @@ const trayItemHandler = new JSCallback(
+@@ -2686,9 +2691,9 @@ const trayItemHandler = new JSCallback(
  	},
  );
  
@@ -186,7 +210,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  
  		// Use shared deserialization method
  		const { action: actualAction, data } = deserializeMenuAction(actionString);
-@@ -2709,9 +2702,9 @@ const applicationMenuHandler = new JSCallback(
+@@ -2709,9 +2714,9 @@ const applicationMenuHandler = new JSCallback(
  	},
  );
  
@@ -198,7 +222,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..d36a4e54b6bbe7a930b282d75b72efbb
  
  		// Use shared deserialization method
  		const { action: actualAction, data } = deserializeMenuAction(actionString);
-@@ -2747,6 +2740,31 @@ export function toCString(
+@@ -2747,6 +2752,31 @@ export function toCString(
  	return ptr(buff);
  }
  

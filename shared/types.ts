@@ -341,6 +341,9 @@ export type PlatformInfo = {
   // substituted. When absent, no link is shown.
   channel_url?: string;
   login?: LoginFlow;
+  // Set for a platform whose streamers can only be recorded once (pages on
+  // sites without their own support): there is no channel to monitor.
+  no_monitor?: boolean;
 };
 
 // CloudInterval mirrors vlapi.CloudInterval: the estimated polling interval for
@@ -483,6 +486,11 @@ export type AddStreamerParams = StreamerRef & {
 export type AddStreamerResult = {
   platform: string;
   username: string;
+  // Set instead of an identity when the daemon refused to monitor a streamer
+  // that can only be recorded once; message is its explanation. The caller
+  // offers to record it once.
+  refused?: "monitor_unsupported";
+  message?: string;
 };
 
 // MARK: VOD Archive
