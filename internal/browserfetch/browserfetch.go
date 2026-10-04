@@ -46,3 +46,35 @@ type Response struct {
 	Body   string `json:"body,omitempty"`
 	Error  string `json:"error,omitempty"`
 }
+
+// SniffSubject is the LOCAL NATS subject (request-reply) on which the daemon
+// asks the desktop to load a page in a throwaway browser and report the stream
+// requests its player makes. The page is one the user asked to record; the
+// daemon refuses any other (see vlstate.PermitSniff). Headless daemons have no
+// subscriber, so the request times out and the caller falls back to reading
+// the page without a browser.
+const SniffSubject = "platform.browsersniff.request"
+
+// SniffRequest asks for one page to be sniffed.
+type SniffRequest struct {
+	URL       string `json:"url"`
+	TimeoutMS int    `json:"timeout_ms,omitempty"`
+}
+
+// SniffCandidate is one stream the page's player requested.
+type SniffCandidate struct {
+	URL string `json:"url"`
+	// Format is "hls" or "flv".
+	Format string `json:"format"`
+	// Frame is the document that made the request, which may be an embedded
+	// player from another site. It is the stream's Referer.
+	Frame string `json:"frame,omitempty"`
+}
+
+// SniffResponse is the desktop's report: the page's title and the streams it
+// saw, best first, or an error.
+type SniffResponse struct {
+	Title      string           `json:"title,omitempty"`
+	Candidates []SniffCandidate `json:"candidates"`
+	Error      string           `json:"error,omitempty"`
+}
