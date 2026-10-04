@@ -665,6 +665,11 @@ func (c *Client) startScrapeHandler(ctx context.Context) error {
 	// the service with: that one may legitimately reach a private address when a
 	// developer runs the service locally, and a scrape never may.
 	handler := newScrapeHandler(scrapeLogger, newScrapeClient(), c.cookies, c.localNC, c.nc)
+	// An add resubscribes right after its preflight sniffed the page, and the
+	// first status check of the new subscription should not load it again.
+	if c.sniffs != nil {
+		handler.sniffs = c.sniffs
+	}
 	if c.kv != nil {
 		handler.sniffPermitted = func(pageURL string) bool {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
