@@ -61,11 +61,37 @@ describe("rank", () => {
   });
 });
 
+// Euronews' Dailymotion player fetches its ad schedule from a .m3u8 address
+// that answers with VMAP XML.
+test("drops a playlist address that answered with something else", () => {
+  const ads = "https://dmxleo.dailymotion.com/cdn/manifest/video/x.m3u8?af=2";
+  const hits: Hit[] = [
+    { kind: "fetch", url: ads, frame: page },
+    { kind: "fetch", url: ads, frame: page },
+    { kind: "response", url: ads, frame: page, invalid: true },
+  ];
+  expect(rank(hits)).toEqual([]);
+  expect(isLiveEnough(hits)).toBe(false);
+});
+
+// 3Cat: a Youbora analytics beacon carries the stream's address in its query.
+test("ranks a playlist named only in a query below a real one", () => {
+  const beacon = "https://c40.youboranqs01.com/start?accountCode=tv3&mediaResource=https%3A%2F%2Fx%2Fmaster.m3u8";
+  const real = "https://directes3-tv-int.3catdirectes.cat/live-content/tvi-hls/master.m3u8";
+  const hits: Hit[] = [
+    { kind: "resource", url: beacon, frame: page },
+    { kind: "html", url: real, frame: page },
+  ];
+  expect(rank(hits).map((c) => c.url)).toEqual([real, beacon]);
+});
+
 describe("isLiveEnough", () => {
   test("waits for a sign the stream is live", () => {
     const once: Hit = { kind: "fetch", url: "https://cdn.example/live/index.m3u8", frame: page };
+    const read: Hit = { kind: "response", url: once.url, frame: page };
     expect(isLiveEnough([once])).toBe(false);
-    expect(isLiveEnough([once, once])).toBe(true);
+    expect(isLiveEnough([once, once])).toBe(false);
+    expect(isLiveEnough([once, read, once])).toBe(true);
     expect(isLiveEnough([{ kind: "playing", url: once.url, frame: page }])).toBe(true);
     expect(isLiveEnough([{ kind: "fetch", url: "https://pull.example/a.flv", frame: page }])).toBe(true);
   });

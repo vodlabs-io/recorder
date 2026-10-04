@@ -17,6 +17,8 @@ export type Hit = {
   // it has ended (a VOD or a finished broadcast).
   master?: boolean;
   ended?: boolean;
+  // Set on a response hit whose body was not a playlist at all.
+  invalid?: boolean;
 };
 
 export type Candidate = {
@@ -41,6 +43,14 @@ function isAd(host: string): boolean {
   return AD_HOSTS.some((ad) => host === ad || host.endsWith("." + ad));
 }
 
+// namedInPath reports whether a stream URL's path, not just its query, names
+// the format. An analytics beacon or an ad call can carry the stream's address
+// as a parameter.
+function namedInPath(u: URL): boolean {
+  const p = u.pathname.toLowerCase();
+  return p.includes(".m3u8") || p.includes(".flv") || p.includes("mpegurl");
+}
+
 type Seen = {
   url: string;
   format: "hls" | "flv";
@@ -50,6 +60,10 @@ type Seen = {
   requests: number;
   master: boolean;
   ended: boolean;
+  // Whether the page read a playlist body from it.
+  read: boolean;
+  // Whether the path names the format (see namedInPath).
+  inPath: boolean;
 };
 
 // collect folds hits into one entry per stream URL.
@@ -77,13 +91,16 @@ function collect(hits: Hit[]): Map<string, Seen> {
         requests: 0,
         master: false,
         ended: false,
+        read: false,
+        inPath: namedInPath(u),
       };
       seen.set(h.url, s);
     }
     s.kinds.add(h.kind);
     if (h.kind === "fetch" || h.kind === "xhr" || h.kind === "resource") s.requests++;
     if (h.master) s.master = true;
-    if (h.ended) s.ended = true;
+    if (h.ended || h.invalid) s.ended = true;
+    if (h.kind === "response" && !h.invalid) s.read = true;
     // The frame whose player fetched it is the Referer it expects; an html
     // sighting in the top document says less than that.
     if (h.kind !== "html" && h.frame) s.frame = h.frame;
@@ -94,9 +111,10 @@ function collect(hits: Hit[]): Map<string, Seen> {
 // score orders candidates: what a <video> is actually playing first, then a
 // playlist the page keeps re-reading (a live media playlist), a master
 // playlist (which leaves the quality to choose), anything a player set as its
-// source or requested, and last an address merely written in the page.
+// source or requested, then an address merely written in the page, and last
+// one whose format only a query parameter names.
 function score(s: Seen): number {
-  let n = 0;
+  let n = s.inPath || s.read ? 0 : -100;
   if (s.kinds.has("playing")) n += 100;
   if (s.requests >= 2) n += 40;
   if (s.master) n += 30;
@@ -106,7 +124,7 @@ function score(s: Seen): number {
 }
 
 // rank returns the candidates worth relaying, best first. A playlist the page
-// read and found ended is dropped. A variant of a master that also made the
+// read and found ended, or found not to be a playlist, is dropped. A variant of a master that also made the
 // list is dropped too, so the daemon gets the master and keeps the choice of
 // quality.
 export function rank(hits: Hit[], limit = 10): Candidate[] {
@@ -116,12 +134,13 @@ export function rank(hits: Hit[], limit = 10): Candidate[] {
 }
 
 // isLiveEnough reports whether hits already hold a stream worth stopping for:
-// something playing, a playlist re-read, or an FLV stream requested.
+// something playing, a playlist re-read and seen to be one, or an FLV stream
+// requested.
 export function isLiveEnough(hits: Hit[]): boolean {
   for (const s of collect(hits).values()) {
     if (s.ended) continue;
-    if (s.kinds.has("playing") || s.requests >= 2) return true;
-    if (s.format === "flv" && s.requests >= 1) return true;
+    if (s.kinds.has("playing") || (s.requests >= 2 && s.read)) return true;
+    if (s.format === "flv" && s.inPath && s.requests >= 1) return true;
   }
   return false;
 }
