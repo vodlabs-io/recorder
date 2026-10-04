@@ -54,3 +54,21 @@ func TestDataGapMeasuresTheHoleNotThePartBoundary(t *testing.T) {
 		}
 	})
 }
+
+// A session on a platform nothing monitors ends on a long enough hole, since no
+// offline status will ever arrive for it; any other platform keeps lagging.
+func TestEndsUnmonitored(t *testing.T) {
+	for _, tc := range []struct {
+		platform string
+		gap      time.Duration
+		want     bool
+	}{
+		{"generic", unmonitoredStallLimit, true},
+		{"generic", unmonitoredStallLimit - time.Second, false},
+		{"twitch", time.Hour, false},
+	} {
+		if got := endsUnmonitored(tc.platform, tc.gap); got != tc.want {
+			t.Errorf("endsUnmonitored(%s, %v) = %v, want %v", tc.platform, tc.gap, got, tc.want)
+		}
+	}
+}

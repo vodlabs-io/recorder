@@ -10,6 +10,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/flvfix"
 	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/streamer"
+	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vlerror"
 )
 
@@ -36,6 +37,18 @@ func reconnectPlan(err error, partBytes int64) (freshURL, skipDelay bool) {
 		return false, false
 	}
 	return true, partBytes > 0
+}
+
+// unmonitoredStallLimit is how long a session on a no_monitor platform may go
+// without data before it ends. Nothing reports such a streamer offline, so a
+// stream that ended while its last check still read live would otherwise keep
+// the session lagging forever.
+const unmonitoredStallLimit = 3 * time.Minute
+
+// endsUnmonitored reports whether a session that has recorded nothing for gap
+// should end because its platform is never monitored.
+func endsUnmonitored(platform string, gap time.Duration) bool {
+	return gap >= unmonitoredStallLimit && vlconfig.NoMonitor(platform)
 }
 
 // streamHost returns the server a stream URL points at, for logging: the rest
@@ -159,6 +172,12 @@ func (w *worker) Run(ctx context.Context) error {
 				// and usually resumes within seconds. A lag is a hole in the
 				// recording, so the gap since the last byte is what decides.
 				gap := w.dataGap(sessionStart)
+				if endsUnmonitored(w.strKey.Platform, gap) {
+					w.logger.Info("No data for too long on a platform nothing monitors; treating the stream as ended",
+						"idle", gap.Round(time.Second))
+					state = streamerOffline
+					continue
+				}
 				if gap >= stallTimeout {
 					w.logger.Info("Stream is lagging", "idle", gap.Round(time.Second))
 					w.store.SetSessionState(ctx, w.strKey, w.SessionID, recording.SessionLagging)
