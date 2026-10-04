@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	m3u8 "github.com/Eyevinn/hls-m3u8/m3u8"
 )
 
 func testIngest(t *testing.T, srv *httptest.Server, cfg Config) *ingest {
@@ -128,5 +130,21 @@ func TestMasterLoopIsBounded(t *testing.T) {
 	o := testIngest(t, srv, Config{URL: srv.URL + "/live/loop.m3u8"})
 	if _, err := o.resolveMediaPlaylist(o.cfg.URL); err == nil {
 		t.Fatal("resolveMediaPlaylist: a self-referential master must be bounded, not followed forever")
+	}
+}
+
+// An I-frame playlist matches its media variant's resolution, so "best" could
+// land on keyframes only.
+func TestSelectVariantSkipsIFramePlaylists(t *testing.T) {
+	body := "#EXTM3U\n" +
+		"#EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080\nindex-1080.m3u8\n" +
+		"#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=500000,RESOLUTION=1920x1080,URI=\"keyframes/index-1080.m3u8\"\n"
+	pl, _, err := m3u8.DecodeFrom(strings.NewReader(body), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := selectVariant(pl.(*m3u8.MasterPlaylist), "https://cdn.example/live/master.m3u8", "best")
+	if err != nil || got != "https://cdn.example/live/index-1080.m3u8" {
+		t.Fatalf("selectVariant = %q, %v; want the media variant", got, err)
 	}
 }
