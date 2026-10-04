@@ -17,7 +17,11 @@ import {
   type StreamerView,
   type UserConfig,
 } from "@/lib/daemon"
-import { platformDisplayName } from "@/data/supported-platforms"
+import {
+  NO_MONITOR_REASON,
+  platformDisplayName,
+  platformNoMonitor,
+} from "@/data/supported-platforms"
 import { refPayload } from "@shared/daemon/subjects"
 import {
   oneShotBlockedReason,
@@ -133,10 +137,12 @@ export function StreamerOptionsDialog({
               // Same rule as the dashboard's Monitor switch: only a live,
               // recording streamer can be switched to record-once, and a
               // streamer already on record-once keeps the box editable so it
-              // can be promoted back.
+              // can be promoted back, unless its site can only be recorded once.
               streamer && streamer.monitor && !oneShotEligible(streamer)
                 ? oneShotBlockedReason(streamer)
-                : undefined
+                : streamer && !streamer.monitor && platformNoMonitor(streamer.platform)
+                  ? NO_MONITOR_REASON
+                  : undefined
             }
             variant={variant}
             onVariantChange={setVariant}

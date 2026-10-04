@@ -60,7 +60,9 @@ import { cn, relativeTimeFromUnix } from "@/lib/utils"
 import { streamerInitials, streamerLabel } from "@shared/streamer-label"
 import { refPayload } from "@shared/daemon/subjects"
 import {
+  NO_MONITOR_REASON,
   platformDisplayName,
+  platformNoMonitor,
   streamerChannelURL,
 } from "@/data/supported-platforms"
 import {
@@ -386,7 +388,9 @@ export function buildColumns({
         // daemon refuses that for anyone not live and recording, so the switch
         // is locked rather than left to fail silently. Switching it back ON is
         // always allowed — that is how a one-shot is kept.
-        const blocked = s.monitor && !oneShotEligible(s)
+        const blocked =
+          (s.monitor && !oneShotEligible(s)) ||
+          (!s.monitor && platformNoMonitor(s.platform))
         const toggle = (
           <Switch
             checked={s.monitor}
@@ -403,7 +407,9 @@ export function buildColumns({
               // tooltip hangs off a wrapper.
               <Tooltip>
                 <TooltipTrigger render={<span>{toggle}</span>} />
-                <TooltipContent>{oneShotBlockedReason(s)}</TooltipContent>
+                <TooltipContent>
+                  {s.monitor ? oneShotBlockedReason(s) : NO_MONITOR_REASON}
+                </TooltipContent>
               </Tooltip>
             ) : (
               toggle

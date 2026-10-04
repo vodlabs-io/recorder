@@ -44,8 +44,20 @@ Electrobun) crashed 10 of 10 runs within a second on 1.3.14, and survived 10 of
    caught everything, and the synchronous, non-threadsafe callbacks are
    untouched.
 
+3. **A custom preload in every frame.** On macOS the native side injects an
+   app's custom `preload` into the main frame only (`forMainFrameOnly:true` in
+   `updateCustomPreloadScript`), while Electrobun's own preload goes to every
+   frame. The stream sniffer (`desktop/src/bun/stream-sniff.ts`) has to see
+   embedded players, which are usually another site's iframe: measured on 30
+   live TV pages, main-frame-only sniffing found 25 streams and all-frames 30.
+   A custom preload that opens with `/* electrobun:all-frames */` is now
+   appended to Electrobun's preload instead, so it reaches every frame on
+   macOS and Windows with no native rebuild. Linux's WebKitGTK wrapper injects
+   both preloads into the top frame only, so iframe players stay out of reach
+   there.
+
 Moving to Electrobun 2.x makes the first change redundant. It does not carry
-the second, so check before dropping it.
+the second or the third, so check before dropping them.
 
 ## `electrobun-1.18.1-win-cookie-api.patch`
 

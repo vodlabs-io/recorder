@@ -26,7 +26,7 @@ import {
 } from "@/components/streamer-option-fields"
 import { appStore } from "@/state/app-state"
 import { getDaemonClient, type StreamerRef, type UserConfig } from "@/lib/daemon"
-import { platformDisplayName } from "@/data/supported-platforms"
+import { platformDisplayName, platformNoMonitor } from "@/data/supported-platforms"
 
 // The daemon accepts a streamer identified by either a platform + username
 // combo or a URL, never both. The dialog mirrors that with a mode switcher.
@@ -62,6 +62,9 @@ export function AddStreamer({
   const [container, setContainer] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Set when the daemon refused to monitor a page that can only be recorded
+  // once, which the dialog then offers to do.
+  const [offerOnce, setOfferOnce] = useState(false)
 
   const urlInputRef = useRef<HTMLInputElement>(null)
   const usernameInputRef = useRef<HTMLInputElement>(null)
@@ -88,6 +91,7 @@ export function AddStreamer({
     setSplitDuration("")
     setArchiveDir("")
     setError(null)
+    setOfferOnce(false)
   }
 
   function handleOpenChange(next: boolean) {
@@ -108,7 +112,8 @@ export function AddStreamer({
     }
   }
 
-  async function submit() {
+  async function submit(monitorOverride?: boolean) {
+    const monitorNow = monitorOverride ?? monitor
     // Build the streamer reference for the chosen mode. The daemon keys on
     // platform/username or url, never both, so we send exactly one.
     let ref: StreamerRef
@@ -129,12 +134,18 @@ export function AddStreamer({
     }
     setSubmitting(true)
     setError(null)
+    setOfferOnce(false)
     try {
       const client = getDaemonClient()
       // The add answers with the identity it resolved to. Keying the options
       // call on that rather than on `ref` saves a URL add a second round trip
       // to the cloud to decode the same URL again.
-      const added = await client.addStreamer({ ...ref, monitor })
+      const added = await client.addStreamer({ ...ref, monitor: monitorNow })
+      if (added.refused === "monitor_unsupported") {
+        setError(added.message ?? "This site can only be recorded once.")
+        setOfferOnce(true)
+        return
+      }
 
       // The field is pre-filled with the global default so the user can see
       // and edit it; treat "unchanged from default" as inherit so we neither
@@ -148,7 +159,7 @@ export function AddStreamer({
       const splitDurationTrimmed = splitDuration.trim()
       const archiveDirTrimmed = archiveDir.trim()
       const hasOverrides =
-        !monitor ||
+        !monitorNow ||
         variant.trim() !== "" ||
         templateOverride !== "" ||
         deletePartFiles !== "inherit" ||
@@ -158,7 +169,7 @@ export function AddStreamer({
       if (hasOverrides) {
         await client.setStreamerOptions({
           ...added,
-          monitor,
+          monitor: monitorNow,
           variant,
           output_template: templateOverride,
           delete_part_files:
@@ -222,7 +233,7 @@ export function AddStreamer({
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") submit()
+                    if (e.key === "Enter") void submit()
                   }}
                 />
               </div>
@@ -245,7 +256,9 @@ export function AddStreamer({
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      {platforms.map((p) => (
+                      {/* A page that can only be recorded once is named by its
+                          URL, never by a username. */}
+                      {platforms.filter((p) => !platformNoMonitor(p.name)).map((p) => (
                         <SelectItem key={p.name} value={p.name}>
                           {platformDisplayName(p.name)}
                         </SelectItem>
@@ -264,7 +277,7 @@ export function AddStreamer({
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") submit()
+                    if (e.key === "Enter") void submit()
                   }}
                 />
               </div>
@@ -295,6 +308,18 @@ export function AddStreamer({
             />
 
             {error && <AddError message={error} />}
+            {offerOnce && (
+              <Button
+                variant="secondary"
+                disabled={submitting}
+                onClick={() => {
+                  setMonitor(false)
+                  void submit(false)
+                }}
+              >
+                Record once
+              </Button>
+            )}
           </div>
         </Tabs>
 
@@ -303,7 +328,7 @@ export function AddStreamer({
           {/* The add resolves the account against the cloud before it is
               accepted, so this can sit for a few seconds on a slow lookup —
               "Checking…" says what the wait is actually for. */}
-          <Button onClick={submit} disabled={submitting}>
+          <Button onClick={() => void submit()} disabled={submitting}>
             {submitting ? "Checking…" : "Add"}
           </Button>
         </DialogFooter>
