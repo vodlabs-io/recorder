@@ -86,9 +86,14 @@ func looksLikeWebAddress(raw string) bool {
 }
 
 // addResolveTimeout bounds how long an add waits for the cloud to name the
-// streamer and confirm it exists. The cloud gives up first, so reaching this
-// means the cloud itself is unreachable.
-const addResolveTimeout = 15 * time.Second
+// streamer and confirm it exists, which for a page on a site without its own
+// support includes loading it in the desktop app. The cloud gives up first, so
+// reaching this means the cloud itself is unreachable.
+const addResolveTimeout = 35 * time.Second
+
+// monitorUnsupportedMessage refuses a monitored add of a streamer that can only
+// be recorded once.
+const monitorUnsupportedMessage = "VodLabs has no support for this site yet, so it can only record what is live there now. Switch Monitor off to record it once."
 
 // kvLookupTimeout bounds a read of the local view store. The bucket is served
 // by this machine's own NATS, so anything slower than this is a fault, not
@@ -110,12 +115,27 @@ func (s *Service) preflight(req micro.Request, id streamer.StreamerRef) (streame
 	ctx, cancel := context.WithTimeout(context.Background(), addResolveTimeout)
 	defer cancel()
 
+	// A URL the user typed may be a page on a site without its own support,
+	// which the cloud can only check by having this machine load it.
+	s.permitSniff(id.URL, streamer.StreamerKey{}, vlstate.SniffPermitPending)
+
 	resolved, err := s.streamerFuncs.Resolve(ctx, id)
 	if err != nil {
 		respond(req, fail(rejectionCode(err), err.Error()))
 		return streamer.StreamerRef{}, false
 	}
 	return resolved, true
+}
+
+// permitSniff lets the cloud have this machine load pageURL in a browser, for
+// ttl. Nothing is permitted without a URL or a KV store.
+func (s *Service) permitSniff(pageURL string, key streamer.StreamerKey, ttl time.Duration) {
+	if pageURL == "" || s.kv == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), kvLookupTimeout)
+	defer cancel()
+	_ = vlstate.PermitSniff(ctx, s.kv, pageURL, key, ttl)
 }
 
 // resolveURLRef turns a URL-only ref into the platform/username identity the
@@ -132,11 +152,28 @@ func (s *Service) resolveURLRef(
 	if id.Canonical().StreamerKey.Valid() {
 		return id, false, true
 	}
+	// A page recorded once is named by a digest of its URL, and the cloud only
+	// names one while something plays there: the permit recorded which
+	// streamer the URL became.
+	if key, found := s.sniffedStreamer(id.URL); found {
+		return streamer.StreamerRef{StreamerKey: key}, true, true
+	}
 	resolved, ok = s.preflight(req, id)
 	if !ok {
 		return streamer.StreamerRef{}, false, false
 	}
 	return resolved, resolved.String() != id.String(), true
+}
+
+// sniffedStreamer returns the streamer a page the user recorded once
+// resolved to, if its permit is still held.
+func (s *Service) sniffedStreamer(pageURL string) (streamer.StreamerKey, bool) {
+	if pageURL == "" || s.kv == nil {
+		return streamer.StreamerKey{}, false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), kvLookupTimeout)
+	defer cancel()
+	return vlstate.SniffedStreamer(ctx, s.kv, pageURL)
 }
 
 // rejectionCode maps a preflight failure onto the vlapi error code clients
@@ -202,6 +239,10 @@ func (s *Service) handleAddStreamer(req micro.Request) {
 
 	id, ok = s.preflight(req, id)
 	if !ok {
+		return
+	}
+	if vlconfig.NoMonitor(id.StreamerKey.Platform) {
+		respond(req, fail(ErrMonitorUnsupported, monitorUnsupportedMessage))
 		return
 	}
 	if s.alreadyAdded(id) {
@@ -319,6 +360,7 @@ func (s *Service) handleRemoveStreamer(req micro.Request) {
 	removedOneShot := false
 	if id.StreamerKey.Valid() && s.kv != nil {
 		removedOneShot, _ = vlstate.DeleteOneShot(context.Background(), s.kv, id.StreamerKey)
+		vlstate.RevokeSniffs(context.Background(), s.kv, id.StreamerKey)
 	}
 	if !removedFromFile && !removedOneShot {
 		respond(req, OK("not present"))
@@ -390,6 +432,9 @@ func (s *Service) handleRecordOnce(req micro.Request) {
 		return
 	}
 	s.markAdded(id)
+	// The cloud re-checks the page for as long as it records, so the permit
+	// the preflight used lasts the recording.
+	s.permitSniff(payload.URL, id.StreamerKey, vlstate.SniffPermitRecording)
 
 	// A one-shot is a new tracked streamer, so the subscription changes.
 	s.resubscribe()
@@ -719,6 +764,11 @@ func (s *Service) handleSetStreamerOptions(req micro.Request) {
 			return
 		}
 		membershipChanged = true
+	}
+
+	if payload.Monitor != nil && *payload.Monitor && vlconfig.NoMonitor(id.StreamerKey.Platform) {
+		respond(req, fail(ErrMonitorUnsupported, "Sites without their own support can only be recorded once."))
+		return
 	}
 
 	// Turning monitoring ON promotes a one-shot back to a monitored streamer. A

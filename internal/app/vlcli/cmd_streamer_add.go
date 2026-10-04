@@ -2,6 +2,7 @@ package vlcli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/urfave/cli/v3"
@@ -27,7 +28,7 @@ func (a *App) addStreamer(ctx context.Context, cmd *cli.Command) error {
 	}
 	added, err := a.sendAdd(id, cmd.String("variant"))
 	if err != nil {
-		return err
+		return withRecordOnceHint(err, id)
 	}
 	// Report the identity the add resolved to. For a URL it is the only way to
 	// learn what the URL named, and it is what every later command needs.
@@ -62,4 +63,17 @@ func (a *App) sendAddRequest(
 		return streamer.StreamerRef{}, err
 	}
 	return res.StreamerRef, nil
+}
+
+// withRecordOnceHint points a refused monitored add of a page that can only be
+// recorded once at the command that records it.
+func withRecordOnceHint(err error, id streamer.StreamerRef) error {
+	if !errors.Is(err, vlapi.ErrMonitorUnsupported) {
+		return err
+	}
+	target := id.URL
+	if target == "" {
+		target = describeRef(id)
+	}
+	return fmt.Errorf("%w\nTo record it now: vod record --once %q", err, target)
 }

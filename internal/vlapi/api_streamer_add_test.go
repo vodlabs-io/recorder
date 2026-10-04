@@ -409,3 +409,51 @@ func TestAddStreamer_MarksAddedTime(t *testing.T) {
 		t.Errorf("a refused add marked %v", added.marked[1:])
 	}
 }
+
+// genericResolve stands in for the cloud naming a page on a site without its
+// own support.
+func genericResolve(context.Context, streamer.StreamerRef) (streamer.StreamerRef, error) {
+	return streamer.StreamerRef{StreamerKey: streamer.StreamerKey{Platform: "generic", Username: "example.com-0123456789"}}, nil
+}
+
+// A page that can only be recorded once is refused as a monitored add, with a
+// code clients turn into a Record once offer, and nothing is written.
+func TestAddStreamer_RefusesToMonitorANoMonitorPlatform(t *testing.T) {
+	s, sf, _ := newAddService(t, genericResolve)
+	req := addRequest(t, streamer.StreamerRef{URL: "https://example.com/live"})
+	s.handleAddStreamer(req)
+
+	env := req.envelope(t)
+	if env.OK || env.Error == nil || env.Error.Code != ErrMonitorUnsupported.Error() {
+		t.Fatalf("reply = %+v, want %s", env, ErrMonitorUnsupported)
+	}
+	if err := sf.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if ids := sf.AllIDs(); len(ids) != 0 {
+		t.Fatalf("streamers.toml lists %v, want nothing", ids.Strings())
+	}
+}
+
+func TestRecordOnce_AcceptsANoMonitorPlatform(t *testing.T) {
+	s, _, _ := newAddService(t, genericResolve)
+	req := addRequest(t, streamer.StreamerRef{URL: "https://example.com/live"})
+	s.handleRecordOnce(req)
+	if env := req.addEnvelope(t); !env.OK || env.Data.StreamerKey.Platform != "generic" {
+		t.Fatalf("reply = %+v, want the one-shot accepted", env)
+	}
+}
+
+func TestSetOptions_RefusesToMonitorANoMonitorPlatform(t *testing.T) {
+	s, _, _ := newAddService(t, genericResolve)
+	on := true
+	b, _ := json.Marshal(setOptionsRequest{
+		StreamerRef: streamer.StreamerRef{StreamerKey: streamer.StreamerKey{Platform: "generic", Username: "example.com-0123456789"}},
+		Monitor:     &on,
+	})
+	req := &fakeRequest{data: b}
+	s.handleSetStreamerOptions(req)
+	if env := req.envelope(t); env.OK || env.Error.Code != ErrMonitorUnsupported.Error() {
+		t.Fatalf("reply = %+v, want %s", env, ErrMonitorUnsupported)
+	}
+}
