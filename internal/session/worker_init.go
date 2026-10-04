@@ -112,9 +112,9 @@ func (w *worker) initStream(str streamer.StreamerState) error {
 
 	w.selectedHTTPClient = w.flvHTTPClient
 
-	writerName := "flvwriter" // default for non-HLS streams
-	if strings.Contains(selectedStream.URL, ".m3u8") {
-		writerName = "hlswriter" // use hlswriter for HLS streams
+	writerName := "flvwriter"
+	if selectedStream.IsHLS() {
+		writerName = "hlswriter"
 		w.selectedHTTPClient = w.basicHTTPClient
 	}
 	w.output.WriterName = writerName

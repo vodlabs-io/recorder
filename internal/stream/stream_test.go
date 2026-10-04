@@ -86,3 +86,19 @@ func TestSelectIgnoresZeroResolutionInNumericMatch(t *testing.T) {
 		t.Fatalf("Select(\"1080\") = %v, want the 1080p variant", got)
 	}
 }
+
+func TestIsHLS(t *testing.T) {
+	for _, tc := range []struct {
+		s    Stream
+		want bool
+	}{
+		{Stream{URL: "https://cdn.example/live/index.m3u8?t=1"}, true},
+		{Stream{URL: "https://cdn.example/live/stream.flv"}, false},
+		{Stream{URL: "https://cdn.example/live/manifest", Format: FormatHLS}, true},
+		{Stream{URL: "https://cdn.example/live.m3u8.flv", Format: FormatFLV}, false},
+	} {
+		if got := tc.s.IsHLS(); got != tc.want {
+			t.Errorf("IsHLS(%+v) = %v, want %v", tc.s, got, tc.want)
+		}
+	}
+}

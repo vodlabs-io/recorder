@@ -12,6 +12,27 @@ type Stream struct {
 	QualityID string // Quality identifier (e.g., "1080p", "720p", "hd", "audio_only")
 	ResWidth  int    // Video width in pixels
 	ResHeight int    // Video height in pixels
+	// Format names the container when the URL may not show it: FormatHLS or
+	// FormatFLV. Empty means the URL decides (see IsHLS).
+	Format string `json:",omitempty"`
+}
+
+// Stream formats the cloud may name in Stream.Format.
+const (
+	FormatHLS = "hls"
+	FormatFLV = "flv"
+)
+
+// IsHLS reports whether the stream is an HLS playlist rather than an FLV
+// stream: as Format says, or from the URL when Format is empty.
+func (s Stream) IsHLS() bool {
+	switch s.Format {
+	case FormatHLS:
+		return true
+	case FormatFLV:
+		return false
+	}
+	return strings.Contains(s.URL, ".m3u8")
 }
 
 // Resolution returns the resolution of the stream as a string in the format "WIDTHxHEIGHT"
