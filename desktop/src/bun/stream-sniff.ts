@@ -17,8 +17,10 @@
 // every sniff, never in a platform login partition. Only stream addresses, the
 // frames that requested them and the page title leave this file.
 //
-// Lifecycle: one hidden window + view, reused and parked on about:blank between
-// sniffs, which subscribeRequest already hands over one at a time.
+// Lifecycle: one window + view, reused and parked on about:blank between sniffs,
+// which subscribeRequest already hands over one at a time. The window is shown
+// but placed off-screen: WebKit treats a hidden window's page as hidden, and
+// embedded players in it never start.
 
 import { BrowserWindow, BrowserView, Session } from "electrobun/bun";
 import type { DaemonSession } from "../../../shared/daemon/session";
@@ -61,8 +63,9 @@ function context(): SniffContext {
     { title: "…", frame: FRAME, url: BLANK_URL, sandbox: true, preload: SNIFFER },
     PARTITION,
   );
-  // Never steal the user's focus: this window exists only to host the view.
-  win.hide();
+  // Shown without taking focus, and off-screen (see the lifecycle note above).
+  win.showInactive();
+  win.setPosition(-(FRAME.width + 50), 200);
   const c: SniffContext = { win, view, watch: null };
   (view.on as (name: string, handler: (e: unknown) => void) => void)("host-message", (e) => {
     const detail = (e as { data?: { detail?: unknown } })?.data?.detail as
@@ -82,6 +85,7 @@ function context(): SniffContext {
       frame: String(hit.frame ?? ""),
       master: hit.master === true,
       ended: hit.ended === true,
+      invalid: hit.invalid === true,
     });
     w.changed();
   });

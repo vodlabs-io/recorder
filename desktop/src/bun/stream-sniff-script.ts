@@ -10,6 +10,7 @@ export const SNIFFER = `${ALL_FRAMES_PRELOAD}
 (function () {
   if (window.__vlSniff) return; window.__vlSniff = true;
   var RX = /\\.m3u8|\\.flv|mpegurl/i;
+  var HLS = /\\.m3u8|mpegurl/i;
   var seen = {};
   var sent = 0;
   function post(hit) {
@@ -38,8 +39,12 @@ export const SNIFFER = `${ALL_FRAMES_PRELOAD}
       post(hit);
     } catch (e) {}
   }
+  // inspect reads a playlist the page fetched. An address that looks like a
+  // playlist but answers with something else (an ad schedule, an error page)
+  // is reported invalid.
   function inspect(u, text) {
-    if (typeof text !== "string" || text.indexOf("#EXTM3U") === -1) return;
+    if (typeof text !== "string" || !text) return;
+    if (text.indexOf("#EXTM3U") === -1) { report("response", u, { invalid: true }); return; }
     report("response", u, { master: text.indexOf("#EXT-X-STREAM-INF") !== -1,
       ended: text.indexOf("#EXT-X-ENDLIST") !== -1 || /PLAYLIST-TYPE:VOD/.test(text) });
   }
@@ -50,7 +55,7 @@ export const SNIFFER = `${ALL_FRAMES_PRELOAD}
     report("fetch", u);
     var p = of.apply(this, arguments);
     try {
-      if (u && RX.test(u)) p.then(function (r) {
+      if (u && HLS.test(u)) p.then(function (r) {
         try { r.clone().text().then(function (t) { inspect(r.url || u, t.slice(0, 65536)); }, function () {}); } catch (e) {}
       }, function () {});
     } catch (e) {}
@@ -61,7 +66,7 @@ export const SNIFFER = `${ALL_FRAMES_PRELOAD}
     try {
       var url = String(u);
       report("xhr", url);
-      if (RX.test(url)) {
+      if (HLS.test(url)) {
         var x = this;
         x.addEventListener("load", function () {
           try {
