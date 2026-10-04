@@ -69,7 +69,7 @@ func (a *App) addStreamerWithStatus(ctx context.Context, cmd *cli.Command) error
 		// streamer is already tracked, so it is in there.
 		return a.runStatus(ctx, cmd)
 	} else if err != nil {
-		return err
+		return withRecordOnceHint(err, id)
 	}
 
 	log.Printf("Added %s", added)

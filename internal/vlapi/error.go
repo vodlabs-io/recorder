@@ -12,6 +12,9 @@ var (
 	// streamer does not exist" apart from "we could not go and look", since
 	// only the second is worth retrying.
 	errUnavailable = errors.New("unavailable")
+	// ErrMonitorUnsupported refuses to monitor a streamer on a platform whose
+	// streamers can only be recorded once. Clients offer to record it once.
+	ErrMonitorUnsupported = errors.New("monitor_unsupported")
 )
 
 var errByCode = map[string]error{
@@ -20,6 +23,7 @@ var errByCode = map[string]error{
 	errInternal.Error():    errInternal,
 	ErrConflict.Error():    ErrConflict,
 	errUnavailable.Error(): errUnavailable,
+	ErrMonitorUnsupported.Error(): ErrMonitorUnsupported,
 }
 
 type Err struct {
