@@ -220,6 +220,9 @@ func (c *Client) handleSubscription(ctx context.Context) {
 	c.triggerResubscribe() // Trigger initial subscription on startup
 
 	var lastSub time.Time
+	// When a standby connection, opened for an add with no streamers yet
+	// tracked, is closed again if no subscription has replaced it.
+	var standbyUntil time.Time
 	// Consecutive failures and the hold they have earned. Kept on the loop
 	// rather than the client: they describe this handler's retrying, and
 	// nothing outside it retries a subscribe.
@@ -251,6 +254,19 @@ func (c *Client) handleSubscription(ctx context.Context) {
 				failures, holdUntil = 0, time.Time{}
 			}
 			c.markInitialSubDone()
+		case reply := <-c.standbyCh:
+			var err error
+			if !c.subscribedNow() {
+				if wait := subscribeMinInterval - time.Since(lastSub); wait > 0 {
+					time.Sleep(wait)
+				}
+				lastSub = time.Now()
+				if err = c.openStandby(ctx); err == nil {
+					standbyUntil = time.Now().Add(standbyTTL)
+					log.Info("Opened a standby cloud connection for an add")
+				}
+			}
+			reply <- err
 		case <-c.ReloadCh:
 			// Ordering against a pending resubscribe does not matter: a
 			// subscription cycle reloads the file itself, so whichever runs
@@ -263,6 +279,11 @@ func (c *Client) handleSubscription(ctx context.Context) {
 				continue // holding off after a failed subscribe
 			}
 			if len(c.subscriptions.Load().(streamer.StreamerRefs)) == 0 {
+				if !standbyUntil.IsZero() && time.Now().After(standbyUntil) {
+					// The add it was opened for never came to anything.
+					standbyUntil = time.Time{}
+					c.closeStandby()
+				}
 				continue // Nothing keeping the connection alive, skip resubscribe checks
 			}
 			c.mu.RLock()
@@ -636,6 +657,70 @@ func (c *Client) waitInitialSub() {
 	for !c.initialSubDone {
 		c.cond.Wait()
 	}
+}
+
+// standbyTTL is how long a standby connection outlives the add it was opened
+// for, when that add tracked nothing.
+const standbyTTL = 5 * time.Minute
+
+// subscribedNow reports whether a subscription is active.
+func (c *Client) subscribedNow() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.isSubscribed
+}
+
+// requestStandby makes sure this daemon is connected to the cloud before an
+// add's preflight, opening a connection with no streamers when none is open.
+// The cloud may check a page the user pasted by asking this machine to load it
+// (see handleSniff), which only a connected daemon can be asked.
+func (c *Client) requestStandby(ctx context.Context) error {
+	if c.subscribedNow() || c.standbyCh == nil {
+		return nil
+	}
+	reply := make(chan error, 1)
+	select {
+	case c.standbyCh <- reply:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-reply:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// openStandby subscribes with no streamers and starts the scrape handler on
+// the connection that buys. The next subscription cycle replaces it, or closes
+// it when there is still nothing to track. Runs on the subscription handler's
+// goroutine.
+func (c *Client) openStandby(ctx context.Context) error {
+	if _, _, err := c.subscribe(ctx, streamer.StreamerRefs{}); err != nil {
+		return err
+	}
+	c.closeConnection()
+	if err := c.connect(); err != nil {
+		c.setSubscribed(false)
+		return fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+	if err := c.startScrapeHandler(ctx); err != nil {
+		c.setSubscribed(false)
+		return fmt.Errorf("failed to start scrape handler: %w", err)
+	}
+	return nil
+}
+
+// closeStandby closes a standby connection nothing replaced. Runs on the
+// subscription handler's goroutine.
+func (c *Client) closeStandby() {
+	if c.stopScrapeHandler != nil {
+		c.stopScrapeHandler()
+	}
+	c.natsHandlerWg.Wait()
+	c.setSubscribed(false)
+	c.closeConnection()
 }
 
 // triggerResubscribe signals the client to initiate a new subscription
