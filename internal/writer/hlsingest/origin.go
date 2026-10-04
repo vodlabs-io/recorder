@@ -69,7 +69,9 @@ func (o *ingest) resolveMediaPlaylist(playlistURL string) (string, error) {
 func selectVariant(master *m3u8.MasterPlaylist, baseURL, variant string) (string, error) {
 	streams := make(stream.List, 0, len(master.Variants))
 	for _, v := range master.Variants {
-		if v == nil || v.URI == "" {
+		// An I-frame playlist is keyframes only, for scrubbing: never a stream
+		// to record.
+		if v == nil || v.URI == "" || v.Iframe {
 			continue
 		}
 		width, height := 0, 0
