@@ -87,11 +87,12 @@ func blockedAddr(addr netip.Addr) bool {
 	return addr.As16()[0]&0xfe == 0xfc
 }
 
-// scrapeDialControl refuses a connection to a non-public address. It runs after
+// PublicDialControl refuses a connection to a non-public address. It runs after
 // DNS and before the connection is made, on the address the kernel is about to
 // use, so a name that resolves to 127.0.0.1 — or is re-resolved to it between
-// the check and the dial — is refused here.
-func scrapeDialControl(_, address string, _ syscall.RawConn) error {
+// the check and the dial — is refused here. Set it as a net.Dialer's Control
+// for any client that fetches addresses others supply.
+func PublicDialControl(_, address string, _ syscall.RawConn) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return fmt.Errorf("unexpected dial address %q: %w", address, err)
@@ -120,7 +121,7 @@ func newScrapeClient() *http.Client {
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
-		Control:   scrapeDialControl,
+		Control:   PublicDialControl,
 	}
 	return &http.Client{
 		Transport: &http.Transport{

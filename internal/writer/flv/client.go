@@ -4,10 +4,17 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"syscall"
 	"time"
 )
 
 func Client() *http.Client {
+	return ClientWithDialControl(nil)
+}
+
+// ClientWithDialControl is Client with control set as its dialer's Control,
+// which can refuse an address before the connection is made.
+func ClientWithDialControl(control func(network, address string, c syscall.RawConn) error) *http.Client {
 	connTimeout := 10 * time.Second
 	readTimeout := 5 * time.Second
 
@@ -17,6 +24,7 @@ func Client() *http.Client {
 			dialer := &net.Dialer{
 				Timeout:   connTimeout,
 				KeepAlive: 30 * time.Second,
+				Control:   control,
 			}
 			conn, err := dialer.DialContext(ctx, network, addr)
 			if err != nil {
