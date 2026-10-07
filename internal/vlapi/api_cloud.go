@@ -38,6 +38,12 @@ type StreamerFuncs struct {
 	// Recheck asks the cloud to check a streamer again now and to clear any
 	// retirement.
 	Recheck func(ctx context.Context, id streamer.StreamerRef) error
+	// ResolvePage checks, on this machine, a page no platform claims, and
+	// returns the streamer it names while something plays there. The cloud
+	// never sees the page. Nil means such pages cannot be recorded.
+	ResolvePage func(ctx context.Context, rawURL string) (streamer.StreamerRef, error)
+	// ForgetPage drops what ResolvePage kept about a removed streamer.
+	ForgetPage func(key streamer.StreamerKey)
 }
 
 // handleCloudIntervals returns the estimated per-platform polling intervals,

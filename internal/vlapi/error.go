@@ -18,11 +18,11 @@ var (
 )
 
 var errByCode = map[string]error{
-	ErrNotFound.Error():    ErrNotFound,
-	errInvalidArg.Error():  errInvalidArg,
-	errInternal.Error():    errInternal,
-	ErrConflict.Error():    ErrConflict,
-	errUnavailable.Error(): errUnavailable,
+	ErrNotFound.Error():           ErrNotFound,
+	errInvalidArg.Error():         errInvalidArg,
+	errInternal.Error():           errInternal,
+	ErrConflict.Error():           ErrConflict,
+	errUnavailable.Error():        errUnavailable,
 	ErrMonitorUnsupported.Error(): ErrMonitorUnsupported,
 }
 

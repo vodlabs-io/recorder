@@ -24,6 +24,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vllog"
 	"github.com/vodlabs-io/recorder/internal/vlstate"
+	"github.com/vodlabs-io/recorder/internal/webpage"
 	"github.com/vodlabs-io/recorder/internal/writer/flv"
 )
 
@@ -153,6 +154,10 @@ func (a *App) start(ctx context.Context) (err error) {
 	// PRIVACY: this data never leaves the machine (see internal/platformauth).
 	a.cookieStore = platformauth.NewStore()
 
+	// Pages no platform claims are checked here, never by the cloud; the
+	// desktop app, when running, loads them over local NATS.
+	a.pages = webpage.New(a.natsConn, a.log.With("component", "webpage"))
+
 	a.cloudClient, err = cloud.Init(
 		ctx,
 		a.natsConn,
@@ -163,7 +168,7 @@ func (a *App) start(ctx context.Context) (err error) {
 		a.cookieStore,
 		a.appCfg.Cloud,
 		a.appCfg.Scraper,
-		nil,
+		a.pages,
 		a.onVersionChecked)
 	if err != nil {
 		return fmt.Errorf("failed to initialize cloud client: %w", err)

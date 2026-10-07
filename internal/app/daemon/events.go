@@ -46,6 +46,9 @@ func (a *App) onVodProcessed(ctx context.Context, v recording.Output) {
 
 	if ok, _ := vlstate.DeleteOneShot(ctx, a.natsKV, strKey); ok {
 		a.log.Info("Removed streamer from one-shot list", "key", strKey)
+		if vlconfig.IsLocal(strKey.Platform) && a.pages != nil {
+			a.pages.Forget(strKey)
+		}
 		a.cloudClient.ResubscribeCh <- struct{}{}
 	}
 }
