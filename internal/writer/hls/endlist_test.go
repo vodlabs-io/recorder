@@ -64,9 +64,6 @@ func TestPlaylistTerminatedOnFetchFailure(t *testing.T) {
 // TestPlaylistTerminatedOnCancel covers the other common exit: the daemon
 // cancels the part (stream offline, split limit, shutdown) between polls.
 func TestPlaylistTerminatedOnCancel(t *testing.T) {
-	// Cancelling once the second segment is requested guarantees the first one
-	// is already recorded, so the assertion below is not a race.
-	lastSegment := make(chan struct{}, 1)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/live/media.m3u8", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n")
@@ -74,27 +71,20 @@ func TestPlaylistTerminatedOnCancel(t *testing.T) {
 	})
 	mux.HandleFunc("/live/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "TSDATA")
-		if strings.HasSuffix(r.URL.Path, "a1.ts") {
-			select {
-			case lastSegment <- struct{}{}:
-			default:
-			}
-		}
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
 	dir := t.TempDir()
+	// Cancelling once the first segment's bytes are reported guarantees it is
+	// already recorded, so the assertion below is not a race.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	progressCh := make(chan int64, 100)
 	go func() {
 		for range progressCh {
+			cancel()
 		}
-	}()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		<-lastSegment
-		cancel()
 	}()
 
 	if err := Record(ctx, Config{

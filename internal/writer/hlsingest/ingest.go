@@ -422,6 +422,7 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 			}
 		}
 
+		pre := o.prefetch(ctx, o.unseenURLs(media.Segments, playlistURL, seen), fetchBudget)
 		for _, seg := range media.Segments {
 			if seg == nil || seg.URI == "" {
 				continue
@@ -487,6 +488,7 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				isFMP4 = true
 				absMap, err := absoluteURL(playlistURL, segMap.URI)
 				if err != nil {
+					pre.close()
 					return fmt.Errorf("resolve map URL %q: %w", segMap.URI, err)
 				}
 				if absMap != lastMapURI {
@@ -500,16 +502,21 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 						}
 						// Nothing after this can be used; the caller resolves
 						// the stream afresh on its next attempt.
+						pre.close()
 						return fmt.Errorf("download init map %s: %w", absMap, err)
 					}
 					if err := o.sink.Init(Map{URI: absMap}, body); err != nil {
+						pre.close()
 						return &SinkError{err: err}
 					}
 					lastMapURI = absMap
 				}
 			}
 
-			body, err := o.fetchRetry(ctx, absSeg, fetchBudget)
+			body, ok, err := pre.get(ctx, absSeg)
+			if !ok {
+				body, err = o.fetchRetry(ctx, absSeg, fetchBudget)
+			}
 			if err != nil {
 				if poll := retry.spend(seg.SeqId); poll <= segmentPollRetries {
 					// Leave it unseen and stop: the segments after it must not
@@ -557,6 +564,7 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 					stalled = true
 					break
 				}
+				pre.close()
 				return &SinkError{err: err}
 			}
 			seen.mark(seg.SeqId, absSeg)
@@ -567,6 +575,8 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				return nil
 			}
 		}
+
+		pre.close()
 
 		// The URL set only has to cover what the Origin still publishes; a
 		// Session that runs for hours would otherwise remember every segment of
@@ -611,6 +621,23 @@ func (o *ingest) seedFirstPoll(
 		return abs, err == nil
 	}
 	return seedLiveEdge(segments, window, resolve, seen.urls)
+}
+
+// unseenURLs lists, in playlist order, the segments a poll has yet to hand
+// over.
+func (o *ingest) unseenURLs(segments []*m3u8.MediaSegment, playlistURL string, seen *segSeen) []string {
+	var urls []string
+	for _, seg := range segments {
+		if seg == nil || seg.URI == "" {
+			continue
+		}
+		abs, err := absoluteURL(playlistURL, seg.URI)
+		if err != nil || seen.has(seg.SeqId, abs) {
+			continue
+		}
+		urls = append(urls, abs)
+	}
+	return urls
 }
 
 // currentURLs is the set of segment URLs a playlist publishes right now.
