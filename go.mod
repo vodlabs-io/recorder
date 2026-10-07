@@ -8,7 +8,7 @@ go 1.26.0
 toolchain go1.26.8
 
 require (
-	github.com/DeRuina/timberjack v1.4.7
+	github.com/DeRuina/timberjack v1.4.8
 	github.com/Eyevinn/hls-m3u8 v0.6.5
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/dustin/go-humanize v1.1.0
@@ -17,7 +17,7 @@ require (
 	github.com/knadh/koanf/providers/confmap v1.0.1
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/posflag v1.0.2
-	github.com/knadh/koanf/v2 v2.3.6
+	github.com/knadh/koanf/v2 v2.3.7
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nats-io/nats-server/v2 v2.15.0
 	github.com/nats-io/nats.go v1.54.0
@@ -25,11 +25,11 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/sgtdi/fswatcher v1.3.0
 	github.com/spf13/pflag v1.0.10
-	github.com/tidwall/gjson v1.19.0
-	github.com/urfave/cli/v3 v3.12.0
+	github.com/tidwall/gjson v1.19.1
+	github.com/urfave/cli/v3 v3.14.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/sys v0.48.0
-	modernc.org/sqlite v1.59.0
+	modernc.org/sqlite v1.60.1
 )
 
 require (
@@ -55,7 +55,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	modernc.org/libc v1.75.7 // indirect
+	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
