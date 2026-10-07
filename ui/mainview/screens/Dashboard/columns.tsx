@@ -448,7 +448,9 @@ export function buildColumns({
               <Tooltip>
                 <TooltipTrigger render={<span>{toggle}</span>} />
                 <TooltipContent>
-                  Enable monitoring first
+                  {platformNoMonitor(s.platform)
+                    ? "Recorded once. Remove it to stop recording."
+                    : "Recorded once. Remove it to stop recording, or enable monitoring first."}
                 </TooltipContent>
               </Tooltip>
             )}
