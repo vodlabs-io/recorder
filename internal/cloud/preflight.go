@@ -50,14 +50,6 @@ type resolveResponse struct {
 // never becomes an entry. Every failure, including a network failure, is a
 // *rejectionError.
 func (c *Client) ResolveStreamer(ctx context.Context, id streamer.StreamerRef) (streamer.StreamerRef, error) {
-	// A page on a site without its own support is checked by having this
-	// machine load it, which the cloud can only ask of a connected daemon.
-	if id.URL != "" {
-		if err := c.requestStandby(ctx); err != nil {
-			c.logger.Info("Could not connect for the add's preflight; it may not see JavaScript players",
-				"error", err)
-		}
-	}
 	body, err := json.Marshal(id)
 	if err != nil {
 		return streamer.StreamerRef{}, &rejectionError{Code: codeUnavailable, Message: err.Error()}

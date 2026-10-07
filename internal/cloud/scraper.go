@@ -20,7 +20,6 @@ import (
 	"github.com/vodlabs-io/recorder/internal/useragent"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vllog"
-	"github.com/vodlabs-io/recorder/internal/vlstate"
 )
 
 // scrapeDrainTimeout bounds how long a resubscribe waits for in-flight scrapes
@@ -45,14 +44,7 @@ type scrapeHandler struct {
 	// checkTarget bounds where a scrape may be sent. Nil means the real guard,
 	// checkScrapeTarget; only tests replace it, because their server is on
 	// loopback, which is the first thing the guard refuses.
-	checkTarget func(method string, u *url.URL) error
-	// sniffPermitted reports whether this machine's user asked to record a
-	// page, which is the only page the service may have it sniff. Nil refuses
-	// every sniff.
-	sniffPermitted func(pageURL string) bool
-	// sniffs caches recent sniff reports by page, so an add's preflight, its
-	// first status check and the recording's first status cost one page load.
-	sniffs          *sniffCache
+	checkTarget     func(method string, u *url.URL) error
 	maxConcurrent   int
 	maxPerMinute    int
 	currentRequests int
@@ -129,7 +121,6 @@ func newScrapeHandler(
 		cookies:       cookies,
 		localNC:       localNC,
 		cloudNC:       cloudNC,
-		sniffs:        newSniffCache(),
 		maxConcurrent: 1,
 		maxPerMinute:  scrapeBudgetPerMinute,
 		lastMinute:    time.Now(),
@@ -158,13 +149,6 @@ type scrapeRequest struct {
 	// webview (via a co-located desktop app) so the platform's own JS signs it,
 	// instead of using the local HTTP client. See handleViaBrowser.
 	BrowserContext bool `json:"browser_context,omitempty"`
-	// Sniff asks us to load URL as a page in a throwaway browser (via a
-	// co-located desktop app) and reply with the stream requests its player
-	// makes, rather than fetching it. See handleSniff.
-	Sniff bool `json:"sniff,omitempty"`
-	// NoCache asks for a sniff to be made afresh rather than answered from a
-	// recent one.
-	NoCache bool `json:"no_cache,omitempty"`
 }
 
 // scrapeResponse contains the response from a scrape request
@@ -257,29 +241,6 @@ func (h *scrapeHandler) handleScrapeRequest(msg *nats.Msg) {
 		h.respondWithError(msg, "invalid URL")
 		return
 	}
-	// A sniff loads a page the user asked to record, not a platform's, so it
-	// is bounded by that instead of by the platform hosts.
-	if scrapeReq.Sniff {
-		if err := h.checkSniffTarget(parsedURL); err != nil {
-			log.Warn("Refusing sniff request", "url", scrapeReq.URL, "reason", err)
-			h.respondWithError(msg, err.Error())
-			return
-		}
-		if err := h.checkRateLimit(msg, false); err != nil {
-			return
-		}
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					log.Error("Sniff panic", "error", r)
-					h.respondWithError(msg, "internal error")
-				}
-			}()
-			h.handleSniff(msg, scrapeReq)
-		}()
-		return
-	}
-
 	// What the service may send this machine to fetch, and how. The address it
 	// resolves to is checked again at dial time (see scrape_guard.go).
 	check := h.checkTarget
@@ -665,18 +626,6 @@ func (c *Client) startScrapeHandler(ctx context.Context) error {
 	// the service with: that one may legitimately reach a private address when a
 	// developer runs the service locally, and a scrape never may.
 	handler := newScrapeHandler(scrapeLogger, newScrapeClient(), c.cookies, c.localNC, c.nc)
-	// An add resubscribes right after its preflight sniffed the page, and the
-	// first status check of the new subscription should not load it again.
-	if c.sniffs != nil {
-		handler.sniffs = c.sniffs
-	}
-	if c.kv != nil {
-		handler.sniffPermitted = func(pageURL string) bool {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			return vlstate.SniffPermitted(ctx, c.kv, pageURL)
-		}
-	}
 
 	sub, err := c.nc.Subscribe("scrape.requests", func(msg *nats.Msg) {
 		c.waitSubscribe()
