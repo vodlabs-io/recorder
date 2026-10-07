@@ -37,6 +37,10 @@ func (e *rejectionError) Unwrap() error { return e.cause }
 // it can classify a rejection without importing this package.
 func (e *rejectionError) Definitive() bool { return e.Code != codeUnavailable }
 
+// UnsupportedSite reports that no platform claims the URL, which may still be
+// a page this machine can record once itself.
+func (e *rejectionError) UnsupportedSite() bool { return e.Code == codeUnsupportedSite }
+
 // resolveResponse is the accepted answer: the canonical identity to store.
 type resolveResponse struct {
 	Platform string `json:"platform"`

@@ -75,6 +75,7 @@ type Client struct {
 	kv              jetstream.KeyValue          // Local KV bucket for storing per-streamer state
 	store           *vlstate.Store              // Authoritative per-streamer view docs
 	cookies         *platformauth.Store         // Local, encrypted third-party platform logins (PRIVACY: never leaves this machine)
+	local           LocalSource                 // Checks the streamers of local platforms, which the cloud never hears of; nil when there are none
 	statusReqCh     chan streamer.StreamerRef   // Queue for outgoing streamer status requests
 	StatusReqPriCh  chan streamer.StreamerRef   // High-priority queue for streamer status requests
 	authStatusReqCh chan streamer.StreamerRef   // Queue for authenticated re-checks of restricted streamers we hold a login for
@@ -125,6 +126,7 @@ func Init(
 	cookies *platformauth.Store,
 	cloudCfg vlconfig.CloudConfig,
 	scraperCfg vlconfig.ScraperConfig,
+	local LocalSource,
 	onVersionChecked versionCheckedCallback,
 ) (*Client, error) {
 	logger, err := vllog.NewFileLogger(cloudCfg.Logger, "cloud")
@@ -140,6 +142,7 @@ func Init(
 		kv:               kv,
 		store:            store,
 		cookies:          cookies,
+		local:            local,
 		streamersFile:    sf,
 		clientVersion:    version.Version,
 		logger:           logger,

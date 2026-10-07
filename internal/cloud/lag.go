@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/streamer"
+	"github.com/vodlabs-io/recorder/internal/vlconfig"
 )
 
 func (c *Client) handleLagReports(ctx context.Context) {
@@ -22,6 +23,14 @@ func (c *Client) handleLagReports(ctx context.Context) {
 			log := log.With("streamer", strKey)
 			if !strKey.Valid() {
 				log.Warn("Received invalid streamer key")
+				continue
+			}
+			if vlconfig.IsLocal(strKey.Platform) {
+				// Nothing to tell the cloud: check it again here, afresh.
+				select {
+				case c.StreamReqCh <- streamer.StreamerRef{StreamerKey: strKey}:
+				default:
+				}
 				continue
 			}
 			if err := c.reportLag(ctx, strKey); err != nil {

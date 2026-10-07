@@ -262,7 +262,8 @@ func (c *Client) handleSubscription(ctx context.Context) {
 			if time.Now().Before(holdUntil) {
 				continue // holding off after a failed subscribe
 			}
-			if len(c.subscriptions.Load().(streamer.StreamerRefs)) == 0 {
+			ids, _ := c.subscriptions.Load().(streamer.StreamerRefs)
+			if _, remote := splitLocal(ids); len(remote) == 0 {
 				continue // Nothing keeping the connection alive, skip resubscribe checks
 			}
 			c.mu.RLock()
@@ -296,8 +297,11 @@ func (c *Client) newSubscription(ctx context.Context) error {
 		c.OnConfigReloaded()
 	}
 
-	// Combine IDs from streamers.toml with IDs from one-shot list
+	// Combine IDs from streamers.toml with IDs from one-shot list. Streamers on
+	// a local platform are never named to the cloud: they join the subscribed
+	// set without a round trip.
 	allIDs := slices.Concat(c.streamersFile.AllIDs(), vlstate.GetOneShotList(ctx, c.kv))
+	localIDs, remoteIDs := splitLocal(allIDs)
 	var subscribedIDs streamer.StreamerRefs
 
 	// Reflect the config's membership in the view docs before the subscribe
@@ -306,11 +310,12 @@ func (c *Client) newSubscription(ctx context.Context) error {
 	// actually subscribed.
 	c.reconcileDocs(ctx, allIDs)
 
-	if len(allIDs) > 0 {
+	var pruned []string
+	if len(remoteIDs) > 0 {
 		var err error
 		var rejected []subscribeRejection
 		// Get new user JWT and subscribed streamer IDs
-		subscribedIDs, rejected, err = c.subscribe(ctx, allIDs)
+		subscribedIDs, rejected, err = c.subscribe(ctx, remoteIDs)
 		if err != nil {
 			return fmt.Errorf("failed to get new user JWT: %w", err)
 		}
@@ -318,77 +323,79 @@ func (c *Client) newSubscription(ctx context.Context) error {
 
 		// Drop entries the cloud definitively rejected; they would be rejected
 		// again on every cycle.
-		pruned := c.streamersFile.DropURLs(definitiveRejections(rejected))
+		pruned = c.streamersFile.DropURLs(definitiveRejections(rejected))
 		for _, r := range rejected {
 			log.Warn("Cloud rejected a streamer entry",
 				"url", r.URL, "streamer", r.name(), "code", r.Error, "reason", r.Message,
 				"removed", slices.Contains(pruned, r.URL))
 		}
-
-		var purgedOneShots []vlconfig.OneShotPurge
-		if len(subscribedIDs) > 0 {
-			// Resolve URLs to Key form in both [streamers] and [[rules]]
-			c.streamersFile.Normalize(subscribedIDs)
-
-			// Move new one-shot IDs from streamers.toml to KV with TTL,
-			// carrying their per-streamer options along (the file forgets
-			// them once purged).
-			purgedOneShots = c.streamersFile.PurgeOneShots()
-			log.Debug("Purged one-shot IDs from streamers.toml", "count", len(purgedOneShots))
-		}
-		// Also written when nothing was subscribed, so a file whose every entry
-		// was rejected is still repaired.
-		if len(subscribedIDs) > 0 || len(pruned) > 0 {
-			if err := c.streamersFile.Write(); err != nil {
-				return fmt.Errorf("failed to write streamer IDs to config: %w", err)
-			}
-		}
-		for _, p := range purgedOneShots {
-			vlstate.PutOneShot(ctx, c.kv, p.ID.StreamerKey, vlstate.OneShotOptions{
-				Variant:         p.Opts.Variant,
-				OutputTemplate:  p.Opts.OutputTemplate,
-				DeletePartFiles: p.Opts.DeletePartFiles,
-				SplitSize:       p.Opts.SplitSize,
-				SplitDuration:   p.Opts.SplitDuration,
-				ArchiveDir:      p.Opts.ArchiveDir,
-			})
-			// A streamer demoted to one-shot mid-recording never passes through
-			// worker creation, which normally lifts the entry's TTL, so lift it
-			// here before it expires under the running session.
-			if doc, err := vlstate.GetStreamerDoc(ctx, c.kv, p.ID.StreamerKey); err == nil && doc.ActiveSessionID != "" {
-				vlstate.PersistOneShot(ctx, c.kv, p.ID.StreamerKey)
-			}
-			log.Debug("Added streamer to one-shot list", "key", p.ID.StreamerKey)
-		}
-
-		if len(subscribedIDs) > 0 {
-			// Reconnect to NATS with new JWT
-			if err := c.connect(); err != nil {
-				return fmt.Errorf("failed to connect to NATS: %w", err)
-			}
-
-			// Restart handlers with new NATS connection. A zero-streamer
-			// subscription has no notification consumer to watch.
-			if c.consumerName != "" {
-				if err := c.startWatchHandler(ctx); err != nil {
-					return fmt.Errorf("failed to start watch handler: %w", err)
-				}
-			}
-			if err := c.startScrapeHandler(ctx); err != nil {
-				return fmt.Errorf("failed to start scrape handler: %w", err)
-			}
-		} else {
-			// Asked for streamers, got none back: every entry was rejected.
-			// There is nothing to connect for, and subscribe() has already
-			// flipped the subscribed flag — leaving it set would tell the
-			// status limiter and the scrape handler to go ahead against a
-			// connection that was never opened.
-			c.setSubscribed(false)
-		}
 	} else {
-		log.Info("No streamers to subscribe to, skipping subscription")
+		log.Info("No cloud streamers to subscribe to, skipping subscription")
 		// Nothing needs the cloud connection anymore.
 		c.closeConnection()
+	}
+	remoteSubscribed := len(subscribedIDs) > 0
+	subscribedIDs = append(subscribedIDs, localIDs...)
+
+	var purgedOneShots []vlconfig.OneShotPurge
+	if len(subscribedIDs) > 0 {
+		// Resolve URLs to Key form in both [streamers] and [[rules]]
+		c.streamersFile.Normalize(subscribedIDs)
+
+		// Move new one-shot IDs from streamers.toml to KV with TTL,
+		// carrying their per-streamer options along (the file forgets
+		// them once purged).
+		purgedOneShots = c.streamersFile.PurgeOneShots()
+		log.Debug("Purged one-shot IDs from streamers.toml", "count", len(purgedOneShots))
+	}
+	// Also written when nothing was subscribed, so a file whose every entry
+	// was rejected is still repaired.
+	if len(subscribedIDs) > 0 || len(pruned) > 0 {
+		if err := c.streamersFile.Write(); err != nil {
+			return fmt.Errorf("failed to write streamer IDs to config: %w", err)
+		}
+	}
+	for _, p := range purgedOneShots {
+		vlstate.PutOneShot(ctx, c.kv, p.ID.StreamerKey, vlstate.OneShotOptions{
+			Variant:         p.Opts.Variant,
+			OutputTemplate:  p.Opts.OutputTemplate,
+			DeletePartFiles: p.Opts.DeletePartFiles,
+			SplitSize:       p.Opts.SplitSize,
+			SplitDuration:   p.Opts.SplitDuration,
+			ArchiveDir:      p.Opts.ArchiveDir,
+		})
+		// A streamer demoted to one-shot mid-recording never passes through
+		// worker creation, which normally lifts the entry's TTL, so lift it
+		// here before it expires under the running session.
+		if doc, err := vlstate.GetStreamerDoc(ctx, c.kv, p.ID.StreamerKey); err == nil && doc.ActiveSessionID != "" {
+			vlstate.PersistOneShot(ctx, c.kv, p.ID.StreamerKey)
+		}
+		log.Debug("Added streamer to one-shot list", "key", p.ID.StreamerKey)
+	}
+
+	if remoteSubscribed {
+		// Reconnect to NATS with new JWT
+		if err := c.connect(); err != nil {
+			return fmt.Errorf("failed to connect to NATS: %w", err)
+		}
+
+		// Restart handlers with new NATS connection. A zero-streamer
+		// subscription has no notification consumer to watch.
+		if c.consumerName != "" {
+			if err := c.startWatchHandler(ctx); err != nil {
+				return fmt.Errorf("failed to start watch handler: %w", err)
+			}
+		}
+		if err := c.startScrapeHandler(ctx); err != nil {
+			return fmt.Errorf("failed to start scrape handler: %w", err)
+		}
+	} else if len(remoteIDs) > 0 {
+		// Asked for streamers, got none back: every entry was rejected.
+		// There is nothing to connect for, and subscribe() has already
+		// flipped the subscribed flag — leaving it set would tell the
+		// status limiter and the scrape handler to go ahead against a
+		// connection that was never opened.
+		c.setSubscribed(false)
 	}
 
 	c.applySubscriptionDiff(subscribedIDs)
