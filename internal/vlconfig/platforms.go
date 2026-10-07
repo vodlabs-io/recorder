@@ -40,6 +40,11 @@ type Platform struct {
 	// is no channel to watch, only what is playing now. The cloud may set it
 	// but never clear it for a platform the embedded list marks.
 	NoMonitor bool `json:"no_monitor,omitempty"`
+	// Local means this machine resolves the platform's streamers itself: they
+	// are never named to the service, which knows nothing of the platform.
+	// Taken only from the embedded list, whose local entries are kept whatever
+	// list the service sends.
+	Local bool `json:"local,omitempty"`
 }
 
 // RateLimit paces one class of outgoing request: Burst tokens available at
@@ -315,6 +320,28 @@ var embeddedNoMonitor = func() map[string]bool {
 	return m
 }()
 
+// embeddedLocal holds the embedded list's local platforms, in order.
+var embeddedLocal = func() []Platform {
+	var out []Platform
+	for _, p := range defaultPlatforms() {
+		if p.Local {
+			out = append(out, p)
+		}
+	}
+	return out
+}()
+
+// IsLocal reports whether this machine resolves a platform's streamers itself
+// (see Platform.Local).
+func IsLocal(name string) bool {
+	for _, p := range embeddedLocal {
+		if p.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // NoMonitor reports whether a platform's streamers can only be recorded once.
 func NoMonitor(name string) bool {
 	platformsMu.RLock()
@@ -335,10 +362,18 @@ func NoMonitor(name string) bool {
 // the embedded default and never from the cloud, so a compromised cloud cannot
 // widen the allowlist and leak cookies. The other fields are safe to take from
 // the cloud: limits are clamped at use, the UI checks ChannelURL for https,
-// and NoMonitor only ever restricts.
+// and NoMonitor only ever restricts. Local is embedded-only too, and the
+// embedded local platforms are appended when the incoming list lacks them: the
+// service never lists a platform it knows nothing of.
 func withEmbeddedDefaults(p []Platform) []Platform {
 	out := slices.Clone(p)
+	for _, l := range embeddedLocal {
+		if !slices.ContainsFunc(out, func(q Platform) bool { return q.Name == l.Name }) {
+			out = append(out, l)
+		}
+	}
 	for i := range out {
+		out[i].Local = IsLocal(out[i].Name)
 		out[i].Login = embeddedLogins[out[i].Name]
 		if out[i].DisplayName == "" {
 			out[i].DisplayName = embeddedDisplayNames[out[i].Name]
@@ -402,7 +437,7 @@ func SetPlatforms(p []Platform) bool {
 // pointers differing while the content is identical.
 func platformEqual(a, b Platform) bool {
 	if a.Name != b.Name || a.DisplayName != b.DisplayName ||
-		a.ChannelURL != b.ChannelURL || a.NoMonitor != b.NoMonitor {
+		a.ChannelURL != b.ChannelURL || a.NoMonitor != b.NoMonitor || a.Local != b.Local {
 		return false
 	}
 	if !rateLimitEqual(a.StatusLimit, b.StatusLimit) ||

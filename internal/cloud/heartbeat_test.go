@@ -59,8 +59,9 @@ func TestApplyPlatforms(t *testing.T) {
 	// A changed list updates the store, persists the cache, and resubscribes.
 	want := []vlconfig.Platform{{Name: "tiktok"}, {Name: "kick"}}
 	c.applyPlatforms(want)
-	if got := vlconfig.PlatformNames(); !reflect.DeepEqual(got, []string{"tiktok", "kick"}) {
-		t.Fatalf("after apply: PlatformNames = %v, want [tiktok kick]", got)
+	// The local generic platform is kept whatever the cloud lists.
+	if got := vlconfig.PlatformNames(); !reflect.DeepEqual(got, []string{"tiktok", "kick", "generic"}) {
+		t.Fatalf("after apply: PlatformNames = %v, want [tiktok kick generic]", got)
 	}
 	cached, err := vlconfig.LoadPlatformsCache()
 	if err != nil {
@@ -81,7 +82,7 @@ func TestApplyPlatforms(t *testing.T) {
 
 	// An empty list (e.g. a response missing the field) is ignored.
 	c.applyPlatforms(nil)
-	if got := vlconfig.PlatformNames(); !reflect.DeepEqual(got, []string{"tiktok", "kick"}) {
+	if got := vlconfig.PlatformNames(); !reflect.DeepEqual(got, []string{"tiktok", "kick", "generic"}) {
 		t.Errorf("empty list changed platforms to %v", got)
 	}
 	if resubscribed(c) {
