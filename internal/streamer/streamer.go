@@ -3,6 +3,7 @@ package streamer
 import (
 	"log/slog"
 
+	"github.com/vodlabs-io/recorder/internal/cookiemint"
 	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/stream"
 )
@@ -23,15 +24,19 @@ type StreamerState struct {
 	// they outlive a recording. A platform that signs a short-lived grant sets
 	// it, and the session re-resolves on that cadence instead of waiting for the
 	// stream to start failing.
-	StreamsTTL       int64             `json:"streams_ttl,omitempty"`
-	Headers          map[string]string `json:"headers,omitempty"`            // Optional HTTP headers to use when accessing stream URLs
-	LiveMetadata     LiveMetadata      `json:"live_metadata"`                // Metadata about the live stream (title, author, etc.)
-	AvatarURL        string            `json:"avatar_url,omitempty"`         // Re-hosted avatar image URL (from the cloud backend)
-	LastLiveStart    int64             `json:"last_live_start,omitempty"`    // Unix timestamp
-	LastLiveDuration int64             `json:"last_live_duration,omitempty"` // Duration in seconds
-	LastStatusChange int64             `json:"last_status_change,omitempty"` // Unix timestamp
-	SessionStats     recording.Stats   `json:"session_stats"`                // Bytes recorded, duration, speed
-	Monitor          *bool             `json:"monitor,omitempty"`            // Whether the streamer's status will be monitored while not live
+	StreamsTTL int64             `json:"streams_ttl,omitempty"`
+	Headers    map[string]string `json:"headers,omitempty"` // Optional HTTP headers to use when accessing stream URLs
+	// CookieMint is set by a platform whose stream URLs answer only to cookies
+	// that expire within seconds; the session mints a fresh set itself as each
+	// one ages. Nil on every platform whose Headers suffice.
+	CookieMint       *cookiemint.Mint `json:"cookie_mint,omitempty"`
+	LiveMetadata     LiveMetadata     `json:"live_metadata"`                // Metadata about the live stream (title, author, etc.)
+	AvatarURL        string           `json:"avatar_url,omitempty"`         // Re-hosted avatar image URL (from the cloud backend)
+	LastLiveStart    int64            `json:"last_live_start,omitempty"`    // Unix timestamp
+	LastLiveDuration int64            `json:"last_live_duration,omitempty"` // Duration in seconds
+	LastStatusChange int64            `json:"last_status_change,omitempty"` // Unix timestamp
+	SessionStats     recording.Stats  `json:"session_stats"`                // Bytes recorded, duration, speed
+	Monitor          *bool            `json:"monitor,omitempty"`            // Whether the streamer's status will be monitored while not live
 }
 
 func (s StreamerState) Recordable() bool {
