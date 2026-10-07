@@ -39,6 +39,11 @@ builds:
             - GOOS={{ .Os }}
             - GOARCH={{ .Arch }}
             - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
+      # Authenticode-signs the Windows binary before it's archived (see
+      # scripts/sign-windows.sh). The signature is the one part a rebuild
+      # can't reproduce; strip it before comparing.
+      post: &sign_windows
+        - cmd: '{{ if eq .Os "windows" }}bash scripts/sign-windows.sh {{ .Path }}{{ else }}true{{ end }}'
 
   - id: vlrecd
     main: ./cmd/daemon
@@ -65,6 +70,7 @@ builds:
             - GOOS={{ .Os }}
             - GOARCH={{ .Arch }}
             - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
+      post: *sign_windows
 
 # Developer ID signs and notarizes the darwin binaries before they're archived,
 # using the certificate and API key the release workflow passes in. Runs on

@@ -9,7 +9,7 @@
 //   desktop/src/bun/win-window-icon.ts), and Explorer draws it on the files.
 //
 // How this fixes it:
-//   Electrobun runs this as its `postBuild` hook (see electrobun.config.ts),
+//   Electrobun runs this in its `postBuild` hook (see scripts/post-build.ts),
 //   after assembling the app bundle and before packing it. We brand the
 //   bundle's binaries with node_modules/rcedit. The bundle, not node_modules,
 //   because `build.bunVersion` copies a separately downloaded bun.exe over the
