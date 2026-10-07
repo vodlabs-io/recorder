@@ -14,6 +14,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/streamer"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vlstate"
+	"github.com/vodlabs-io/recorder/internal/webpage"
 )
 
 // MARK: parseStreamerID
@@ -90,6 +91,10 @@ func looksLikeWebAddress(raw string) bool {
 // means the cloud itself is unreachable.
 const addResolveTimeout = 15 * time.Second
 
+// pageResolveTimeout bounds checking a page no platform claims, which can mean
+// loading it in the desktop app and then reading its HTML.
+const pageResolveTimeout = 30 * time.Second
+
 // monitorUnsupportedMessage refuses a monitored add of a streamer that can only
 // be recorded once.
 const monitorUnsupportedMessage = "VodLabs has no support for this site yet, so it can only record what is live there now. Switch Monitor off to record it once."
@@ -104,7 +109,11 @@ const kvLookupTimeout = 2 * time.Second
 // that names no streamer never reaches streamers.toml. Every failure refuses
 // the add, including an unreachable cloud, since status comes only from the
 // cloud. On failure it responds to req and returns ok=false.
-func (s *Service) preflight(req micro.Request, id streamer.StreamerRef) (streamer.StreamerRef, bool) {
+//
+// A URL the cloud says no platform claims may be a page this machine can record
+// once itself: for a record-once request (once) it is checked here instead, and
+// a monitored add is told to record it once.
+func (s *Service) preflight(req micro.Request, id streamer.StreamerRef, once bool) (streamer.StreamerRef, bool) {
 	if s.streamerFuncs.Resolve == nil {
 		// No cloud client wired (tests, or a daemon running without one). There
 		// is nothing to check against, so take the request at its word.
@@ -115,11 +124,52 @@ func (s *Service) preflight(req micro.Request, id streamer.StreamerRef) (streame
 	defer cancel()
 
 	resolved, err := s.streamerFuncs.Resolve(ctx, id)
-	if err != nil {
-		respond(req, fail(rejectionCode(err), err.Error()))
-		return streamer.StreamerRef{}, false
+	if err == nil {
+		return resolved, true
 	}
-	return resolved, true
+	if id.URL != "" && unsupportedSite(err) && s.streamerFuncs.ResolvePage != nil {
+		if _, perr := webpage.Canonical(id.URL); perr == nil {
+			if !once {
+				respond(req, fail(ErrMonitorUnsupported, monitorUnsupportedMessage))
+				return streamer.StreamerRef{}, false
+			}
+			return s.preflightPage(req, id.URL)
+		}
+	}
+	respond(req, fail(rejectionCode(err), err.Error()))
+	return streamer.StreamerRef{}, false
+}
+
+// preflightPage checks a page no platform claims, on this machine.
+func (s *Service) preflightPage(req micro.Request, rawURL string) (streamer.StreamerRef, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), pageResolveTimeout)
+	defer cancel()
+	ref, err := s.streamerFuncs.ResolvePage(ctx, rawURL)
+	if err == nil {
+		return ref, true
+	}
+	host := rawURL
+	if u, perr := webpage.Canonical(rawURL); perr == nil {
+		host = strings.TrimPrefix(u.Hostname(), "www.")
+	}
+	switch {
+	case errors.Is(err, webpage.ErrNotLive):
+		respond(req, fail(ErrNotFound, fmt.Sprintf(
+			"Nothing is live at %s right now. Paste the page while the stream is on, or the stream's own .m3u8 or .flv address.", host)))
+	case ctx.Err() != nil:
+		respond(req, fail(errUnavailable, fmt.Sprintf("%s took too long to answer. Nothing was added; try again.", host)))
+	default:
+		respond(req, fail(errUnavailable, fmt.Sprintf("Could not read %s: %v", host, err)))
+	}
+	return streamer.StreamerRef{}, false
+}
+
+// unsupportedSite reports a cloud verdict that no platform claims the URL. The
+// verdict is read through an interface so vlapi does not depend on the cloud
+// package.
+func unsupportedSite(err error) bool {
+	var verdict interface{ UnsupportedSite() bool }
+	return errors.As(err, &verdict) && verdict.UnsupportedSite()
 }
 
 // resolveURLRef turns a URL-only ref into the platform/username identity the
@@ -136,7 +186,16 @@ func (s *Service) resolveURLRef(
 	if id.Canonical().StreamerKey.Valid() {
 		return id, false, true
 	}
-	resolved, ok = s.preflight(req, id)
+	// A page recorded once is named by a digest of its URL, so a URL this
+	// machine already tracks needs no round trip, and works after the stream
+	// has ended.
+	if key, found := webpage.KeyFor(id.URL); found {
+		ref := streamer.StreamerRef{StreamerKey: key}
+		if s.isOneShot(ref) || s.alreadyAdded(ref) {
+			return ref, true, true
+		}
+	}
+	resolved, ok = s.preflight(req, id, false)
 	if !ok {
 		return streamer.StreamerRef{}, false, false
 	}
@@ -204,7 +263,7 @@ func (s *Service) handleAddStreamer(req micro.Request) {
 		return
 	}
 
-	id, ok = s.preflight(req, id)
+	id, ok = s.preflight(req, id, false)
 	if !ok {
 		return
 	}
@@ -328,6 +387,9 @@ func (s *Service) handleRemoveStreamer(req micro.Request) {
 	if id.StreamerKey.Valid() && s.kv != nil {
 		removedOneShot, _ = vlstate.DeleteOneShot(context.Background(), s.kv, id.StreamerKey)
 	}
+	if (removedFromFile || removedOneShot) && vlconfig.IsLocal(id.StreamerKey.Platform) && s.streamerFuncs.ForgetPage != nil {
+		s.streamerFuncs.ForgetPage(id.StreamerKey)
+	}
 	if !removedFromFile && !removedOneShot {
 		respond(req, OK("not present"))
 		return
@@ -371,7 +433,7 @@ func (s *Service) handleRecordOnce(req micro.Request) {
 		return
 	}
 
-	id, ok = s.preflight(req, id)
+	id, ok = s.preflight(req, id, true)
 	if !ok {
 		return
 	}

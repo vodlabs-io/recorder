@@ -75,7 +75,7 @@ const NATS_URL = process.env.VLREC_NATS_URL ?? "nats://127.0.0.1:4222";
 // so they need a ceiling above the daemon's own. Time out below it and the user
 // gets a generic local timeout instead of the daemon's own account of what
 // went wrong.
-const CLOUD_ROUNDTRIP_TIMEOUT_MS = 40_000;
+const CLOUD_ROUNDTRIP_TIMEOUT_MS = 50_000;
 
 // session owns the daemon connection: NATS transport, KV mirroring into the
 // snapshot, reconnect resync, and debounced snapshot delivery (see

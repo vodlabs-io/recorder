@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go/micro"
 	"github.com/vodlabs-io/recorder/internal/streamer"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
+	"github.com/vodlabs-io/recorder/internal/webpage"
 )
 
 // fakeRequest is a micro.Request that captures the handler's reply instead of
@@ -410,22 +411,50 @@ func TestAddStreamer_MarksAddedTime(t *testing.T) {
 	}
 }
 
-// genericResolve stands in for the cloud naming a page on a site without its
+// unsupportedSite is the cloud's verdict that no platform claims a URL.
+type unsupportedSiteErr struct{}
+
+func (unsupportedSiteErr) Error() string         { return "That site isn't supported." }
+func (unsupportedSiteErr) UnsupportedSite() bool { return true }
+
+// genericResolve stands in for the cloud refusing a page on a site without its
 // own support.
 func genericResolve(context.Context, streamer.StreamerRef) (streamer.StreamerRef, error) {
-	return streamer.StreamerRef{StreamerKey: streamer.StreamerKey{Platform: "generic", Username: "example.com-0123456789"}}, nil
+	return streamer.StreamerRef{}, unsupportedSiteErr{}
+}
+
+// pageService wires a page resolver that answers live and records which pages
+// it was asked about, and which it forgot.
+type pageService struct {
+	asked     []string
+	forgotten []streamer.StreamerKey
+}
+
+func newPageService(t *testing.T) (*Service, *vlconfig.StreamersFile, *pageService) {
+	s, sf, _ := newAddService(t, genericResolve)
+	p := &pageService{}
+	s.streamerFuncs.ResolvePage = func(_ context.Context, rawURL string) (streamer.StreamerRef, error) {
+		p.asked = append(p.asked, rawURL)
+		key, _ := webpage.KeyFor(rawURL)
+		return streamer.StreamerRef{StreamerKey: key}, nil
+	}
+	s.streamerFuncs.ForgetPage = func(key streamer.StreamerKey) { p.forgotten = append(p.forgotten, key) }
+	return s, sf, p
 }
 
 // A page that can only be recorded once is refused as a monitored add, with a
-// code clients turn into a Record once offer, and nothing is written.
+// code clients turn into a Record once offer, and is neither read nor written.
 func TestAddStreamer_RefusesToMonitorANoMonitorPlatform(t *testing.T) {
-	s, sf, _ := newAddService(t, genericResolve)
+	s, sf, pages := newPageService(t)
 	req := addRequest(t, streamer.StreamerRef{URL: "https://example.com/live"})
 	s.handleAddStreamer(req)
 
 	env := req.envelope(t)
 	if env.OK || env.Error == nil || env.Error.Code != ErrMonitorUnsupported.Error() {
 		t.Fatalf("reply = %+v, want %s", env, ErrMonitorUnsupported)
+	}
+	if len(pages.asked) != 0 {
+		t.Fatalf("a monitored add read the page: %v", pages.asked)
 	}
 	if err := sf.Load(); err != nil {
 		t.Fatal(err)
@@ -435,12 +464,44 @@ func TestAddStreamer_RefusesToMonitorANoMonitorPlatform(t *testing.T) {
 	}
 }
 
-func TestRecordOnce_AcceptsANoMonitorPlatform(t *testing.T) {
-	s, _, _ := newAddService(t, genericResolve)
+// Recording a page once checks it on this machine, and removing it by its URL
+// needs no check at all.
+func TestRecordOnce_PageIsCheckedHereAndRemovedByURL(t *testing.T) {
+	s, _, pages := newPageService(t)
 	req := addRequest(t, streamer.StreamerRef{URL: "https://example.com/live"})
 	s.handleRecordOnce(req)
-	if env := req.addEnvelope(t); !env.OK || env.Data.StreamerKey.Platform != "generic" {
-		t.Fatalf("reply = %+v, want the one-shot accepted", env)
+	env := req.addEnvelope(t)
+	want, _ := webpage.KeyFor("https://example.com/live")
+	if !env.OK || env.Data.StreamerKey != want {
+		t.Fatalf("reply = %+v, want the one-shot %v accepted", env, want)
+	}
+	if len(pages.asked) != 1 {
+		t.Fatalf("page checks = %v, want one", pages.asked)
+	}
+
+	rm := addRequest(t, streamer.StreamerRef{URL: "https://example.com/live"})
+	s.handleRemoveStreamer(rm)
+	if env := rm.envelope(t); !env.OK {
+		t.Fatalf("remove reply = %+v", env)
+	}
+	if len(pages.asked) != 1 {
+		t.Fatalf("removing by URL checked the page again: %v", pages.asked)
+	}
+	if len(pages.forgotten) != 1 || pages.forgotten[0] != want {
+		t.Fatalf("forgotten = %v, want %v", pages.forgotten, want)
+	}
+}
+
+// A URL the cloud cannot check at all is not taken for a page.
+func TestRecordOnce_UnavailableCloudIsNotAPage(t *testing.T) {
+	s, _, pages := newPageService(t)
+	s.streamerFuncs.Resolve = func(context.Context, streamer.StreamerRef) (streamer.StreamerRef, error) {
+		return streamer.StreamerRef{}, errors.New("cloud unreachable")
+	}
+	req := addRequest(t, streamer.StreamerRef{URL: "https://example.com/live"})
+	s.handleRecordOnce(req)
+	if env := req.envelope(t); env.OK || len(pages.asked) != 0 {
+		t.Fatalf("reply = %+v, page checks = %v", env, pages.asked)
 	}
 }
 

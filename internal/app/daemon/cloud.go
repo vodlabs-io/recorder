@@ -40,5 +40,10 @@ func (a *App) cloudStreamerFuncs() vlapi.StreamerFuncs {
 		Recheck: func(ctx context.Context, id streamer.StreamerRef) error {
 			return a.cloudClient.RecheckStreamer(ctx, id)
 		},
+		ResolvePage: func(ctx context.Context, rawURL string) (streamer.StreamerRef, error) {
+			key, err := a.pages.Preflight(ctx, rawURL)
+			return streamer.StreamerRef{StreamerKey: key}, err
+		},
+		ForgetPage: a.pages.Forget,
 	}
 }

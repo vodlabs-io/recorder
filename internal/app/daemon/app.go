@@ -22,6 +22,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/vllog"
 	"github.com/vodlabs-io/recorder/internal/vlstate"
 	"github.com/vodlabs-io/recorder/internal/vodindex"
+	"github.com/vodlabs-io/recorder/internal/webpage"
 )
 
 type App struct {
@@ -45,6 +46,7 @@ type App struct {
 	revSentAt   time.Time         // When a rev was last published
 	thumbCache  *thumbcache.Cache // VOD screenshots, kept off the archive volume
 	cloudClient *cloud.Client
+	pages       *webpage.Resolver // finds what plays on pages no platform claims, on this machine
 	sessionReg  *session.Registry
 	strFile     *vlconfig.StreamersFile // streamers.toml
 	cookieStore *platformauth.Store     // Local, encrypted third-party platform logins
