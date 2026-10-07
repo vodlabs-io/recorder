@@ -20,6 +20,7 @@ import (
 // so a re-sign never waits behind status checks until its grant has expired.
 type platformLimiter struct {
 	platform string
+	local    bool                      // a local platform's checks run on this machine, so its lanes never wait for the cloud
 	highPri  chan streamer.StreamerRef // status: something is waiting on this one
 	authPri  chan streamer.StreamerRef // status: authenticated re-check of a restricted streamer
 	lowPri   chan streamer.StreamerRef // status: backlog
@@ -249,6 +250,7 @@ func (c *Client) limiterFor(ctx context.Context, platform string) *platformLimit
 	}
 	l := &platformLimiter{
 		platform: platform,
+		local:    vlconfig.IsLocal(platform),
 		highPri:  make(chan streamer.StreamerRef, laneDepth),
 		authPri:  make(chan streamer.StreamerRef, laneDepth),
 		lowPri:   make(chan streamer.StreamerRef, laneDepth),
@@ -291,7 +293,7 @@ func (c *Client) runStatusLane(ctx context.Context, l *platformLimiter) {
 		// Gate before taking rather than after: a request held back stays in
 		// its lane, so an urgent check arriving during the wait is still served
 		// ahead of a backlog that was queued first.
-		if !c.waitSubscribeCtx(ctx) {
+		if !l.local && !c.waitSubscribeCtx(ctx) {
 			return
 		}
 		id, kind, _ := waitForRequest(ctx, l.highPri, l.authPri, nil, l.lowPri)
@@ -307,7 +309,7 @@ func (c *Client) runStatusLane(ctx context.Context, l *platformLimiter) {
 func (c *Client) runStreamLane(ctx context.Context, l *platformLimiter) {
 	log := c.logger.With("func", "runStreamLane", "platform", l.platform)
 	for {
-		if !c.waitSubscribeCtx(ctx) {
+		if !l.local && !c.waitSubscribeCtx(ctx) {
 			return
 		}
 		select {
@@ -339,7 +341,13 @@ func (c *Client) serve(
 	// fetch carries on writing view docs and dispatching after it returns, and
 	// nothing could otherwise tell whether any were still doing so.
 	c.fetchWg.Go(func() {
-		str, err := c.fetchSingleStatus(ctx, id, kind == kindAuthed, kind == kindStream)
+		var str streamer.StreamerState
+		var err error
+		if l.local {
+			str, err = c.checkLocal(ctx, id, kind == kindStream)
+		} else {
+			str, err = c.fetchSingleStatus(ctx, id, kind == kindAuthed, kind == kindStream)
+		}
 		if err != nil {
 			if started, holding := l.noteFailure(time.Now()); holding {
 				logHold(log, id, kind, started, err)

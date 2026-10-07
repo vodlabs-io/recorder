@@ -163,6 +163,7 @@ func (a *App) start(ctx context.Context) (err error) {
 		a.cookieStore,
 		a.appCfg.Cloud,
 		a.appCfg.Scraper,
+		nil,
 		a.onVersionChecked)
 	if err != nil {
 		return fmt.Errorf("failed to initialize cloud client: %w", err)

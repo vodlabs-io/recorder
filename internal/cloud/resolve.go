@@ -13,6 +13,14 @@ import (
 // This is the only way out of StatusDefunct, and it is deliberately manual: a
 // defunct account is not polled at all, so nothing else will ever ask again.
 func (c *Client) RecheckStreamer(ctx context.Context, id streamer.StreamerRef) error {
+	if isLocal(id) {
+		str, err := c.checkLocal(ctx, id, true)
+		if err != nil {
+			return err
+		}
+		c.dispatchStreamer(ctx, str)
+		return nil
+	}
 	str, err := c.fetchStreamerRecheck(ctx, id)
 	if err != nil {
 		return err

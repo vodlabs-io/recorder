@@ -301,8 +301,16 @@ func (c *Client) initStatusRetrying(ctx context.Context, base, max time.Duration
 func (c *Client) InitStatus(ctx context.Context) error {
 	log := c.logger.With("func", "InitStatus")
 
-	if len(c.subscriptions.Load().(streamer.StreamerRefs)) == 0 {
-		log.Info("No subscribed streamers, skipping initial status fetch")
+	ids, _ := c.subscriptions.Load().(streamer.StreamerRefs)
+	local, remote := splitLocal(ids)
+	for _, id := range local {
+		select {
+		case c.statusReqCh <- id:
+		default:
+		}
+	}
+	if len(remote) == 0 {
+		log.Info("No cloud streamers, skipping initial status fetch")
 		return nil
 	}
 
