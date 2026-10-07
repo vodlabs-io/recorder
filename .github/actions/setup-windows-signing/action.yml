@@ -1,0 +1,32 @@
+name: Set up Windows signing
+description: >-
+  Signs in to Azure for Artifact Signing and fetches jsign, which
+  scripts/sign-windows.sh signs with. The caller's job needs `id-token: write`.
+
+inputs:
+  client-id:
+    description: Client ID of the app registration that holds the Certificate Profile Signer role.
+    required: true
+  tenant-id:
+    description: Its Microsoft Entra tenant ID.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # OIDC: the app registration trusts this repo's `release` environment
+    # through a federated credential, so no Azure secret is stored.
+    - uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        allow-no-subscriptions: true
+
+    - name: Fetch jsign
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "$RUNNER_TEMP"
+        curl -fsSL -o jsign.jar https://github.com/ebourg/jsign/releases/download/7.5/jsign-7.5.jar
+        echo "602a51c3545a6dc4fb99bd2ea7152b26d1345916d0c93ddfbd5936cb735af91c  jsign.jar" | sha256sum -c -
+        echo "JSIGN_JAR=$RUNNER_TEMP/jsign.jar" >> "$GITHUB_ENV"

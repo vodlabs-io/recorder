@@ -30,9 +30,19 @@ jobs:
       MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
       MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
       MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+      # Azure Artifact Signing, which Authenticode-signs vod.exe and vlrecd.exe
+      # (see the post hooks in .goreleaser.yaml); the desktop job signs the
+      # Windows app with the same account.
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      WINDOWS_SIGN_ENDPOINT: ${{ vars.WINDOWS_SIGN_ENDPOINT }}
+      WINDOWS_SIGN_ACCOUNT: ${{ vars.WINDOWS_SIGN_ACCOUNT }}
+      WINDOWS_SIGN_PROFILE: ${{ vars.WINDOWS_SIGN_PROFILE }}
     steps:
       # A tag push publishes, so check before anything is built.
-      - name: Require macOS signing secrets
+      # macOS builds are never published unsigned; Windows ones are, with a
+      # warning, until the Artifact Signing account is set up.
+      - name: Require signing configuration
         if: github.event_name == 'push'
         run: |
           for name in MACOS_SIGN_P12 MACOS_SIGN_PASSWORD MACOS_NOTARY_KEY MACOS_NOTARY_KEY_ID MACOS_NOTARY_ISSUER_ID; do
@@ -41,6 +51,9 @@ jobs:
               exit 1
             fi
           done
+          if [ -z "$WINDOWS_SIGN_ACCOUNT" ]; then
+            echo "::warning::WINDOWS_SIGN_ACCOUNT is not set; publishing unsigned vod.exe and vlrecd.exe"
+          fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,6 +63,13 @@ jobs:
         with:
           # The module names the toolchain; see the toolchain directive in go.mod.
           go-version-file: go.mod
+
+      - name: Set up Windows signing
+        if: env.WINDOWS_SIGN_ACCOUNT != ''
+        uses: ./.github/actions/setup-windows-signing
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
 
       - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -121,6 +141,11 @@ jobs:
             installer: '*linux-x64*-Setup.tar.gz'
             friendly: VodLabs-Recorder-Linux-x64-Setup.tar.gz
     runs-on: ${{ matrix.runner }}
+    env:
+      # Read by scripts/sign-win-bundle.ts during the Windows build.
+      WINDOWS_SIGN_ENDPOINT: ${{ vars.WINDOWS_SIGN_ENDPOINT }}
+      WINDOWS_SIGN_ACCOUNT: ${{ vars.WINDOWS_SIGN_ACCOUNT }}
+      WINDOWS_SIGN_PROFILE: ${{ vars.WINDOWS_SIGN_PROFILE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -193,6 +218,22 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
+      # Without the configuration the Windows app builds unsigned, with a
+      # warning on tag pushes. Signing happens inside the build, in the
+      # postBuild hook.
+      - name: Warn about an unsigned Windows build
+        if: runner.os == 'Windows' && github.event_name == 'push' && env.WINDOWS_SIGN_ACCOUNT == ''
+        shell: bash
+        run: echo "::warning::WINDOWS_SIGN_ACCOUNT is not set; publishing an unsigned Windows build"
+
+      - name: Set up Windows signing
+        id: winsigning
+        if: runner.os == 'Windows' && env.WINDOWS_SIGN_ACCOUNT != ''
+        uses: ./.github/actions/setup-windows-signing
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+
       # build:stable = `vite build && electrobun build --env=stable`. Bun runs
       # the script cross-platform; Electrobun builds for this runner's OS/arch
       # and emits artifacts/stable-<os>-<arch>-* (installer, .app.tar.zst, update.json).
@@ -211,6 +252,28 @@ jobs:
             xcrun stapler validate "$dmg"
             spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           done
+
+      # Electrobun stamps Setup.exe out of the signed extractor after signing,
+      # so confirm the installer users run, and every binary the app ships,
+      # still carries a valid signature.
+      - name: Verify Windows signatures
+        if: steps.winsigning.outcome == 'success'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $staging = Join-Path $env:RUNNER_TEMP 'setup-check'
+          foreach ($zip in Get-ChildItem artifacts -Filter '${{ matrix.installer }}') {
+            Expand-Archive -LiteralPath $zip.FullName -DestinationPath $staging -Force
+          }
+          $files = @(Get-ChildItem $staging, build -Recurse -File -Include *.exe, *.dll)
+          if (-not ($files | Where-Object Name -like '*Setup*.exe')) { throw 'No Setup exe found in the installer zip' }
+          $bad = $files | Where-Object { (Get-AuthenticodeSignature -LiteralPath $_.FullName).Status -ne 'Valid' }
+          if ($bad) {
+            $bad | ForEach-Object { Write-Output "::error::Not validly signed: $($_.FullName)" }
+            exit 1
+          }
+          Get-AuthenticodeSignature -LiteralPath ($files | Where-Object Name -like '*Setup*.exe')[0].FullName |
+            Select-Object Status, @{ n = 'Signer'; e = { $_.SignerCertificate.Subject } } | Format-List
 
       # A copy of the installer under a stable, readable name, which the README
       # and the website link through releases/latest/download/. Electrobun's

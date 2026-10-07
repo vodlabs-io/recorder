@@ -65,10 +65,12 @@ export default {
 	// scripts/fix-macos-headerpad.ts), and the app icon its precompiled CLI
 	// can't embed itself, stamped into the assembled bundle before it's packed
 	// (https://github.com/blackboardsh/electrobun/pull/433, unmerged).
-	// Drop each once upstream ships it.
+	// Drop each once upstream ships it. postBuild then Authenticode-signs the
+	// Windows bundle when release CI provides the credentials (see
+	// scripts/sign-win-bundle.ts).
 	scripts: {
 		preBuild: "scripts/vendor-native.ts",
-		postBuild: "scripts/embed-win-icon.ts",
+		postBuild: "scripts/post-build.ts",
 	},
 	// Keep the app running when its window is closed (X / red button) so it lives
 	// on in the system tray. The app only exits via an explicit Quit (app menu or
