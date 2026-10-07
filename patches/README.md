@@ -56,8 +56,19 @@ Electrobun) crashed 10 of 10 runs within a second on 1.3.14, and survived 10 of
    both preloads into the top frame only, so iframe players stay out of reach
    there.
 
+4. **Page events must name their own webview.** A page's preload reports
+   events (dom-ready, host-message, ...) over the event bridge as JSON that
+   carries a webview id, and Electrobun dispatched them to whichever webview
+   that id named. Native code passes the real sender's id alongside, unused. So
+   any page, sandboxed or not, could raise events on another webview (the app's
+   own UI, a platform login window) and claim events only native code sends
+   (`will-navigate`, `download-started`). `isPageEvent` drops an event whose id
+   is not its sender's, or whose name is not one a preload emits. The stream
+   sniffer loads arbitrary pages and acts on download events, so it relies on
+   this.
+
 Moving to Electrobun 2.x makes the first change redundant. It does not carry
-the second or the third, so check before dropping them.
+the second, third or fourth, so check before dropping them.
 
 ## `electrobun-1.18.1-win-cookie-api.patch`
 

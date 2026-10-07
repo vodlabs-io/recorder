@@ -1,5 +1,5 @@
 diff --git a/dist/api/bun/proc/native.ts b/dist/api/bun/proc/native.ts
-index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802382149c4 100644
+index f0f6c2532ba2eb467ec1d452a25c835b6db72661..7c33bdba38e4e8619e401595fd8e5e4e9ba8f9fc 100644
 --- a/dist/api/bun/proc/native.ts
 +++ b/dist/api/bun/proc/native.ts
 @@ -1304,9 +1304,17 @@ window.__electrobunBunBridge = window.__electrobunBunBridge || window.webkit?.me
@@ -164,7 +164,25 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802
  			if (!rawMessage || (rawMessage[0] !== "{" && rawMessage[0] !== "[")) {
  				return;
  			}
-@@ -2564,8 +2571,7 @@ const bunBridgePostmessageHandler = new JSCallback(
+@@ -2558,14 +2565,25 @@ const bunBridgePostmessageHandler = new JSCallback(
+ // BrowserView.rpc (user defined bun <-> browser rpc unique to each webview)
+ // nativeRPC (internal bun <-> native rpc)
+ 
++// The events a page's own preload emits. Everything else (navigation
++// decisions, downloads) comes from native code, so a page claiming one is
++// forging it.
++const PAGE_EVENTS = new Set(["dom-ready", "did-navigate-in-page", "host-message", "new-window-open"]);
++
++// isPageEvent accepts a page-sent event only when it names the webview it came
++// from (native passes that id; the payload's is the page's own claim) and is
++// one a page may send.
++function isPageEvent(senderId: number, payload: { id?: unknown; eventName?: unknown } | undefined): boolean {
++	return !!payload && payload.id === senderId && PAGE_EVENTS.has(String(payload.eventName));
++}
++
+ // eventBridgeHandler: handles ONLY webview events (dom-ready, navigation, etc.)
+ // This is available on ALL webviews including sandboxed ones.
+ // It cannot process RPC requests - only event emission.
  const eventBridgeHandler = new JSCallback(
  	(_id: number, msg: number) => {
  		try {
@@ -174,7 +192,18 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802
  			if (!rawMessage || (rawMessage[0] !== "{" && rawMessage[0] !== "[")) {
  				return;
  			}
-@@ -2593,8 +2599,7 @@ const eventBridgeHandler = new JSCallback(
+@@ -2574,7 +2592,9 @@ const eventBridgeHandler = new JSCallback(
+ 			// Only handle webviewEvent messages - no RPC
+ 			if (jsonMessage.id === "webviewEvent") {
+ 				const { payload } = jsonMessage;
+-				webviewEventHandler(payload.id, payload.eventName, payload.detail);
++				if (isPageEvent(_id, payload)) {
++					webviewEventHandler(payload.id, payload.eventName, payload.detail);
++				}
+ 			}
+ 			// Silently ignore any other message types - sandboxed webviews shouldn't send them
+ 		} catch (err) {
+@@ -2593,14 +2613,15 @@ const eventBridgeHandler = new JSCallback(
  const internalBridgeHandler = new JSCallback(
  	(_id: number, msg: number) => {
  		try {
@@ -184,7 +213,16 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802
  
  			if (jsonBatch.id === "webviewEvent") {
  				// Note: Some WebviewEvents from inside the webview are routed through here
-@@ -2660,11 +2665,11 @@ const internalBridgeHandler = new JSCallback(
+ 				// Others call the JSCallback directly from native code.
+ 				const { payload } = jsonBatch;
+-				webviewEventHandler(payload.id, payload.eventName, payload.detail);
++				if (isPageEvent(_id, payload)) {
++					webviewEventHandler(payload.id, payload.eventName, payload.detail);
++				}
+ 				return;
+ 			}
+ 
+@@ -2660,11 +2681,11 @@ const internalBridgeHandler = new JSCallback(
  	},
  );
  
@@ -198,7 +236,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802
  
  		// Use shared deserialization method
  		const { action: actualAction, data } = deserializeMenuAction(actionString);
-@@ -2686,9 +2691,9 @@ const trayItemHandler = new JSCallback(
+@@ -2686,9 +2707,9 @@ const trayItemHandler = new JSCallback(
  	},
  );
  
@@ -210,7 +248,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802
  
  		// Use shared deserialization method
  		const { action: actualAction, data } = deserializeMenuAction(actionString);
-@@ -2709,9 +2714,9 @@ const applicationMenuHandler = new JSCallback(
+@@ -2709,9 +2730,9 @@ const applicationMenuHandler = new JSCallback(
  	},
  );
  
@@ -222,7 +260,7 @@ index f0f6c2532ba2eb467ec1d452a25c835b6db72661..72d371e07ca1102fdb0659b00b53c802
  
  		// Use shared deserialization method
  		const { action: actualAction, data } = deserializeMenuAction(actionString);
-@@ -2747,6 +2752,31 @@ export function toCString(
+@@ -2747,6 +2768,31 @@ export function toCString(
  	return ptr(buff);
  }
  
