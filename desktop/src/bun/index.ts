@@ -44,6 +44,7 @@ import { countPendingWork, hasPendingWork } from "../../../shared/daemon/pending
 import { AppUpdater } from "./app-update";
 import { DaemonUpdater, type DaemonHost } from "./daemon-update";
 import { applyWindowIcon } from "./win-window-icon";
+import { disableWindowTabbing } from "./macos-window-tabbing";
 import { acquireSingleInstanceLock } from "./single-instance";
 import {
   refreshPlatformLogin,
@@ -1166,6 +1167,10 @@ Electrobun.events.on("before-quit", (event: unknown) => {
 // Started by the OS at login (see start-at-login.ts): the user did not ask for
 // a window, they asked for their streams to be recorded. Come up in the tray
 // instead, and let the tray icon open the window when they want it.
+// Before any window opens: a tab group moves as one window, so a background
+// window must never join the main window's.
+disableWindowTabbing();
+
 if (!process.argv.includes(START_HIDDEN_FLAG)) {
   createMainWindow();
 }
