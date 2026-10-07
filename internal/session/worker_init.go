@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/vodlabs-io/recorder/internal/cookiemint"
 	"github.com/vodlabs-io/recorder/internal/provenance"
 	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/stream"
@@ -124,6 +125,9 @@ func (w *worker) initStream(str streamer.StreamerState) error {
 			w.selectedHTTPClient = guardedHLSClient
 		}
 	}
+	// A platform whose stream answers only to cookies that expire within
+	// seconds has them minted afresh for every request that needs them.
+	w.selectedHTTPClient = cookiemint.Client(w.selectedHTTPClient, str.CookieMint)
 	w.output.WriterName = writerName
 
 	writerInstance, ok := writer.Get(writerName)
