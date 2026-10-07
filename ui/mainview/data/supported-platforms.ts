@@ -27,6 +27,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   mixch: "Mixch",
   kuaishou: "Kuaishou",
   rumble: "Rumble",
+  tango: "Tango",
   generic: "Web",
 }
 

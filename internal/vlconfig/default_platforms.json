@@ -113,6 +113,11 @@
 		"channel_url": "https://api.vodlabs.io/channel/rumble/{username}"
 	},
 	{
+		"name": "tango",
+		"display_name": "Tango",
+		"channel_url": "https://api.vodlabs.io/channel/tango/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
