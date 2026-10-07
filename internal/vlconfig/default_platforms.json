@@ -115,6 +115,7 @@
 	{
 		"name": "generic",
 		"display_name": "Web",
-		"no_monitor": true
+		"no_monitor": true,
+		"local": true
 	}
 ]

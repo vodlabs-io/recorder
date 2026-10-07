@@ -3,6 +3,7 @@ package vlconfig
 import (
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -41,7 +42,8 @@ func TestSetAndPlatformNames(t *testing.T) {
 	snapshotPlatforms(t)
 	SetPlatforms([]Platform{{Name: "kick"}, {Name: "tiktok"}})
 	got := PlatformNames()
-	want := []string{"kick", "tiktok"}
+	// The local generic platform is kept whatever the list says.
+	want := []string{"kick", "tiktok", "generic"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("PlatformNames = %v, want %v", got, want)
 	}
@@ -258,5 +260,24 @@ func TestNoMonitorOnlyRestricts(t *testing.T) {
 		if got := NoMonitor(name); got != want {
 			t.Errorf("NoMonitor(%s) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+// The service never lists a local platform, and cannot mark one local.
+func TestLocalPlatformsAreEmbeddedOnly(t *testing.T) {
+	saved := Platforms()
+	t.Cleanup(func() { SetPlatforms(saved) })
+
+	SetPlatforms([]Platform{{Name: "twitch", Local: true}})
+	if !slices.Contains(PlatformNames(), "generic") {
+		t.Fatal("a list from the service dropped the local generic platform")
+	}
+	for _, p := range Platforms() {
+		if p.Local != (p.Name == "generic") {
+			t.Errorf("%s: Local = %v", p.Name, p.Local)
+		}
+	}
+	if IsLocal("twitch") || !IsLocal("generic") {
+		t.Error("IsLocal must follow the embedded list")
 	}
 }
