@@ -49,10 +49,10 @@ type Response struct {
 
 // SniffSubject is the LOCAL NATS subject (request-reply) on which the daemon
 // asks the desktop to load a page in a throwaway browser and report the stream
-// requests its player makes. The page is one the user asked to record; the
-// daemon refuses any other (see vlstate.PermitSniff). Headless daemons have no
-// subscriber, so the request times out and the caller falls back to reading
-// the page without a browser.
+// requests its player makes. The page is always one this machine's user asked
+// to record; nothing from the service ever names one. Headless daemons have
+// no subscriber, so the request fails at once and the caller reads the page
+// without a browser.
 const SniffSubject = "platform.browsersniff.request"
 
 // SniffRequest asks for one page to be sniffed.

@@ -101,8 +101,6 @@ type Client struct {
 	lastUpstream      atomic.Pointer[version.Upstream]
 	ResubscribeCh     chan struct{}          // Trigger a new subscription: new JWT, new consumer, NATS reconnect. Only for a change to WHICH streamers are tracked
 	ReloadCh          chan struct{}          // Re-read streamers.toml and apply it locally. For a change to HOW a tracked streamer is recorded (see reloadConfig)
-	standbyCh         chan chan error        // Ask for a connection with no streamers (see requestStandby); answered on the subscription handler's goroutine
-	sniffs            *sniffCache            // Recent sniff reports, kept across the scrape handlers each subscription starts
 	natsHandlerWg     sync.WaitGroup         // Tracks NATS handler goroutines for resubscription
 	fetchWg           sync.WaitGroup         // Tracks the in-flight status fetches serve detaches (see waitFetches)
 	stopScrapeHandler context.CancelFunc     // Cancel function to stop the scrape handler goroutine
@@ -150,8 +148,6 @@ func Init(
 		onVersionChecked: onVersionChecked,
 		ResubscribeCh:    make(chan struct{}, 1),
 		ReloadCh:         make(chan struct{}, 1),
-		standbyCh:        make(chan chan error),
-		sniffs:           newSniffCache(),
 		// One slot per subscribed streamer: every one of these carries at most
 		// one entry per streamer at a time, and the bursts that fill them
 		// (a subscription refresh, an enable-all, every tracked streamer
