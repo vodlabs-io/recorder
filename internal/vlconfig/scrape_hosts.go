@@ -114,6 +114,9 @@ var scrapeDomains = map[string][]string{
 		"rumble.com",
 		"rumble.cloud",
 	},
+	"tango": {
+		"tango.me",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
