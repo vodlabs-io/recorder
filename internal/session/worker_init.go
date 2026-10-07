@@ -111,11 +111,18 @@ func (w *worker) initStream(str streamer.StreamerState) error {
 	w.streamsTTL = time.Duration(str.StreamsTTL) * time.Second
 
 	w.selectedHTTPClient = w.flvHTTPClient
+	local := vlconfig.IsLocal(str.Platform)
+	if local {
+		w.selectedHTTPClient = guardedFLVClient
+	}
 
 	writerName := "flvwriter"
 	if selectedStream.IsHLS() {
 		writerName = "hlswriter"
 		w.selectedHTTPClient = w.basicHTTPClient
+		if local {
+			w.selectedHTTPClient = guardedHLSClient
+		}
 	}
 	w.output.WriterName = writerName
 
