@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
-	"syscall"
 	"time"
 
+	"github.com/vodlabs-io/recorder/internal/netguard"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 )
 
@@ -19,7 +18,7 @@ var errHostNotAllowed = errors.New("host is not a supported platform")
 
 // errPrivateAddress is returned when a scrape resolves to an address on this
 // machine or this network.
-var errPrivateAddress = errors.New("address is not a public internet address")
+var errPrivateAddress = netguard.ErrPrivateAddress
 
 // scrapeMethods are the methods a scrape request may use. Checks read pages and
 // call APIs; nothing about them needs to delete or overwrite anything, and a
@@ -51,62 +50,6 @@ func checkScrapeTarget(method string, u *url.URL) error {
 	return nil
 }
 
-// blockedAddr reports whether an address is one a scrape must never reach: this
-// machine, this network, or a range that is not public internet. It is the half
-// of the guard a hostname cannot talk its way around, since it runs on the
-// address actually dialled.
-func blockedAddr(addr netip.Addr) bool {
-	addr = addr.Unmap() // an IPv4-mapped IPv6 address is its IPv4 address
-	switch {
-	case !addr.IsValid(),
-		addr.IsLoopback(),
-		addr.IsUnspecified(),
-		addr.IsPrivate(),
-		addr.IsLinkLocalUnicast(),
-		addr.IsLinkLocalMulticast(),
-		addr.IsInterfaceLocalMulticast(),
-		addr.IsMulticast():
-		return true
-	}
-	if addr.Is4() {
-		b := addr.As4()
-		switch {
-		case b[0] == 0: // 0.0.0.0/8, "this network"
-			return true
-		case b[0] == 100 && b[1]&0xc0 == 64: // 100.64.0.0/10, carrier-grade NAT
-			return true
-		case b[0] == 198 && b[1]&0xfe == 18: // 198.18.0.0/15, benchmarking
-			return true
-		case b[0] == 255 && b[1] == 255 && b[2] == 255 && b[3] == 255: // broadcast
-			return true
-		}
-		return false
-	}
-	// IPv6 unique local addresses, fc00::/7, which Addr.IsPrivate only reports
-	// for fd00::/8.
-	return addr.As16()[0]&0xfe == 0xfc
-}
-
-// PublicDialControl refuses a connection to a non-public address. It runs after
-// DNS and before the connection is made, on the address the kernel is about to
-// use, so a name that resolves to 127.0.0.1 — or is re-resolved to it between
-// the check and the dial — is refused here. Set it as a net.Dialer's Control
-// for any client that fetches addresses others supply.
-func PublicDialControl(_, address string, _ syscall.RawConn) error {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return fmt.Errorf("unexpected dial address %q: %w", address, err)
-	}
-	addr, err := netip.ParseAddr(host)
-	if err != nil {
-		return fmt.Errorf("unexpected dial address %q: %w", address, err)
-	}
-	if blockedAddr(addr) {
-		return fmt.Errorf("%w: %s", errPrivateAddress, addr)
-	}
-	return nil
-}
-
 // newScrapeClient builds the HTTP client scrapes are made with. It is separate
 // from the client the daemon talks to the service with, which legitimately
 // reaches a private address when a developer runs the service locally.
@@ -121,7 +64,7 @@ func newScrapeClient() *http.Client {
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
 		KeepAlive: 30 * time.Second,
-		Control:   PublicDialControl,
+		Control:   netguard.DialControl,
 	}
 	return &http.Client{
 		Transport: &http.Transport{
