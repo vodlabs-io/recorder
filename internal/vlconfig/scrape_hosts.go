@@ -117,6 +117,9 @@ var scrapeDomains = map[string][]string{
 	"tango": {
 		"tango.me",
 	},
+	"buzzcast": {
+		"buzzcast.com",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
