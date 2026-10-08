@@ -118,6 +118,11 @@
 		"channel_url": "https://api.vodlabs.io/channel/tango/{username}"
 	},
 	{
+		"name": "buzzcast",
+		"display_name": "BuzzCast",
+		"channel_url": "https://www.buzzcast.com/live/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
