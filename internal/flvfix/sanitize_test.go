@@ -669,3 +669,48 @@ func TestSinkErrorSticky(t *testing.T) {
 type failWriter struct{}
 
 func (failWriter) Write(p []byte) (int, error) { return 0, errors.New("disk full") }
+
+// Opus travels in the enhanced-FLV audio layout: a SequenceStart carrying the
+// identification header, then CodedFrames.
+func opusSeqTag(ts int64) []byte {
+	return buildTag(tagAudio, ts, append([]byte{0x90, 'O', 'p', 'u', 's'}, []byte("OpusHead\x01\x02\x38\x01\x80\xbb\x00\x00\x00\x00\x00")...))
+}
+
+func opusFrame(ts int64) []byte {
+	return buildTag(tagAudio, ts, []byte{0x91, 'O', 'p', 'u', 's', 0xfc, 0xff})
+}
+
+func TestOpusSequenceStartIsAConfig(t *testing.T) {
+	src := stream(fileHeader(), vCfgTag(0, 0x41, 22),
+		opusFrame(0), // before its sequence start: dropped
+		opusSeqTag(0), vKey(0), opusFrame(20),
+		opusSeqTag(40), // identical re-send: dropped
+		opusFrame(40), vInter(40))
+	out, s, err := run(t, src)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	tags := parseOutput(t, out.Bytes())
+	checkInvariants(t, tags)
+	var seqStarts, frames int
+	for _, tag := range tags {
+		if tag.typ != tagAudio {
+			continue
+		}
+		switch tag.payload[0] {
+		case 0x90:
+			seqStarts++
+			if frames > 0 {
+				t.Fatal("Opus sequence start emitted after a frame")
+			}
+		case 0x91:
+			frames++
+		}
+	}
+	if seqStarts != 1 || frames != 2 {
+		t.Fatalf("got %d sequence starts and %d frames, want 1 and 2", seqStarts, frames)
+	}
+	if st := s.Stats(); st.preConfigTags != 1 || st.dupConfigsDropped != 1 {
+		t.Fatalf("stats %+v: want one pre-config drop and one duplicate config", st)
+	}
+}
