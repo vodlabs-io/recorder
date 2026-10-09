@@ -21,7 +21,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    # Upstream's own Linux runner: Hutch's toolchain needs glibc 2.38+.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout recorder (for the patch)
         uses: actions/checkout@v7
@@ -50,8 +51,7 @@ jobs:
 
       # electrobun's own vendorLinuxDeps() list (package/build.ts), which is what
       # its build expects to find; libx11-dev covers the X11 calls the wrapper
-      # makes directly. Built on 22.04 so the .so does not pick up a newer glibc
-      # than the distros we ship to.
+      # makes directly.
       - name: Install build dependencies
         run: |
           set -euo pipefail

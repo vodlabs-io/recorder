@@ -4,3 +4,6 @@
 # Anything a POSIX shell or Linux container reads must keep LF — a CRLF
 # shebang makes bash report "bad interpreter" on a Windows checkout.
 *.sh text eol=lf
+
+# Patches apply to upstream sources that check out with LF everywhere.
+*.patch text eol=lf
