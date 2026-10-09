@@ -123,6 +123,11 @@
 		"channel_url": "https://www.buzzcast.com/live/{username}"
 	},
 	{
+		"name": "superlive",
+		"display_name": "Superlive",
+		"channel_url": "https://superlive.chat/profile/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
