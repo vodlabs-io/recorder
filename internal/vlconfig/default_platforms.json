@@ -142,6 +142,11 @@
 		}
 	},
 	{
+		"name": "mico",
+		"display_name": "MICO",
+		"channel_url": "https://m.micoworld.net/live/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,

@@ -127,6 +127,9 @@ var scrapeDomains = map[string][]string{
 	"tilive": {
 		"ti.live",
 	},
+	"mico": {
+		"micoworld.net",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
