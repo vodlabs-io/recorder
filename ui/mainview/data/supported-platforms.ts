@@ -31,6 +31,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   buzzcast: "BuzzCast",
   superlive: "Superlive",
   tilive: "TiLive",
+  mico: "MICO",
   generic: "Web",
 }
 
