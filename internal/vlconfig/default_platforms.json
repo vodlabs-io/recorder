@@ -147,6 +147,22 @@
 		"channel_url": "https://m.micoworld.net/live/{username}"
 	},
 	{
+		"name": "x",
+		"display_name": "X",
+		"channel_url": "https://x.com/{username}",
+		"login": {
+			"url": "https://x.com/i/flow/login",
+			"refresh_url": "https://x.com/home",
+			"cookie_domains": ["x.com"],
+			"success_url_pattern": "^https://x\\.com/home",
+			"session_cookie": "auth_token",
+			"auth": {
+				"scheme": "x-csrf",
+				"cookies": ["ct0"]
+			}
+		}
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,

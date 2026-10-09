@@ -130,6 +130,10 @@ var scrapeDomains = map[string][]string{
 	"mico": {
 		"micoworld.net",
 	},
+	"x": {
+		"x.com",
+		"pscp.tv",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
