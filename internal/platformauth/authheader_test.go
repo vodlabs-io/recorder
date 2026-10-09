@@ -188,3 +188,19 @@ func TestTiLiveSchemeNeedsBothCookies(t *testing.T) {
 		t.Errorf("signed without naming the user-id cookie: %v", h)
 	}
 }
+
+func TestAuthHeadersXCSRFRepeatsCT0(t *testing.T) {
+	s := Session{Platform: "x", Cookies: []Cookie{
+		{Name: "auth_token", Value: "secret"},
+		{Name: "ct0", Value: "csrf0"},
+	}}
+	h := s.AuthHeaders(SchemeXCSRF, []string{"ct0"}, "", SignedRequest{URL: "https://x.com/i/api/x"})
+	if len(h) != 2 || h["x-csrf-token"] != "csrf0" || h["x-twitter-auth-type"] != "OAuth2Session" {
+		t.Errorf("headers = %v", h)
+	}
+	// A capture without ct0 cannot be signed; the cookies go alone.
+	s.Cookies = s.Cookies[:1]
+	if h := s.AuthHeaders(SchemeXCSRF, []string{"ct0"}, "", SignedRequest{}); h != nil {
+		t.Errorf("headers without ct0 = %v", h)
+	}
+}
