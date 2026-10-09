@@ -1,8 +1,8 @@
 diff --git a/package/src/native/linux/nativeWrapper.cpp b/package/src/native/linux/nativeWrapper.cpp
-index c3765d7..15542a8 100644
+index 2be8905c..7547194d 100644
 --- a/package/src/native/linux/nativeWrapper.cpp
 +++ b/package/src/native/linux/nativeWrapper.cpp
-@@ -10903,63 +10903,49 @@ ELECTROBUN_EXPORT uint64_t getMouseButtons() {
+@@ -12509,63 +12509,49 @@ ELECTROBUN_EXPORT uint64_t getMouseButtons() {
   * =============================================================================
   */
  
@@ -99,7 +99,7 @@ index c3765d7..15542a8 100644
  }
  
  
-@@ -10970,29 +10956,76 @@ struct CookieCallbackData {
+@@ -12576,29 +12562,76 @@ struct CookieCallbackData {
      GMainLoop* loop;
  };
  
@@ -190,7 +190,7 @@ index c3765d7..15542a8 100644
              json << "\"secure\":" << (soup_cookie_get_secure(cookie) ? "true" : "false") << ",";
              json << "\"httpOnly\":" << (soup_cookie_get_http_only(cookie) ? "true" : "false");
  
-@@ -11002,25 +11035,143 @@ static void onGetCookiesFinished(GObject* source, GAsyncResult* result, gpointer
+@@ -12608,25 +12641,143 @@ static void onGetCookiesFinished(GObject* source, GAsyncResult* result, gpointer
              }
  
              json << "}";
@@ -340,7 +340,7 @@ index c3765d7..15542a8 100644
  // Get cookies for a partition (WebKit2GTK)
  ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier, const char* filterJson) {
      // Copy arguments before dispatching to main thread
-@@ -11051,31 +11202,48 @@ ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier,
+@@ -12657,31 +12808,48 @@ ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier,
              }
          }
  

@@ -17,7 +17,7 @@
 // about:blank between requests, which are serialised. The background login
 // refresh borrows the same view via withLoginView.
 
-import { BrowserWindow, BrowserView, Session } from "electrobun/bun";
+import { BrowserWindow, BrowserView, Session } from "electrobun/main";
 import type { DaemonSession } from "../../../shared/daemon/session";
 import {
   PLATFORM_BROWSERFETCH_READY_SUBJECT,

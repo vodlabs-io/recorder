@@ -14,7 +14,6 @@ Douyin.
 | Platform | Download |
 | --- | --- |
 | macOS, Apple Silicon | [VodLabs-Recorder-macOS-arm64.dmg](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-macOS-arm64.dmg) |
-| macOS, Intel | [VodLabs-Recorder-macOS-x64.dmg](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-macOS-x64.dmg) |
 | Windows 11 | [VodLabs-Recorder-Windows-x64-Setup.zip](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-Windows-x64-Setup.zip) |
 | Linux, x64 | [VodLabs-Recorder-Linux-x64-Setup.tar.gz](https://github.com/vodlabs-io/recorder/releases/latest/download/VodLabs-Recorder-Linux-x64-Setup.tar.gz) |
 

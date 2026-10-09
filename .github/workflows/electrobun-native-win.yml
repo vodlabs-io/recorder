@@ -1,8 +1,8 @@
 # Builds the patched Windows native wrapper for electrobun.
 #
 # Upstream's Session cookie API is a no-op on Windows, which blocks desktop
-# platform login there; patches/electrobun-1.18.1-win-cookie-api.patch fixes it.
-# This mirrors the Windows leg of electrobun's own release workflow closely
+# platform login there; patches/electrobun-<version>-win-cookie-api.patch fixes
+# it. This mirrors the Windows leg of electrobun's own release workflow closely
 # enough to produce the one artefact we need: libNativeWrapper.dll.
 #
 # Manual only — it is slow (it vendors CEF) and only needs re-running when the
@@ -15,20 +15,16 @@ on:
       electrobun_tag:
         description: "electrobun tag to patch and build"
         required: true
-        default: "v1.18.1"
+        default: "v2.0.2"
 
 jobs:
   build:
-    # Not windows-2025: GitHub moved that label onto Visual Studio 2026 (v18)
-    # without a version bump of its own, and electrobun v1.18.1's build.ts
-    # hardcodes the CMake generator string "Visual Studio 17 2022" — CMake then
-    # fails with "could not find any instance of Visual Studio" since only v18
-    # is installed. windows-2022 still ships the matching VS2022 toolchain.
-    runs-on: windows-2022
-    # A full run (nothing cached) took ~9 minutes to reach the CEF cmake step
-    # in a working attempt; a hung runner otherwise burns hours silently
-    # (GitHub's own default is 6h) before anyone notices.
-    timeout-minutes: 30
+    # Upstream's own Windows runner. Its build uses NMake under the MSVC
+    # developer prompt, so the image's Visual Studio version does not matter.
+    runs-on: windows-2025
+    # A hung runner otherwise burns hours silently (GitHub's own default is 6h)
+    # before anyone notices.
+    timeout-minutes: 45
     steps:
       - name: Checkout recorder (for the patch)
         uses: actions/checkout@v7
@@ -46,19 +42,24 @@ jobs:
       - name: Apply patch
         shell: bash
         working-directory: electrobun
+        env:
+          TAG: ${{ github.event.inputs.electrobun_tag }}
         run: |
           set -euo pipefail
-          patch_file="../recorder/patches/electrobun-1.18.1-win-cookie-api.patch"
+          patch_file="../recorder/patches/electrobun-${TAG#v}-win-cookie-api.patch"
           git apply --check "$patch_file"
           git apply "$patch_file"
           git --no-pager diff --stat
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v6
         with:
-          bun-version: 1.3.8
+          node-version: '18'
+
+      - name: Install Hutch
+        uses: ./electrobun/.github/actions/install-hutch
 
       - name: Install dependencies
-        run: bun install
+        run: hutch run install
         working-directory: electrobun/package
 
       - name: Setup MSVC Developer Command Prompt
@@ -81,7 +82,7 @@ jobs:
           key: cef-win-x64-${{ steps.cef-version.outputs.version }}
 
       - name: Build
-        run: bun build.ts --release
+        run: hutch build.ts --release --core-only
         working-directory: electrobun/package
 
       - name: Upload libNativeWrapper.dll

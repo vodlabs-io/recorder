@@ -8,7 +8,7 @@
 // NATS and are NEVER sent to the vodlabs cloud. Only the bun process can do this
 // — the React webview cannot read another site's cookies.
 
-import { Session } from "electrobun/bun";
+import { Session } from "electrobun/main";
 import type { DaemonSession } from "../../../shared/daemon/session";
 import { Subjects } from "../../../shared/daemon/subjects";
 import type { PlatformInfo, LoginFlow } from "../../../shared/types";

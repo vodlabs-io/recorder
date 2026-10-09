@@ -6,7 +6,7 @@ import Electrobun, {
   Utils,
   ApplicationMenu,
   app,
-} from "electrobun/bun";
+} from "electrobun/main";
 import type { AppRPCType } from "../rpc";
 import type {
   VODDeleteManyResponse,

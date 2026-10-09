@@ -9,16 +9,10 @@ export default {
 		version: process.env.ELECTROBUN_APP_VERSION ?? "0.0.1",
 	},
 	build: {
+		mainProcess: "bun",
 		bun: {
 			entrypoint: "desktop/src/bun/index.ts",
 		},
-		// NOTE: this key belongs to `build`, not `build.bun`; nested under
-		// `bun` it typechecks and is silently ignored. Downloaded from oven-sh/bun
-		// releases and cached in node_modules/.electrobun-cache/bun-override.
-		// 1.4.0+ is required: earlier releases corrupt the GC's handle list on
-		// every native event (see patches/README.md). 1.4 needs
-		// patches/electrobun@1.18.1.patch, or every webview event and RPC is dropped.
-		bunVersion: "1.4.2",
 		// Vite builds the mainview to ui/mainview/dist, we copy from there
 		copy: {
 			"ui/mainview/dist/index.html": "views/mainview/index.html",
@@ -57,20 +51,18 @@ export default {
 		},
 	},
 	// Workarounds against unfixed Electrobun bugs, each at the point in the build
-	// where it lands: patched native wrappers swapped over the downloaded core
-	// binaries before they're bundled (the Session cookie API is a no-op on
-	// Windows and reads a stale jar on Linux, either of which breaks platform
-	// sign-in — see patches/README.md), room for the code signature made in the
-	// Intel macOS core binaries, which signing would otherwise corrupt (see
-	// scripts/fix-macos-headerpad.ts), and the app icon its precompiled CLI
-	// can't embed itself, stamped into the assembled bundle before it's packed
-	// (https://github.com/blackboardsh/electrobun/pull/433, unmerged).
-	// Drop each once upstream ships it. postBuild then Authenticode-signs the
-	// Windows bundle when release CI provides the credentials (see
-	// scripts/sign-win-bundle.ts).
+	// where it lands: preBuild patches the SDK the main process is bundled from
+	// (page-forged webview events, listener exceptions that kill the app — see
+	// patches/README.md), and postBuild swaps patched native wrappers into the
+	// assembled bundle before it is signed and packed (the Session cookie API is
+	// a no-op on Windows and reads a stale jar on Linux, either of which breaks
+	// platform sign-in). Drop each once upstream ships it. postBuild then
+	// Authenticode-signs the Windows bundle, and postPackage the installer, when
+	// release CI provides the credentials (see scripts/sign-win-bundle.ts).
 	scripts: {
-		preBuild: "scripts/vendor-native.ts",
+		preBuild: "scripts/patch-electrobun-sdk.ts",
 		postBuild: "scripts/post-build.ts",
+		postPackage: "scripts/sign-win-installer.ts",
 	},
 	// Keep the app running when its window is closed (X / red button) so it lives
 	// on in the system tray. The app only exits via an explicit Quit (app menu or

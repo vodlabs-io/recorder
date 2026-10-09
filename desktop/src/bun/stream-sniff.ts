@@ -33,9 +33,10 @@
 import { unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { BrowserWindow, BrowserView, Screen, Session } from "electrobun/bun";
+import { BrowserWindow, BrowserView, Screen, Session } from "electrobun/main";
 import type { DaemonSession } from "../../../shared/daemon/session";
 import { PLATFORM_BROWSERSNIFF_SUBJECT } from "../../../shared/daemon/subjects";
+import { addAllFramesPreload } from "./all-frames-preload";
 import { createPartitionedWindow } from "./partitioned-window";
 import { type Candidate, type Hit, isLiveEnough, rank } from "./stream-sniff-rank";
 import { NUDGE, SNIFFER } from "./stream-sniff-script";
@@ -65,7 +66,8 @@ const IDLE_CLOSE_MS = 60_000;
 // The sniff in progress, fed by the view's host-message handler.
 type Watch = { hits: Hit[]; title: string; changed: () => void; aborted: string };
 
-type SniffContext = { win: BrowserWindow; view: BrowserView; watch: Watch | null };
+// ready settles once SNIFFER reaches every frame the view loads next.
+type SniffContext = { win: BrowserWindow; view: BrowserView; watch: Watch | null; ready: Promise<unknown> };
 
 let ctx: SniffContext | null = null;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -109,7 +111,7 @@ function context(): SniffContext {
   // Placed before it is first shown, and shown without taking focus.
   win.setPosition(frame.x, frame.y);
   win.showInactive();
-  const c: SniffContext = { win, view, watch: null };
+  const c: SniffContext = { win, view, watch: null, ready: addAllFramesPreload(view, SNIFFER) };
   const onDownload = (e: unknown) => {
     const path = (e as { data?: { detail?: unknown } })?.data?.detail;
     const file = typeof path === "string" ? safeParse(path)?.path : (path as { path?: string })?.path;
@@ -222,6 +224,7 @@ async function sniff(req: SniffRequest): Promise<SniffResponse> {
     /* a fresh partition has nothing to clear */
   }
 
+  await c.ready;
   const start = Date.now();
   let liveAt = 0;
   let wake: () => void = () => {};

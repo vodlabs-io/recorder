@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import { electrobunViteAliases } from "./.hutch/devkit/api/config/electrobun-vite";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,11 +13,13 @@ export default defineConfig({
 	plugins: [react(), tailwindcss()],
 	root: "./ui/mainview",
 	resolve: {
-		alias: {
-			"@": path.resolve(__dirname, "./ui/mainview"),
+		alias: [
+			{ find: "@", replacement: path.resolve(__dirname, "./ui/mainview") },
 			// Wire types + daemon engine shared across desktop, webview and web.
-			"@shared": path.resolve(__dirname, "./shared"),
-		},
+			{ find: "@shared", replacement: path.resolve(__dirname, "./shared") },
+			// electrobun/view, from the devkit Hutch projects (`electrobun prepare`).
+			...electrobunViteAliases(path.resolve(__dirname, ".hutch/devkit")),
+		],
 	},
 	build: {
 		outDir: "./dist",
