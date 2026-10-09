@@ -32,7 +32,7 @@ The installer is not yet code-signed, so Windows SmartScreen may show
 
 ### Linux
 
-Built for x64. Ubuntu 22.04 and later are supported. The app needs WebKitGTK
+Built for x64. Ubuntu 24.04 and later are supported (glibc 2.38 or newer). The app needs WebKitGTK
 4.1 and the Ayatana app indicator library for its tray icon. On Ubuntu or
 Debian:
 

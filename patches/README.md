@@ -187,12 +187,9 @@ falling back. `desktop/native/win-x64/ELECTROBUN_VERSION` names the release it
 was built from; the native ABI changes between releases, so the hook also fails
 when that is not the release being built.
 
-The committed copy is still the `v1.18.1` build (SHA-256
-`7cb81929f7e6f744e813b327da1a3d78fd51130dfa2c48db043d20b362274709`, from
-`4eba723c85b97559e1d9e13439d9a92ede0832e8`), so Windows builds fail until a
-`v2.0.2` build replaces it. When it does, record its checksum and the
-electrobun commit (`v2.0.2` is `e424efbc8af0315e565811fcef0920d3b757e3fc`)
-here, and set `ELECTROBUN_VERSION` to `2.0.2`.
+The committed copy is the `v2.0.2` build (SHA-256
+`2df0e5ca5b61e919fccdecee1a690bb84dde83117fea98ea7050bbddd3e2f576`, from
+`e424efbc8af0315e565811fcef0920d3b757e3fc`).
 
 ### Rebuilding
 
@@ -284,18 +281,19 @@ without it silently ships a sign-in flow that cannot finish.
 Electrobun's `postBuild` hook, which runs for dev builds too, and fails the
 build rather than falling back, or when
 `desktop/native/linux-x64/ELECTROBUN_VERSION` is not the release being built.
-The committed copy is still the `v1.18.1` build, so Linux builds fail until a
-`v2.0.2` build replaces it.
+The committed copy is the `v2.0.2` build (SHA-256
+`5519992600da4ef231a61f01110e7f57835de7e743300d61e5c7bb6a4d1d3b8f`, from
+`e424efbc8af0315e565811fcef0920d3b757e3fc`).
 
 ### Rebuilding
 
 `.github/workflows/electrobun-native-linux.yml` checks out the pinned electrobun
-tag, applies this patch, builds with Hutch on `ubuntu-22.04`, and uploads
+tag, applies this patch, builds with Hutch on `ubuntu-24.04`, and uploads
 `libNativeWrapper.so` as an artifact. Run it from the Actions tab, then commit
 the artifact to `desktop/native/linux-x64/` and set `ELECTROBUN_VERSION`.
 
-The committed artefact should come from that workflow rather than a local build:
-22.04 keeps the glibc baseline low enough for the distros we ship to.
+The committed artefact should come from that workflow rather than a local build,
+so its glibc baseline (2.38) matches upstream's own 2.0.2 Linux libraries.
 
 **Iterating on the patch locally** is much faster than a CI round trip, and only
 needs headers — the GTK-only wrapper compiles against CEF but does not link it,
