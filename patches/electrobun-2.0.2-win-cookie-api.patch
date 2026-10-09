@@ -1,8 +1,8 @@
 diff --git a/package/src/native/win/nativeWrapper.cpp b/package/src/native/win/nativeWrapper.cpp
-index 098e022..36ae2fc 100644
+index d804b305..b049b766 100644
 --- a/package/src/native/win/nativeWrapper.cpp
 +++ b/package/src/native/win/nativeWrapper.cpp
-@@ -36,6 +36,8 @@
+@@ -40,6 +40,8 @@
  #include <shobjidl.h>  // For IFileOpenDialog
  #include <shlobj.h>    // For SHGetKnownFolderPath, FOLDERID_Downloads
  #include <shlguid.h>   // For CLSID_FileOpenDialog
@@ -11,7 +11,7 @@ index 098e022..36ae2fc 100644
  #include <commdlg.h>   // For COMDLG_FILTERSPEC
  #include <dcomp.h>     // For DirectComposition
  #include <dxgi1_2.h>   // For DXGI 1.2 (CreateSwapChainForComposition)
-@@ -458,8 +460,10 @@ static std::mutex browserMapMutex;
+@@ -502,8 +504,10 @@ static std::mutex browserMapMutex;
  
  // Global map to store CEFViews by container window handle (using void* to avoid forward declaration issues)
  static std::map<HWND, void*> g_cefViews;
@@ -24,8 +24,8 @@ index 098e022..36ae2fc 100644
  
  // Global map to store pending CEF navigations for timing workaround - use browser ID instead of pointer
  static std::map<int, std::string> g_pendingCefNavigations;
-@@ -3060,6 +3064,10 @@ private:
-     HWND containerHwnd = nullptr;  // Container window for masking
+@@ -3727,6 +3731,10 @@ private:
+     bool removed = false;
  
  public:
 +    // The partition this view was created with ("persist:<name>", or empty for
@@ -35,7 +35,7 @@ index 098e022..36ae2fc 100644
      std::string pendingUrl;
      std::string pendingHtml;  // Stored inline HTML for loading after async creation
      std::string electrobunScript;
-@@ -3092,6 +3100,10 @@ public:
+@@ -3759,6 +3767,10 @@ public:
          containerHwnd = hwnd;
      }
  
@@ -46,7 +46,7 @@ index 098e022..36ae2fc 100644
      ComPtr<ICoreWebView2> getWebView() const {
          return webview;
      }
-@@ -3117,6 +3129,75 @@ public:
+@@ -3841,6 +3853,64 @@ public:
          webview->AddHostObjectToScript(L"eventBridge", &eventBridgeVariant);
          VariantClear(&eventBridgeVariant);
  
@@ -91,48 +91,27 @@ index 098e022..36ae2fc 100644
 +                        CoTaskMemFree(raw);
 +                        const std::wstring prefix = L"__eb_event:";
 +                        if (w.compare(0, prefix.size(), prefix) != 0) return S_OK;
-+                        w = w.substr(prefix.size());
 +
-+                        int size = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, nullptr, 0, nullptr, nullptr);
-+                        if (size <= 0) return S_OK;
-+                        char* message = new char[size];
-+                        if (WideCharToMultiByte(CP_UTF8, 0, w.c_str(), -1, message, size, nullptr, nullptr) == 0) {
-+                            delete[] message;
++                        std::string message;
++                        if (!electrobun::wideToUtf8(std::wstring_view(w).substr(prefix.size()), message)) {
 +                            return S_OK;
 +                        }
-+
++                        // As BridgeHandler::PostMessage: the callback copies the
++                        // message before it returns.
 +                        try {
-+                            handler(id, message);
++                            handler(id, message.c_str());
 +                        } catch (...) {
 +                            ::log("ERROR: Exception in webmessage event bridge");
-+                            delete[] message;
-+                            return S_OK;
 +                        }
-+                        // Freed on a delay, matching BridgeHandler: the bun side
-+                        // reads the string after this returns.
-+                        std::thread([message]() {
-+                            std::this_thread::sleep_for(std::chrono::seconds(1));
-+                            delete[] message;
-+                        }).detach();
 +                        return S_OK;
 +                    }).Get(),
 +                nullptr);
 +        }
 +
-         // bunBridge and internalBridge - RPC bridges (only for non-sandboxed webviews)
+         // hostBridge/bunBridge aliases and internalBridge - RPC bridges (only for non-sandboxed webviews)
          if (!isSandboxed) {
-             // Create COM objects for the bridge handlers
-@@ -3232,6 +3313,9 @@ public:
-             controller = nullptr;
-         }
-         webview = nullptr;
-+        // Drop the raw pointer the session APIs walk; this object is owned by a
-+        // shared_ptr elsewhere and may be freed right after this returns.
-+        g_webview2Views.erase(this->webviewId);
-     }
- 
-     // Override transparency implementation for WebView2
-@@ -4190,7 +4274,11 @@ void SetBrowserOnCEFView(HWND parentWindow, CefRefPtr<CefBrowser> browser) {
+             // RPC bridges may carry thousands of packets in a burst. Synchronous
+@@ -5054,7 +5124,11 @@ void SetBrowserOnCEFView(HWND parentWindow, CefRefPtr<CefBrowser> browser) {
  // Helper function to set webview on WebView2View (defined after WebView2View class)
  void SetWebViewOnWebView2View(HWND containerWindow, void* webview) {
      std::cout << "[WebView2] Looking for WebView2View with containerWindow: " << containerWindow << std::endl;
@@ -145,16 +124,16 @@ index 098e022..36ae2fc 100644
      if (viewIt != g_webview2Views.end()) {
          auto view = static_cast<WebView2View*>(viewIt->second);
          if (view) {
-@@ -5961,6 +6049,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
-     auto view = std::make_shared<WebView2View>(webviewId, eventBridgeHandler, bunBridgeHandler, internalBridgeHandler, sandbox);
+@@ -7313,6 +7387,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
      view->hwnd = hwnd;
+     view->parentWindow = hwnd;
      view->fullSize = autoResize;
 +    view->partition = partitionStr;
-     view->webviewEventHandler = webviewEventHandler;
- 
-     // Store URL and scripts in view to survive async callbacks
-@@ -6606,8 +6695,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
-                             }
+     view->pendingStartTransparent = startTransparent;
+     view->pendingStartPassthrough = startPassthrough;
+     view->setLogicalFrame(x, y, width, height);
+@@ -8071,8 +8146,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+                             trackAbstractView(view.get());
  
                              // Store WebView2View in global map for JavaScript execution
 -                            HWND containerHwnd = container->GetHwnd();
@@ -163,7 +142,7 @@ index 098e022..36ae2fc 100644
  
  
                              return S_OK;
-@@ -6619,7 +6707,29 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+@@ -8097,7 +8171,29 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
          // Create WebView2 environment with custom scheme support
          try {
              auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
@@ -194,7 +173,7 @@ index 098e022..36ae2fc 100644
  
              // Get the interface that supports custom scheme registration
              Microsoft::WRL::ComPtr<ICoreWebView2EnvironmentOptions4> options4;
-@@ -11828,21 +11938,167 @@ static WebView2View* findWebView2ById(uint32_t webviewId) {
+@@ -14200,21 +14296,167 @@ static WebView2View* findWebView2ById(uint32_t webviewId) {
      return nullptr;
  }
  
@@ -359,10 +338,10 @@ index 098e022..36ae2fc 100644
 -    // For WebView2, we need a webview to access cookies
 -    // We'll try to find any webview with the matching partition
 -    // For now, return empty array - full implementation requires webview access
+-
+-    std::string result = "[]";
 +    const std::string partition = partitionIdentifier ? partitionIdentifier : "";
  
--    std::string result = "[]";
--
 -    // Parse filter to get URL
 +    // Simple JSON parsing for the url field
      std::string filterStr = filterJson ? filterJson : "{}";
@@ -372,7 +351,7 @@ index 098e022..36ae2fc 100644
      size_t urlPos = filterStr.find("\"url\"");
      if (urlPos != std::string::npos) {
          size_t colonPos = filterStr.find(':', urlPos);
-@@ -11853,59 +12109,33 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+@@ -14225,58 +14467,33 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
          }
      }
  
@@ -388,28 +367,36 @@ index 098e022..36ae2fc 100644
 -    if (!view || !view->getWebView()) {
 -        return _strdup("[]");
 -    }
-+    std::string cookiesJson = onUIThread([&partition, &filterUrl]() -> std::string {
-+        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
-+        if (!cookieManager) return "[]";
- 
+-
 -    // Get cookie manager
 -    ComPtr<ICoreWebView2_2> webview2;
 -    if (FAILED(view->getWebView()->QueryInterface(IID_PPV_ARGS(&webview2)))) {
 -        return _strdup("[]");
 -    }
-+        std::wstring wFilterUrl = cookieUtf8ToWide(filterUrl);
-+        LPCWSTR uri = filterUrl.empty() ? nullptr : wFilterUrl.c_str();
- 
+-
 -    ComPtr<ICoreWebView2CookieManager> cookieManager;
 -    if (FAILED(webview2->get_CookieManager(&cookieManager)) || !cookieManager) {
 -        return _strdup("[]");
 -    }
-+        auto call = std::make_shared<SessionCallState>();
-+        if (!call->completed) return "[]";
++    std::string cookiesJson = onUIThread([&partition, &filterUrl]() -> std::string {
++        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
++        if (!cookieManager) return "[]";
+ 
+-    std::wstring wFilterUrl;
+-    if (!filterUrl.empty() &&
+-        !electrobun::utf8ToWide(filterUrl, wFilterUrl)) {
+-        return _strdup("[]");
+-    }
++        std::wstring wFilterUrl = cookieUtf8ToWide(filterUrl);
++        LPCWSTR uri = filterUrl.empty() ? nullptr : wFilterUrl.c_str();
  
 -    // Get cookies synchronously using event
 -    std::string cookiesJson = "[]";
 -    HANDLE event = CreateEvent(NULL, FALSE, FALSE, NULL);
++        auto call = std::make_shared<SessionCallState>();
++        if (!call->completed) return "[]";
+ 
+-    LPCWSTR uri = filterUrl.empty() ? nullptr : wFilterUrl.c_str();
 +        HRESULT hr = cookieManager->GetCookies(uri,
 +            Callback<ICoreWebView2GetCookiesCompletedHandler>(
 +                [call](HRESULT status, ICoreWebView2CookieList* cookieList) -> HRESULT {
@@ -417,15 +404,6 @@ index 098e022..36ae2fc 100644
 +                        UINT count = 0;
 +                        cookieList->get_Count(&count);
  
--    std::wstring wFilterUrl;
--    if (!filterUrl.empty()) {
--        int wideSize = MultiByteToWideChar(CP_UTF8, 0, filterUrl.c_str(), -1, nullptr, 0);
--        wFilterUrl.resize(wideSize - 1);
--        MultiByteToWideChar(CP_UTF8, 0, filterUrl.c_str(), -1, &wFilterUrl[0], wideSize);
--    }
--
--    LPCWSTR uri = filterUrl.empty() ? nullptr : wFilterUrl.c_str();
--
 -    cookieManager->GetCookies(uri,
 -        Callback<ICoreWebView2GetCookiesCompletedHandler>(
 -            [&cookiesJson, event](HRESULT result, ICoreWebView2CookieList* cookieList) -> HRESULT {
@@ -454,16 +432,15 @@ index 098e022..36ae2fc 100644
                              cookie->get_Name(&name);
                              cookie->get_Value(&value);
                              cookie->get_Domain(&domain);
-@@ -11914,25 +12144,20 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+@@ -14285,24 +14502,20 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
                              cookie->get_IsHttpOnly(&httpOnly);
                              cookie->get_Expires(&expires);
  
 -                            // Convert to UTF-8
 -                            auto toUtf8 = [](LPWSTR wstr) -> std::string {
 -                                if (!wstr) return "";
--                                int size = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
--                                std::string str(size - 1, '\0');
--                                WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &str[0], size, nullptr, nullptr);
+-                                std::string str;
+-                                electrobun::wideToUtf8(wstr, str);
 -                                return str;
 -                            };
 -
@@ -493,7 +470,7 @@ index 098e022..36ae2fc 100644
                              }
                              json << "}";
  
-@@ -11941,47 +12166,26 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+@@ -14311,47 +14524,26 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
                              CoTaskMemFree(domain);
                              CoTaskMemFree(path);
                          }
@@ -553,7 +530,7 @@ index 098e022..36ae2fc 100644
  
      // Parse JSON
      std::string jsonStr = cookieJson;
-@@ -12012,7 +12216,11 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
+@@ -14382,7 +14574,11 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
          size_t colonPos = jsonStr.find(':', pos);
          size_t numStart = colonPos + 1;
          while (numStart < jsonStr.size() && (jsonStr[numStart] == ' ' || jsonStr[numStart] == '\t')) numStart++;
@@ -566,28 +543,28 @@ index 098e022..36ae2fc 100644
      };
  
      std::string name = extractString("name");
-@@ -12040,197 +12248,126 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
+@@ -14410,195 +14606,126 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
  
      if (path.empty()) path = "/";
  
--    // Convert to wide strings
--    auto toWide = [](const std::string& str) -> std::wstring {
--        int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
--        std::wstring wstr(size - 1, L'\0');
--        MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wstr[0], size);
--        return wstr;
--    };
+-    std::wstring wideName;
+-    std::wstring wideValue;
+-    std::wstring wideDomain;
+-    std::wstring widePath;
+-    if (!electrobun::utf8ToWide(name, wideName) ||
+-        !electrobun::utf8ToWide(value, wideValue) ||
+-        !electrobun::utf8ToWide(domain, wideDomain) ||
+-        !electrobun::utf8ToWide(path, widePath)) {
+-        return false;
+-    }
 -
--    // Create cookie - need to use CreateCookie which requires a URI
--    std::string cookieUrl = url.empty() ? ("https://" + domain + "/") : url;
--    std::wstring wUrl = toWide(cookieUrl);
-+    return onUIThread([&]() -> bool {
-+        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
-+        if (!cookieManager) return false;
- 
 -    ComPtr<ICoreWebView2Cookie> cookie;
--    if (FAILED(cookieManager->CreateCookie(toWide(name).c_str(), toWide(value).c_str(),
--                                           toWide(domain).c_str(), toWide(path).c_str(), &cookie))) {
+-    if (FAILED(cookieManager->CreateCookie(
+-            wideName.c_str(),
+-            wideValue.c_str(),
+-            wideDomain.c_str(),
+-            widePath.c_str(),
+-            &cookie))) {
 -        return false;
 -    }
 -
@@ -596,7 +573,10 @@ index 098e022..36ae2fc 100644
 -    if (expirationDate > 0) {
 -        cookie->put_Expires(expirationDate);
 -    }
--
++    return onUIThread([&]() -> bool {
++        ComPtr<ICoreWebView2CookieManager> cookieManager = cookieManagerFor(partition);
++        if (!cookieManager) return false;
+ 
 -    bool success = false;
 -    HANDLE event = CreateEvent(NULL, FALSE, FALSE, NULL);
 +        ComPtr<ICoreWebView2Cookie> cookie;
@@ -651,17 +631,12 @@ index 098e022..36ae2fc 100644
 -        return false;
 -    }
 -
--    std::string url = urlStr;
--    std::string name = cookieName;
--
--    // Convert to wide strings
--    int wideSize = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
--    std::wstring wUrl(wideSize - 1, L'\0');
--    MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, &wUrl[0], wideSize);
--
--    wideSize = MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, nullptr, 0);
--    std::wstring wName(wideSize - 1, L'\0');
--    MultiByteToWideChar(CP_UTF8, 0, name.c_str(), -1, &wName[0], wideSize);
+-    std::wstring wUrl;
+-    std::wstring wName;
+-    if (!electrobun::utf8ToWide(urlStr, wUrl) ||
+-        !electrobun::utf8ToWide(cookieName, wName)) {
+-        return false;
+-    }
 -
 -    // Get cookies matching URL, then delete the one with matching name
 -    bool found = false;

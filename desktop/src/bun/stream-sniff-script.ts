@@ -1,13 +1,9 @@
 // The scripts the stream sniffer (stream-sniff.ts) runs inside the page.
 
-// ALL_FRAMES_PRELOAD must match the marker in patches/electrobun@1.18.1.patch:
-// a custom preload opening with it is injected into every frame, not just the
-// top one.
-const ALL_FRAMES_PRELOAD = "/* electrobun:all-frames */";
-
-// SNIFFER is the preload injected into every frame of the sniffing view.
-export const SNIFFER = `${ALL_FRAMES_PRELOAD}
-(function () {
+// SNIFFER is the preload injected into every frame of the sniffing view (see
+// all-frames-preload.ts). It may run twice in the main frame and ignores the
+// second run.
+export const SNIFFER = `(function () {
   if (window.__vlSniff) return; window.__vlSniff = true;
   var RX = /\\.m3u8|\\.flv|mpegurl/i;
   var HLS = /\\.m3u8|mpegurl/i;

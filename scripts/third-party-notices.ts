@@ -52,10 +52,9 @@ function goModules(): Entry[] {
 	return [std, ...[...seen.values()].sort((a, b) => a.name.localeCompare(b.name))];
 }
 
-// npm: the app's runtime dependencies and what they depend on. Electrobun's own
-// dependencies are its build tooling, so only Electrobun itself is walked.
-// tailwindcss and tw-animate-css are dev dependencies whose CSS lands in the
-// bundle.
+// npm: the app's runtime dependencies and what they depend on. Electrobun,
+// tailwindcss and tw-animate-css are dev dependencies whose code lands in the
+// app: Electrobun's runtime, and the CSS of the other two.
 function npmPackages(): Entry[] {
 	const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 	const seen = new Map<string, Entry>();
@@ -85,8 +84,8 @@ function npmPackages(): Entry[] {
 		const deps = { ...meta.dependencies, ...meta.peerDependencies, ...meta.optionalDependencies };
 		for (const dep of Object.keys(deps)) visit(dep, dir, true);
 	};
-	for (const name of Object.keys(pkg.dependencies)) visit(name, root, name !== "electrobun");
-	for (const name of ["tailwindcss", "tw-animate-css"]) visit(name, root, false);
+	for (const name of Object.keys(pkg.dependencies)) visit(name, root, true);
+	for (const name of ["electrobun", "tailwindcss", "tw-animate-css"]) visit(name, root, false);
 	return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -127,15 +126,16 @@ General Public License, version 2 (LGPL-2), along with other libraries under
 permissive licenses. <https://bun.com/docs/project/license> lists them with
 their licenses and explains how to relink Bun against a modified
 JavaScriptCore, whose source is at <https://github.com/oven-sh/WebKit>. The
-app ships Bun 1.4.2 unmodified.
+app ships Bun 1.4.0, the release Electrobun pins, unmodified.
 
 ## Electrobun
 
 The desktop app is built with [Electrobun](https://github.com/blackboardsh/electrobun)
-(MIT), and ships its launcher, native wrapper, bspatch (from bsdiff, BSD-2-Clause)
-and zstd (BSD-3-Clause) binaries. The Windows and Linux native wrappers are
-rebuilt from Electrobun's source with the changes in \`patches/\`, and include
-source from the Chromium Embedded Framework (BSD-3-Clause).
+(MIT), and ships its launcher, core library, native wrapper, bspatch (from
+bsdiff, BSD-2-Clause) and zstd (BSD-3-Clause) binaries. The Windows and Linux
+native wrappers are rebuilt from Electrobun's source with the changes in
+\`patches/\`, and include source from the Chromium Embedded Framework
+(BSD-3-Clause).
 
 ## shadcn/ui
 

@@ -12,10 +12,17 @@
 		"noEmit": true,
 		"jsx": "react-jsx",
 		"strict": true,
+		"types": ["bun"],
 		"noFallthroughCasesInSwitch": true,
 		"paths": {
 			"@/*": ["./ui/mainview/*"],
 			"@shared/*": ["./shared/*"],
+			// Electrobun's SDK, projected by Hutch (`electrobun prepare`). The npm
+			// package itself exports nothing.
+			"electrobun": ["./.hutch/devkit/api/sdks/main/index.ts"],
+			"electrobun/main": ["./.hutch/devkit/api/sdks/main/index.ts"],
+			"electrobun/rpc": ["./.hutch/devkit/api/sdks/main/entries/rpc.ts"],
+			"electrobun/view": ["./.hutch/devkit/api/browser/index.ts"],
 		}
 	},
 	"include": ["ui", "shared", "web", "desktop/src/rpc.ts"],

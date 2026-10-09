@@ -7,7 +7,7 @@
 // BrowserWindow constructor, so BrowserView's initialiser is hooked for exactly
 // that one construction.
 
-import { BrowserWindow, BrowserView, type WindowOptionsType } from "electrobun/bun";
+import { BrowserWindow, BrowserView, type WindowOptionsType } from "electrobun/main";
 
 // The partition to hand the next webview built, set only for the duration of a
 // single synchronous `new BrowserWindow(...)` below.

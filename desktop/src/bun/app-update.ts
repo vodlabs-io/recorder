@@ -1,4 +1,4 @@
-import { Updater } from "electrobun/bun";
+import { Updater } from "electrobun/main";
 import type { AppUpdateStatus } from "../../../shared/types";
 import { notifyOnce } from "./update-notify";
 

@@ -14,7 +14,7 @@ updates:
     schedule:
       interval: weekly
     ignore:
-      # Pinned and patched (patches/); upgraded deliberately.
+      # Pinned (hutch.config.ts too) and patched (patches/); upgraded deliberately.
       - dependency-name: electrobun
     groups:
       npm:

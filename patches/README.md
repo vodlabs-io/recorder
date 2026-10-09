@@ -4,12 +4,17 @@ Source patches we carry against third-party code, with the built artefacts they
 produce. Each one exists because a bug upstream blocks a feature here and the
 fix has not landed (or shipped) yet.
 
-## `electrobun@1.18.1.patch`
+## `electrobun-2.0.2-sdk.patch`
 
-Against the published npm package, file `dist/api/bun/proc/native.ts`. Applied
-by `bun install` itself (`patchedDependencies` in `package.json`), so it needs
-no build step and covers every platform. It lets the app run on Bun 1.4
-(`bunVersion` in `electrobun.config.ts`) while staying on Electrobun 1.18.1.
+Against Electrobun's TypeScript SDK as Hutch projects it into `.hutch/devkit`,
+which the main process is bundled from. The npm package carries no SDK, so
+there is nothing for `bun install` to patch: Electrobun's `preBuild` hook
+(`scripts/patch-electrobun-sdk.ts`) applies it with `git apply` after Hutch has
+prepared the devkit, skips it when the devkit is already patched, and fails the
+build when it neither applies nor is applied. Hutch leaves edits to the devkit
+in place between builds and re-projects it only when the Electrobun version
+changes, so a version bump without a matching `electrobun-<version>-sdk.patch`
+fails the build until the patch is re-cut.
 
 ### Why Bun 1.4
 
@@ -26,53 +31,43 @@ A standalone reproduction (a pthread calling a threadsafe JSCallback, no
 Electrobun) crashed 10 of 10 runs within a second on 1.3.14, and survived 10 of
 10 on 1.4.2 plus ten minutes under `BUN_JSC_collectContinuously=1`.
 
+Electrobun 2.0.2 bundles Bun 1.4.0 for `build.mainProcess: "bun"` apps, which
+has the fix, and reads 1.4's string-typed `cstring` callback arguments itself.
+
 ### What the patch changes
 
-1. **cstring arguments.** Bun 1.4 passes `FFIType.cstring` callback arguments
-   as strings rather than pointers. Electrobun read all eleven with
-   `new CString(ptr)`, which now throws — inside the catch blocks of the webview
-   event callback and the RPC bridges, so every webview event and every
-   webview-to-bun RPC would vanish without an error. `ffiCStringToString`
-   accepts either form, as Electrobun 2.x does.
-
-2. **Exceptions in threadsafe callbacks.** On Bun 1.4 an exception escaping a
+1. **Exceptions in threadsafe callbacks.** On Bun 1.4 an exception escaping a
    threadsafe JSCallback kills the Worker (with nothing logged) or segfaults;
    one throw was enough to reproduce it. App listeners (`win.on`, `view.on`,
    tray, menus) run inside these callbacks and Node's `EventEmitter` does not
    catch, so a bug in any listener would take down the whole app.
-   `guardedJSCallback` logs the error instead. The three bridge handlers already
-   caught everything, and the synchronous, non-threadsafe callbacks are
-   untouched.
+   `emitEvent` logs a listener's throw instead.
 
-3. **A custom preload in every frame.** On macOS the native side injects an
-   app's custom `preload` into the main frame only (`forMainFrameOnly:true` in
-   `updateCustomPreloadScript`), while Electrobun's own preload goes to every
-   frame. The stream sniffer (`desktop/src/bun/stream-sniff.ts`) has to see
-   embedded players, which are usually another site's iframe: measured on 30
-   live TV pages, main-frame-only sniffing found 25 streams and all-frames 30.
-   A custom preload that opens with `/* electrobun:all-frames */` is now
-   appended to Electrobun's preload instead, so it reaches every frame on
-   macOS and Windows with no native rebuild. Linux's WebKitGTK wrapper injects
-   both preloads into the top frame only, so iframe players stay out of reach
-   there.
+2. **Page events must be ones a page sends.** A page's preload reports events
+   (dom-ready, host-message, ...) over the event bridge as JSON. Electrobun
+   2.x already drops one that names another webview than its sender, but any
+   page could still raise events only native code sends (`will-navigate`,
+   `download-started`) on its own webview. The stream sniffer loads arbitrary
+   pages and deletes the file a `download-started` event names, so a page could
+   have it delete files in `~/Downloads`. `parseWebviewEventBridgeMessage` now
+   also drops an event whose name is not one a preload emits.
 
-4. **Page events must name their own webview.** A page's preload reports
-   events (dom-ready, host-message, ...) over the event bridge as JSON that
-   carries a webview id, and Electrobun dispatched them to whichever webview
-   that id named. Native code passes the real sender's id alongside, unused. So
-   any page, sandboxed or not, could raise events on another webview (the app's
-   own UI, a platform login window) and claim events only native code sends
-   (`will-navigate`, `download-started`). `isPageEvent` drops an event whose id
-   is not its sender's, or whose name is not one a preload emits. The stream
-   sniffer loads arbitrary pages and acts on download events, so it relies on
-   this.
+### A custom preload in every frame
 
-Moving to Electrobun 2.x makes the first change redundant. It does not carry
-the second, third or fourth, so check before dropping them.
+On macOS the native side injects an app's custom `preload` into the main frame
+only (`forMainFrameOnly:true` in `updateCustomPreloadScript`), while Electrobun's
+own preload goes to every frame. The stream sniffer
+(`desktop/src/bun/stream-sniff.ts`) has to see embedded players, which are
+usually another site's iframe: measured on 30 live TV pages, main-frame-only
+sniffing found 25 streams and all-frames 30. `desktop/src/bun/all-frames-preload.ts`
+calls the native wrapper's `addPreloadScriptToWebView` directly, which injects
+into every frame, once the view's native webview exists. Windows already runs
+a custom preload in every frame. Linux's WebKitGTK wrapper injects both
+preloads into the top frame only, so iframe players stay out of reach there.
 
-## `electrobun-1.18.1-win-cookie-api.patch`
+## `electrobun-2.0.2-win-cookie-api.patch`
 
-Against `blackboardsh/electrobun` at tag `v1.18.1`, file
+Against `blackboardsh/electrobun` at tag `v2.0.2`, file
 `package/src/native/win/nativeWrapper.cpp`. Makes the `Session` cookie API work
 on Windows.
 
@@ -82,7 +77,8 @@ profile on disk. That is the whole mechanism behind desktop platform login: the
 sign-in window can render perfectly and still never complete, because
 `captureCookies()` never sees a session cookie. It also breaks `wipePartition()`
 and the browser-context signed-fetch relay, which round-trips its result through
-cookies. Reproduced on 1.18.1 and on 2.0.1, so an upgrade does not fix it.
+cookies. Reproduced on 1.18.1 and on 2.0.1; 2.0.2's session exports differ from
+1.18.1's only in their UTF-8 conversion, so an upgrade does not fix it.
 
 Three defects, all in the five `session*` exports:
 
@@ -102,9 +98,8 @@ Three defects, all in the five `session*` exports:
 
 3. **Registry keyed per window.** `g_webview2Views` was keyed by the container
    HWND, which every view in a window shares, so a second view evicted the
-   first; nothing ever erased an entry either, leaving the session APIs walking
-   raw pointers to freed views after a window closed. Now keyed by webview id
-   and erased in `remove()`.
+   first. Now keyed by webview id. (2.0.2 already erases a view's entry in
+   `remove()`, which 1.18.1 never did.)
 
 The patch also JSON-escapes cookie values on the way out (they were interpolated
 raw, so one quote or backslash produced JSON the JS side silently read as `[]`).
@@ -186,62 +181,55 @@ it), and a real QR sign-in completed with the account showing Active.
 `desktop/native/win-x64/libNativeWrapper.dll` is the patched build, committed
 deliberately (`.gitignore` has an exception for it) because a Windows build
 without it silently ships a sign-in flow that cannot finish.
-`scripts/vendor-win-native.ts` installs it over the copy in `node_modules` during
-Electrobun's `preBuild` hook, and fails the build rather than falling back.
+`scripts/vendor-native.ts` copies it over the stock library in the assembled
+bundle during Electrobun's `postBuild` hook, and fails the build rather than
+falling back. `desktop/native/win-x64/ELECTROBUN_VERSION` names the release it
+was built from; the native ABI changes between releases, so the hook also fails
+when that is not the release being built.
 
-The committed copy is `libNativeWrapper.dll`, SHA-256
-`7cb81929f7e6f744e813b327da1a3d78fd51130dfa2c48db043d20b362274709`, built from
-electrobun `v1.18.1` (`4eba723c85b97559e1d9e13439d9a92ede0832e8`) with this
-patch applied — replacing an earlier local build that embedded a developer's
-own `C:\Users\rs\...` paths with no record of how it was produced.
+The committed copy is still the `v1.18.1` build (SHA-256
+`7cb81929f7e6f744e813b327da1a3d78fd51130dfa2c48db043d20b362274709`, from
+`4eba723c85b97559e1d9e13439d9a92ede0832e8`), so Windows builds fail until a
+`v2.0.2` build replaces it. When it does, record its checksum and the
+electrobun commit (`v2.0.2` is `e424efbc8af0315e565811fcef0920d3b757e3fc`)
+here, and set `ELECTROBUN_VERSION` to `2.0.2`.
 
 ### Rebuilding
 
 `.github/workflows/electrobun-native-win.yml` checks out the pinned electrobun
-tag, applies this patch, and builds. Run it from the Actions tab. Two things
-that bit us building this DLL, both already fixed in the workflow:
-
-- **Runner image**: `windows-2025` now ships Visual Studio 2026 (v18), but
-  electrobun `v1.18.1`'s `build.ts` hardcodes the CMake generator string
-  `"Visual Studio 17 2022"` — CMake fails with "could not find any instance of
-  Visual Studio" when only v18 is present. The workflow now pins
-  `windows-2022`, which still ships the matching toolchain.
-- **Silent hangs**: a run can stall indefinitely with no error (observed 2+
-  hours at the CEF extraction step, which normally takes ~15s). The workflow
-  now sets `timeout-minutes: 30` so a stuck run fails instead of burning
-  Actions minutes unnoticed.
+tag, applies `electrobun-<version>-win-cookie-api.patch`, and builds with Hutch
+the way upstream's release workflow does. Run it from the Actions tab, then
+commit the artifact to `desktop/native/win-x64/`. It sets `timeout-minutes`
+because a run once stalled for 2+ hours at the CEF extraction step, which
+normally takes ~15s.
 
 **Building locally**, e.g. on a spare Windows machine, is a faster iteration
-loop than a CI round trip and was how this DLL was actually produced (CI kept
-stalling). Needs Visual Studio 2022 Build Tools (`winget install
+loop than a CI round trip. Needs Visual Studio 2022 Build Tools (`winget install
 Microsoft.VisualStudio.2022.BuildTools --override "--add
 Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`), CMake
-(`winget install Kitware.CMake`), and Node.js (`winget install
-OpenJS.NodeJS.LTS`) — `build.ts` shells out to `node` for one vendoring step,
-which a bun-only machine won't have and which no error message here points at
-directly (it surfaces as "Failed to download electrobun-dawn binaries").
-Bun alone is not enough.
+(`winget install Kitware.CMake`), Node.js (`winget install OpenJS.NodeJS.LTS`)
+and Hutch (`irm https://hutch.blackboard.sh/hutch/install.ps1 | iex`).
 
-    git clone --branch v1.18.1 --recurse-submodules ^
+    git clone --branch v2.0.2 --recurse-submodules ^
         https://github.com/blackboardsh/electrobun.git electrobun
     cd electrobun
-    git apply ..\recorder\patches\electrobun-1.18.1-win-cookie-api.patch
+    git apply ..\recorder\patches\electrobun-2.0.2-win-cookie-api.patch
     cd package
-    bun install
+    hutch run install
     call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
-    bun build.ts --release
+    hutch build.ts --release --core-only
 
 `dist\libNativeWrapper.dll` is the result. A local build embeds that
 machine's own paths in its debug info (unavoidable with MSVC unless the PDB
 path is scrubbed) — harmless, but worth naming the machine and recording the
 checksum here so the artefact's origin stays traceable either way.
 
-When bumping electrobun, re-cut the patch against the new tag, update the tag
-in the workflow, and update the checksum and commit hash above.
+When bumping electrobun, re-cut the patch against the new tag, rebuild, and
+update the checksum, commit hash and `ELECTROBUN_VERSION`.
 
-## `electrobun-1.18.1-linux-cookie-api.patch`
+## `electrobun-2.0.2-linux-cookie-api.patch`
 
-Against `blackboardsh/electrobun` at tag `v1.18.1`, file
+Against `blackboardsh/electrobun` at tag `v2.0.2`, file
 `package/src/native/linux/nativeWrapper.cpp`. Makes the `Session` cookie API
 work on Linux.
 
@@ -290,32 +278,36 @@ JSON the JS side silently reads as `[]`.
 ### The built artefact
 
 `desktop/native/linux-x64/libNativeWrapper.so` is the patched build, committed
-deliberately (`.gitignore` has an exception for it) because a Linux build without
-it silently ships a sign-in flow that cannot finish. `scripts/vendor-native.ts`
-installs it over the copy in `node_modules` during Electrobun's `preBuild` hook,
-and fails the build rather than falling back. That hook runs for `electrobun dev`
-too, so dev builds get it as well.
+deliberately (`.gitignore` has an exception for it) because a Linux build
+without it silently ships a sign-in flow that cannot finish.
+`scripts/vendor-native.ts` copies it into the assembled bundle during
+Electrobun's `postBuild` hook, which runs for dev builds too, and fails the
+build rather than falling back, or when
+`desktop/native/linux-x64/ELECTROBUN_VERSION` is not the release being built.
+The committed copy is still the `v1.18.1` build, so Linux builds fail until a
+`v2.0.2` build replaces it.
 
 ### Rebuilding
 
 `.github/workflows/electrobun-native-linux.yml` checks out the pinned electrobun
-tag, applies this patch, builds on `ubuntu-22.04`, and uploads
+tag, applies this patch, builds with Hutch on `ubuntu-22.04`, and uploads
 `libNativeWrapper.so` as an artifact. Run it from the Actions tab, then commit
-the artifact to `desktop/native/linux-x64/`.
+the artifact to `desktop/native/linux-x64/` and set `ELECTROBUN_VERSION`.
 
 The committed artefact should come from that workflow rather than a local build:
 22.04 keeps the glibc baseline low enough for the distros we ship to.
 
 **Iterating on the patch locally** is much faster than a CI round trip, and only
 needs headers — the GTK-only wrapper compiles against CEF but does not link it,
-so there is no need for electrobun's full vendoring (a bun/zig toolchain and the
-CEF binary distribution):
+so there is no need for electrobun's full vendoring (Hutch, a zig toolchain and
+the CEF binary distribution). The CEF and dawn versions below are 2.0.2's
+(`package/src/shared/cef-version.ts`, `package/src/shared/build-dependencies.ts`):
 
     sudo apt install build-essential cmake pkg-config libgtk-3-dev \
         libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
         libx11-dev libxext-dev
 
-    git clone --depth 1 --branch v1.18.1 \
+    git clone --depth 1 --branch v2.0.2 \
         https://github.com/blackboardsh/electrobun.git src
     cd src/package
     # CEF headers only (~4MB of a ~150MB stream), and the dawn headers
@@ -323,9 +315,10 @@ CEF binary distribution):
       "https://cef-builds.spotifycdn.com/cef_binary_147.0.10%2Bgd58e84d%2Bchromium-147.0.7727.118_linux64_minimal.tar.bz2" \
       | tar -xj --strip-components=1 -C vendors/cef --wildcards "*/include/*"
     mkdir -p vendors/wgpu && curl -sL \
-      "https://github.com/blackboardsh/electrobun-dawn/releases/download/v0.2.3/electrobun-dawn-linux-x64.tar.gz" \
+      "https://electrobun-artifacts.blackboard.sh/electrobun-dawn/releases/0.2.5/electrobun-dawn-linux-x64.tar.gz" \
       | tar -xz -C vendors/wgpu
-    cp ../../../recorder/node_modules/electrobun/dist-linux-x64/libasar.so vendors/
+    # libasar.so from the bin/ of any Linux build of the app
+    cp <app>/bin/libasar.so vendors/
 
 Then compile and link (seconds per iteration):
 
@@ -340,5 +333,5 @@ Then compile and link (seconds per iteration):
 Drop the result into a built app's `bin/` to test it. Expect deprecation
 warnings from electrobun's own GTK and appindicator calls; they are pre-existing.
 
-When bumping electrobun, re-cut the patch against the new tag and update the tag
-in that workflow.
+When bumping electrobun, re-cut the patch against the new tag, rebuild, and set
+`ELECTROBUN_VERSION`.

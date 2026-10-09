@@ -1,4 +1,4 @@
-import { Updater, Utils } from "electrobun/bun";
+import { Updater, Utils } from "electrobun/main";
 import { mkdirSync } from "fs";
 import { join } from "path";
 

@@ -101,6 +101,5 @@ describe("scripts", () => {
   test("parse", () => {
     expect(() => new Function(SNIFFER)).not.toThrow();
     expect(() => new Function(NUDGE)).not.toThrow();
-    expect(SNIFFER.startsWith("/* electrobun:all-frames */")).toBe(true);
   });
 });

@@ -1,0 +1,59 @@
+diff --git a/sdks/main/events/eventEmitter.ts b/sdks/main/events/eventEmitter.ts
+index 8499d05..9f4678c 100644
+--- a/sdks/main/events/eventEmitter.ts
++++ b/sdks/main/events/eventEmitter.ts
+@@ -13,14 +13,21 @@ class ElectrobunEventEmitter extends EventEmitter {
+ 	// optionally pass in a specifier to make the event name specific.
+ 	// eg: will-navigate is listened to globally for all webviews, but
+ 	// will-navigate-1 is listened to for a specific webview with id 1
++	//
++	// Listeners mostly run inside threadsafe JSCallbacks, and on Bun 1.4 an
++	// exception escaping one terminates the Worker (the whole app) or crashes
++	// the process, so a listener's throw is logged instead.
+ 	emitEvent(
+ 		ElectrobunEvent: ElectrobunEvent<any, any>,
+ 		specifier?: number | string,
+ 	) {
+-		if (specifier) {
+-			this.emit(`${ElectrobunEvent.name}-${specifier}`, ElectrobunEvent);
+-		} else {
+-			this.emit(ElectrobunEvent.name, ElectrobunEvent);
++		const name = specifier
++			? `${ElectrobunEvent.name}-${specifier}`
++			: ElectrobunEvent.name;
++		try {
++			this.emit(name, ElectrobunEvent);
++		} catch (err) {
++			console.error(`[electrobun] ${name} listener threw:`, err);
+ 		}
+ 	}
+ 
+diff --git a/sdks/main/proc/eventBridge.ts b/sdks/main/proc/eventBridge.ts
+index 1602c4c..eb7074e 100644
+--- a/sdks/main/proc/eventBridge.ts
++++ b/sdks/main/proc/eventBridge.ts
+@@ -6,6 +6,16 @@ export type WebviewEventBridgeMessage = {
+ 	detail: string;
+ };
+ 
++// The events a page's own preload emits. Everything else (navigation
++// decisions, downloads) comes from native code, so a page claiming one is
++// forging it.
++const PAGE_EVENTS = new Set([
++	"dom-ready",
++	"did-navigate-in-page",
++	"host-message",
++	"new-window-open",
++]);
++
+ function isJsonRecord(value: unknown): value is JsonRecord {
+ 	return typeof value === "object" && value !== null && !Array.isArray(value);
+ }
+@@ -35,6 +45,7 @@ export function parseWebviewEventBridgeMessage(
+ 	if (
+ 		id !== sourceId ||
+ 		typeof eventName !== "string" ||
++		!PAGE_EVENTS.has(eventName) ||
+ 		typeof detail !== "string"
+ 	) {
+ 		return null;

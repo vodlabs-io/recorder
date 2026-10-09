@@ -2,7 +2,7 @@
 # Authenticode-signs Windows binaries in place as VODLABS LLC through Azure
 # Artifact Signing, using jsign so it runs on the Linux and Windows runners
 # alike. Called by goreleaser for vod.exe/vlrecd.exe and by the desktop build's
-# postBuild hook (scripts/sign-win-bundle.ts).
+# hooks (scripts/sign-win-bundle.ts, scripts/sign-win-installer.ts).
 #
 # Needs an `az login` session holding the Artifact Signing Certificate Profile
 # Signer role, plus:

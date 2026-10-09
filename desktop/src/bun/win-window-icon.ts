@@ -38,7 +38,7 @@
 import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { dlopen, FFIType, ptr, type Pointer } from "bun:ffi";
-import type { BrowserWindow } from "electrobun/bun";
+import type { BrowserWindow } from "electrobun/main";
 
 const WM_SETICON = 0x0080;
 const ICON_SMALL = 0;
