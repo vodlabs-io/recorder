@@ -330,10 +330,12 @@ func (h *scrapeHandler) handleScrapeRequest(msg *nats.Msg) {
 					"host", parsedURL.Host,
 					"cookie_count", len(sess.Cookies))
 				// Some platforms need more than the jar: YouTube's InnerTube
-				// wants a signature derived from one of the cookies. Only this
-				// machine can compute it — see platformauth.Session.AuthHeaders.
+				// wants a signature derived from one of the cookies, TiLive one
+				// over the request itself. Only this machine can compute it —
+				// see platformauth.Session.AuthHeaders.
 				if a := login.Auth; a != nil {
-					extra := sess.AuthHeaders(a.Scheme, a.Cookies, a.Origin)
+					extra := sess.AuthHeaders(a.Scheme, a.Cookies, a.Origin,
+						platformauth.SignedRequest{URL: scrapeReq.URL, Body: []byte(scrapeReq.Body)})
 					for k, v := range extra {
 						req.Header.Set(k, v)
 					}

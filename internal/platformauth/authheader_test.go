@@ -24,7 +24,7 @@ func TestAuthHeadersPrefersFirstPresentCookie(t *testing.T) {
 		{Name: "SAPISID", Value: "legacy"},
 		{Name: "__Secure-3PAPISID", Value: "preferred"},
 	}}
-	h := s.AuthHeaders(SchemeSAPISIDHASH, []string{"__Secure-3PAPISID", "SAPISID"}, "https://www.youtube.com")
+	h := s.AuthHeaders(SchemeSAPISIDHASH, []string{"__Secure-3PAPISID", "SAPISID"}, "https://www.youtube.com", SignedRequest{})
 	if h["X-Origin"] != "https://www.youtube.com" {
 		t.Errorf("X-Origin = %q", h["X-Origin"])
 	}
@@ -59,7 +59,7 @@ func TestAuthHeadersDeclinesWhatItCannotSign(t *testing.T) {
 			SchemeSAPISIDHASH, []string{"SAPISID"}, "https://www.youtube.com"},
 	}
 	for _, tc := range cases {
-		if h := tc.session.AuthHeaders(tc.scheme, tc.cookies, tc.origin); h != nil {
+		if h := tc.session.AuthHeaders(tc.scheme, tc.cookies, tc.origin, SignedRequest{}); h != nil {
 			t.Errorf("%s: got headers %v, want nil", tc.name, h)
 		}
 	}
@@ -73,7 +73,7 @@ func TestOAuthCookieHeader(t *testing.T) {
 		{Name: "login", Value: "someone"},
 		{Name: "auth-token", Value: "thetoken"},
 	}}
-	h := s.AuthHeaders(SchemeOAuthCookie, []string{"auth-token"}, "")
+	h := s.AuthHeaders(SchemeOAuthCookie, []string{"auth-token"}, "", SignedRequest{})
 	if got := h["Authorization"]; got != "OAuth thetoken" {
 		t.Errorf("Authorization = %q, want %q", got, "OAuth thetoken")
 	}
@@ -85,7 +85,7 @@ func TestOAuthCookieHeader(t *testing.T) {
 	// A jar with no auth-token in it cannot authenticate, and must not produce
 	// a header carrying some other cookie's value.
 	empty := Session{Platform: "twitch", Cookies: []Cookie{{Name: "login", Value: "someone"}}}
-	if h := empty.AuthHeaders(SchemeOAuthCookie, []string{"auth-token"}, ""); h != nil {
+	if h := empty.AuthHeaders(SchemeOAuthCookie, []string{"auth-token"}, "", SignedRequest{}); h != nil {
 		t.Errorf("got headers %v from a jar with no auth-token, want nil", h)
 	}
 }
@@ -138,10 +138,53 @@ func TestStatusCanAuthenticate(t *testing.T) {
 func TestAuthHeaderDoesNotContainTheSecret(t *testing.T) {
 	const secret = "AVeryDistinctiveSapisidValue"
 	s := Session{Cookies: []Cookie{{Name: "SAPISID", Value: secret}}}
-	h := s.AuthHeaders(SchemeSAPISIDHASH, []string{"SAPISID"}, "https://www.youtube.com")
+	h := s.AuthHeaders(SchemeSAPISIDHASH, []string{"SAPISID"}, "https://www.youtube.com", SignedRequest{})
 	for k, v := range h {
 		if strings.Contains(v, secret) {
 			t.Errorf("header %s leaks the cookie value", k)
 		}
+	}
+}
+
+func TestTiLiveHeadersMatchWebClient(t *testing.T) {
+	// Digests cross-checked against Python's hashlib, following the web
+	// client's own signing code: md5(url + md5(body) + ts + userId + token[:6]).
+	at := time.UnixMilli(1791533572915)
+	post := tiliveHeaders("317147090", "abcdef0123456789", SignedRequest{
+		URL:  "https://api.ti.live/vchat/app/state/get_state",
+		Body: []byte(`{"idList":[273178158],"typeList":[1,2]}`),
+	}, at)
+	if post["CheckSum"] != "9abfc9ef8a5852a464084d5d82673863" {
+		t.Errorf("POST CheckSum = %q", post["CheckSum"])
+	}
+	if post["timestamp"] != "1791533572915" || post["userId"] != "317147090" || post["token"] != "abcdef0123456789" {
+		t.Errorf("unexpected headers %v", post)
+	}
+	get := tiliveHeaders("317147090", "abcdef0123456789", SignedRequest{
+		URL: "https://api.ti.live/vchat/app/video_living/room_info/273178158",
+	}, at)
+	if get["CheckSum"] != "e04830ec8281fcb19121f07636328289" {
+		t.Errorf("GET CheckSum = %q", get["CheckSum"])
+	}
+}
+
+func TestTiLiveSchemeNeedsBothCookies(t *testing.T) {
+	names := []string{"token", "userId"}
+	req := SignedRequest{URL: "https://api.ti.live/vchat/app/video_living/room_info/1"}
+	full := Session{Cookies: []Cookie{{Name: "userId", Value: "42"}, {Name: "token", Value: "secret"}}}
+	h := full.AuthHeaders(SchemeTiLiveChecksum, names, "", req)
+	if h["userId"] != "42" || h["token"] != "secret" || len(h["CheckSum"]) != 32 {
+		t.Errorf("headers = %v", h)
+	}
+	for _, s := range []Session{
+		{Cookies: []Cookie{{Name: "token", Value: "secret"}}},
+		{Cookies: []Cookie{{Name: "userId", Value: "42"}}},
+	} {
+		if h := s.AuthHeaders(SchemeTiLiveChecksum, names, "", req); h != nil {
+			t.Errorf("signed with a partial jar %v: %v", s.Cookies, h)
+		}
+	}
+	if h := full.AuthHeaders(SchemeTiLiveChecksum, names[:1], "", req); h != nil {
+		t.Errorf("signed without naming the user-id cookie: %v", h)
 	}
 }
