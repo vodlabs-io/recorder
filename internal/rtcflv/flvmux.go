@@ -1,4 +1,4 @@
-package agora
+package rtcflv
 
 import (
 	"bytes"
