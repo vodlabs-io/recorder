@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vodlabs-io/recorder/internal/agora"
 	"github.com/vodlabs-io/recorder/internal/flvfix"
 	"github.com/vodlabs-io/recorder/internal/vlerror"
 )
@@ -172,8 +173,9 @@ func (w *flvWriter) closeOutputFile() {
 	}
 }
 
-// openStream issues the stream request on a context of its own so the response
-// can outlive the part that opened it (see Handoff). guardStream ties it back
+// openStream issues the stream request (or joins the Agora channel an agora://
+// URL names) on a context of its own so the response can outlive the part that
+// opened it (see Handoff). guardStream ties it back
 // to the part for every other kind of ending — including the dial, which a
 // cancelled part must still abort.
 func (w *flvWriter) openStream(ctx context.Context, url string) (io.ReadCloser, error) {
@@ -185,6 +187,14 @@ func (w *flvWriter) openStream(ctx context.Context, url string) (io.ReadCloser, 
 		cancel()
 		w.streamCancel = nil
 		return nil, err
+	}
+
+	if agora.IsURL(url) {
+		stream, err := agora.Open(streamCtx, url, w.client, w.logger)
+		if err != nil {
+			return fail(fmt.Errorf("failed to join channel: %w", err))
+		}
+		return stream, nil
 	}
 
 	req, err := http.NewRequestWithContext(streamCtx, "GET", url, nil)

@@ -150,14 +150,19 @@ func videoConfigIdentity(p []byte) []byte {
 	return id
 }
 
-// audioConfigInfo reports whether an audio tag payload is an AAC sequence header
-// (AudioSpecificConfig), and whether the format requires one before raw frames.
+// audioConfigInfo reports whether an audio tag payload is a sequence header
+// (an AAC AudioSpecificConfig, or an enhanced-FLV SequenceStart such as an
+// Opus identification header), and whether the format requires one before
+// raw frames.
 func audioConfigInfo(p []byte) (isConfig, needsConfig bool) {
 	if len(p) == 0 {
 		return false, false
 	}
-	if p[0]>>4 != 10 { // not AAC
-		return false, false
+	switch p[0] >> 4 {
+	case 10: // AAC
+		return len(p) >= 2 && p[1] == 0, true
+	case 9: // enhanced FLV: AudioPacketType in the low nibble, 0 = SequenceStart
+		return p[0]&0x0f == 0, true
 	}
-	return len(p) >= 2 && p[1] == 0, true
+	return false, false
 }
