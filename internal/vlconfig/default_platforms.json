@@ -128,6 +128,20 @@
 		"channel_url": "https://superlive.chat/profile/{username}"
 	},
 	{
+		"name": "tilive",
+		"display_name": "TiLive",
+		"channel_url": "https://app.ti.live/profile?userId={username}",
+		"login": {
+			"url": "https://app.ti.live/",
+			"cookie_domains": ["ti.live"],
+			"session_cookie": "token",
+			"auth": {
+				"scheme": "tilive-checksum",
+				"cookies": ["token", "userId"]
+			}
+		}
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
