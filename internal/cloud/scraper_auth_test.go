@@ -118,7 +118,7 @@ func TestAuthHeadersForYouTubeDescriptor(t *testing.T) {
 		{Name: "__Secure-3PAPISID", Value: "secret"},
 	}}
 
-	h := sess.AuthHeaders(login.Auth.Scheme, login.Auth.Cookies, login.Auth.Origin)
+	h := sess.AuthHeaders(login.Auth.Scheme, login.Auth.Cookies, login.Auth.Origin, platformauth.SignedRequest{})
 	if h == nil {
 		t.Fatal("the descriptor's scheme produced no headers for a well-formed jar")
 	}
@@ -140,7 +140,7 @@ func TestAuthHeadersForYouTubeDescriptor(t *testing.T) {
 	if noSecret.HasAuthSecret(login.Auth.Cookies) {
 		t.Error("a jar with no signing cookie reported that it has one")
 	}
-	if noSecret.AuthHeaders(login.Auth.Scheme, login.Auth.Cookies, login.Auth.Origin) != nil {
+	if noSecret.AuthHeaders(login.Auth.Scheme, login.Auth.Cookies, login.Auth.Origin, platformauth.SignedRequest{}) != nil {
 		t.Error("headers were produced from a jar with no signing cookie")
 	}
 }

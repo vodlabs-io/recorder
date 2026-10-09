@@ -1,7 +1,9 @@
 package platformauth
 
 import (
+	"crypto/md5"
 	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -35,11 +37,31 @@ const SchemeSAPISIDHASH = "sapisidhash"
 // itself, under the same AllowsHost guard as the cookies.
 const SchemeOAuthCookie = "oauth-cookie"
 
+// SchemeTiLiveChecksum is TiLive's scheme. Its API ignores the Cookie header:
+// it reads the login from headers, and refuses a request whose checksum does
+// not bind it to that login:
+//
+//	userId: <user id>
+//	token: <token>
+//	timestamp: <unix ms>
+//	CheckSum: hex(md5(url + md5hex(body) + timestamp + userId + token[:6]))
+//
+// url is the request URL exactly as sent; md5hex(body) is empty for a request
+// without one. Cookies names the token cookie, then the user-id cookie.
+const SchemeTiLiveChecksum = "tilive-checksum"
+
+// SignedRequest is the request a request-bound scheme signs.
+type SignedRequest struct {
+	URL  string
+	Body []byte
+}
+
 // AuthHeaders returns the extra request headers a scheme contributes for this
-// session, or nil when the scheme is unknown or its secret cookie is absent.
+// session and request, or nil when the scheme is unknown or a cookie it needs
+// is absent.
 //
 // An unknown scheme is not an error: the cookies are sent alone.
-func (s Session) AuthHeaders(scheme string, cookieNames []string, origin string) map[string]string {
+func (s Session) AuthHeaders(scheme string, cookieNames []string, origin string, req SignedRequest) map[string]string {
 	secret := s.firstCookie(cookieNames)
 	if secret == "" {
 		return nil
@@ -56,6 +78,15 @@ func (s Session) AuthHeaders(scheme string, cookieNames []string, origin string)
 		}
 	case strings.EqualFold(scheme, SchemeOAuthCookie):
 		return map[string]string{"Authorization": "OAuth " + secret}
+	case strings.EqualFold(scheme, SchemeTiLiveChecksum):
+		if len(cookieNames) < 2 {
+			return nil
+		}
+		token, userID := s.firstCookie(cookieNames[:1]), s.firstCookie(cookieNames[1:2])
+		if token == "" || userID == "" {
+			return nil
+		}
+		return tiliveHeaders(userID, token, req, time.Now())
 	default:
 		return nil
 	}
@@ -86,4 +117,29 @@ func sapisidHash(sapisid, origin string, now time.Time) string {
 	ts := strconv.FormatInt(now.Unix(), 10)
 	sum := sha1.Sum([]byte(ts + " " + sapisid + " " + origin))
 	return fmt.Sprintf("SAPISIDHASH %s_%x", ts, sum)
+}
+
+// tiliveHeaders signs req for SchemeTiLiveChecksum. The timestamp is part of
+// both the checksum and the headers, so the two must come from the same instant.
+func tiliveHeaders(userID, token string, req SignedRequest, now time.Time) map[string]string {
+	ts := strconv.FormatInt(now.UnixMilli(), 10)
+	bodySum := ""
+	if len(req.Body) > 0 {
+		bodySum = md5Hex(req.Body)
+	}
+	prefix := token
+	if len(prefix) > 6 {
+		prefix = prefix[:6]
+	}
+	return map[string]string{
+		"userId":    userID,
+		"token":     token,
+		"timestamp": ts,
+		"CheckSum":  md5Hex([]byte(req.URL + bodySum + ts + userID + prefix)),
+	}
+}
+
+func md5Hex(b []byte) string {
+	sum := md5.Sum(b)
+	return hex.EncodeToString(sum[:])
 }
