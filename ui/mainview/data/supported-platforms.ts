@@ -29,6 +29,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   rumble: "Rumble",
   tango: "Tango",
   buzzcast: "BuzzCast",
+  superlive: "Superlive",
   generic: "Web",
 }
 
