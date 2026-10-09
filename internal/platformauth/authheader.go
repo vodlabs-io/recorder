@@ -50,6 +50,16 @@ const SchemeOAuthCookie = "oauth-cookie"
 // without one. Cookies names the token cookie, then the user-id cookie.
 const SchemeTiLiveChecksum = "tilive-checksum"
 
+// SchemeXCSRF is X's scheme. X's web API refuses a signed-in request whose
+// CSRF header does not repeat the jar's ct0 cookie:
+//
+//	x-csrf-token: <ct0>
+//	x-twitter-auth-type: OAuth2Session
+//
+// Cookies names the ct0 cookie. The app bearer token every request also
+// carries is public, and comes with the request.
+const SchemeXCSRF = "x-csrf"
+
 // SignedRequest is the request a request-bound scheme signs.
 type SignedRequest struct {
 	URL  string
@@ -87,6 +97,11 @@ func (s Session) AuthHeaders(scheme string, cookieNames []string, origin string,
 			return nil
 		}
 		return tiliveHeaders(userID, token, req, time.Now())
+	case strings.EqualFold(scheme, SchemeXCSRF):
+		return map[string]string{
+			"x-csrf-token":        secret,
+			"x-twitter-auth-type": "OAuth2Session",
+		}
 	default:
 		return nil
 	}
