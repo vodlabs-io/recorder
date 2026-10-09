@@ -290,3 +290,35 @@ func TestPageToRefreshFallsBackToLoginURL(t *testing.T) {
 		t.Errorf("nil loginFlow refresh page = %q, want empty", got)
 	}
 }
+
+// TestDefaultTiLiveHasLogin guards the descriptor behind TiLive's fallback: a
+// broadcast the service cannot see is checked with the user's own login, which
+// TiLive's API accepts only as signed headers.
+func TestDefaultTiLiveHasLogin(t *testing.T) {
+	l := LoginFlowFor("tilive")
+	if l == nil {
+		t.Fatal("tilive should have a login descriptor in the embedded default")
+	}
+	// app.ti.live is where the login is captured, api.ti.live where it is spent.
+	for _, h := range []string{"app.ti.live", "api.ti.live"} {
+		if !l.AllowsHost(h) {
+			t.Errorf("tilive login should allow %q, domains=%v", h, l.CookieDomains)
+		}
+	}
+	// The stream CDN is authorized by its signed URL alone.
+	for _, h := range []string{"pull.yah.live", "txlivecdn.com", "netease.im"} {
+		if l.AllowsHost(h) {
+			t.Errorf("SECURITY: tilive login must not allow %q", h)
+		}
+	}
+	if l.Required {
+		t.Error("tilive is polled by the service; the login is a fallback, not required")
+	}
+	if l.Auth == nil || l.Auth.Scheme != "tilive-checksum" ||
+		!slices.Equal(l.Auth.Cookies, []string{"token", "userId"}) {
+		t.Errorf("unexpected tilive auth scheme: %+v", l.Auth)
+	}
+	if l.SessionCookie != l.Auth.Cookies[0] {
+		t.Errorf("tilive session cookie %q should be the token the scheme signs with", l.SessionCookie)
+	}
+}

@@ -124,6 +124,9 @@ var scrapeDomains = map[string][]string{
 		"superlive.chat",
 		"spl-live.com",
 	},
+	"tilive": {
+		"ti.live",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
