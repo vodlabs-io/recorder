@@ -1,6 +1,7 @@
 package vlconfig
 
 import (
+	"regexp"
 	"slices"
 	"testing"
 )
@@ -320,5 +321,35 @@ func TestDefaultTiLiveHasLogin(t *testing.T) {
 	}
 	if l.SessionCookie != l.Auth.Cookies[0] {
 		t.Errorf("tilive session cookie %q should be the token the scheme signs with", l.SessionCookie)
+	}
+}
+
+// TestDefaultXHasLogin guards the descriptor behind X's fallback: a check the
+// service cannot make is made with the user's own login, which X's web API
+// accepts only with ct0 repeated as a CSRF header.
+func TestDefaultXHasLogin(t *testing.T) {
+	l := LoginFlowFor("x")
+	if l == nil {
+		t.Fatal("x should have a login descriptor in the embedded default")
+	}
+	for _, h := range []string{"x.com", "api.x.com"} {
+		if !l.AllowsHost(h) {
+			t.Errorf("x login should allow %q, domains=%v", h, l.CookieDomains)
+		}
+	}
+	// The video CDNs need no login.
+	for _, h := range []string{"prod-fastly-us-east-1.video.pscp.tv", "pbs.twimg.com", "x.com.evil.test"} {
+		if l.AllowsHost(h) {
+			t.Errorf("SECURITY: x login must not allow %q", h)
+		}
+	}
+	if l.Required {
+		t.Error("x is polled by the service; the login is a fallback, not required")
+	}
+	if l.Auth == nil || l.Auth.Scheme != "x-csrf" || !slices.Equal(l.Auth.Cookies, []string{"ct0"}) {
+		t.Errorf("unexpected x auth scheme: %+v", l.Auth)
+	}
+	if !regexp.MustCompile(l.SuccessURLPattern).MatchString("https://x.com/home") {
+		t.Errorf("success pattern %q misses the home timeline", l.SuccessURLPattern)
 	}
 }
