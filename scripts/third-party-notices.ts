@@ -114,8 +114,8 @@ The \`vod\` and \`vlrecd\` binaries embed FFmpeg, built with the x264 encoder,
 and run it as a separate program. That FFmpeg build is licensed under the GNU
 General Public License, version 2 or later. The exact source code, the
 configure line and the license text for the build the recorder embeds are
-published with the [\`ffmpeg-13-1\` release of
-vodlabs-io/custom-ffmpeg](https://github.com/vodlabs-io/custom-ffmpeg/releases/tag/ffmpeg-13-1),
+published with the [\`ffmpeg-14-1\` release of
+vodlabs-io/custom-ffmpeg](https://github.com/vodlabs-io/custom-ffmpeg/releases/tag/ffmpeg-14-1),
 which also documents how it is built. \`internal/ffmpeg/download.sh\` names the
 release in use.
 
