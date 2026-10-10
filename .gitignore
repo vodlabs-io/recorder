@@ -76,6 +76,7 @@ build/
 dist/
 out/
 artifacts/
+.cottontail-tmp
 
 # Environment variables
 .env

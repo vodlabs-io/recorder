@@ -74,7 +74,9 @@ cd "$REPO_ROOT"
 # A fresh clone, or a shallow one, has no tags. Build anyway as "devel", the
 # version of an unstamped build: the VodLabs service accepts it only from
 # allowlisted development machines, and the desktop app never auto-updates it.
-GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "devel")
+# Only release tags (v<number>...) count: other tags, like a draft-build marker,
+# are not versions and the service rejects them as malformed.
+GIT_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo "devel")
 SEMVER_STRING="${GIT_TAG#v}"
 VERSION_PATH="github.com/vodlabs-io/recorder/internal/version.Version=$SEMVER_STRING"
 COMMIT_PATH="github.com/vodlabs-io/recorder/internal/version.Commit=$(git rev-parse HEAD)"
