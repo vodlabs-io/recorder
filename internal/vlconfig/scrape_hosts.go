@@ -134,6 +134,9 @@ var scrapeDomains = map[string][]string{
 		"x.com",
 		"pscp.tv",
 	},
+	"rplay": {
+		"rplay.live",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
