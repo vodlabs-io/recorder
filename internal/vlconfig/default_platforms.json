@@ -163,6 +163,11 @@
 		}
 	},
 	{
+		"name": "rplay",
+		"display_name": "RPLAY",
+		"channel_url": "https://rplay.live/live/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
