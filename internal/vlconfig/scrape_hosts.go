@@ -137,6 +137,10 @@ var scrapeDomains = map[string][]string{
 	"rplay": {
 		"rplay.live",
 	},
+	"stripchat": {
+		"stripchat.com",
+		"doppiocdn.net",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host

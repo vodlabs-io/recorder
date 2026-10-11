@@ -168,6 +168,17 @@
 		"channel_url": "https://rplay.live/live/{username}"
 	},
 	{
+		"name": "stripchat",
+		"display_name": "Stripchat",
+		"channel_url": "https://stripchat.com/{username}",
+		"login": {
+			"url": "https://stripchat.com/login",
+			"refresh_url": "https://stripchat.com/",
+			"cookie_domains": ["stripchat.com"],
+			"session_cookie": "stripchat_com_sessionId"
+		}
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
