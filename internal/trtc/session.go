@@ -100,11 +100,33 @@ type session struct {
 
 // roomUser is one member as the user lists describe them.
 type roomUser struct {
-	UserID    string      `json:"userId"`
-	SrcTinyID json.Number `json:"srcTinyId"`
-	Role      int         `json:"role"`
-	Flag      int         `json:"flag"`
+	UserID    string `json:"userId"`
+	SrcTinyID tinyID `json:"srcTinyId"`
+	Role      int    `json:"role"`
+	Flag      int    `json:"flag"`
 }
+
+// tinyID is a member's numeric stream id. The lists carry it as a number or a
+// numeric string, and as "" for members without a stream; it is sent back as
+// a number.
+type tinyID string
+
+func (t *tinyID) UnmarshalJSON(b []byte) error {
+	if string(b) == `""` || string(b) == "null" {
+		*t = ""
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*t = tinyID(n)
+	return nil
+}
+
+func (t tinyID) MarshalJSON() ([]byte, error) { return json.Marshal(json.Number(t)) }
+
+func (t tinyID) String() string { return string(t) }
 
 // iceServer is the relay the join reply offers.
 type iceServer struct {
