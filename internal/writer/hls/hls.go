@@ -52,6 +52,8 @@ type Config struct {
 	// a Broadcast lasts; see hlsingest.Config.
 	URLTTL     time.Duration
 	RefreshURL func(context.Context) (string, error)
+	// MouflonKeys decrypts encrypted segment names; see hlsingest.Config.
+	MouflonKeys map[string]string
 	// Provenance is written as a playlist comment; see provenance.Record.
 	Provenance string
 }
@@ -92,6 +94,7 @@ func Record(
 		SanitizeTimestamps: true,
 		URLTTL:             cfg.URLTTL,
 		RefreshURL:         cfg.RefreshURL,
+		MouflonKeys:        cfg.MouflonKeys,
 	}, client, logger, sink)
 }
 

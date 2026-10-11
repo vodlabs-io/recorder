@@ -37,6 +37,9 @@ type Config struct {
 	// (see hlsingest.Config.URLTTL and flv.URLRenewer).
 	StreamURLTTL     time.Duration
 	RefreshStreamURL func(context.Context) (string, error)
+	// MouflonKeys decrypts the segment names of a playlist that publishes them
+	// encrypted (hlswriter only; see hlsingest.Config.MouflonKeys).
+	MouflonKeys map[string]string
 	// Provenance describes the build and session that produced this Part, for
 	// writers that author their own output files rather than passing the
 	// origin's bytes through unchanged.
@@ -153,6 +156,7 @@ func (h *hlsWriter) Record(
 		Variant:      cfg.Variant,
 		URLTTL:       cfg.StreamURLTTL,
 		RefreshURL:   cfg.RefreshStreamURL,
+		MouflonKeys:  cfg.MouflonKeys,
 		Provenance:   cfg.Provenance,
 	}
 
