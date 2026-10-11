@@ -83,9 +83,9 @@ jobs:
 
       # Ties each published file to this repository, this workflow and this
       # commit; `gh attestation verify <file> --repo vodlabs-io/recorder`
-      # checks it.
+      # checks it. GitHub only offers attestations here for public repos.
       - name: Attest build provenance
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && !github.event.repository.private
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
@@ -289,8 +289,9 @@ jobs:
           fi
           cp "${found[0]}" "artifacts/${{ matrix.friendly }}"
 
+      # Public repos only, as in the goreleaser job.
       - name: Attest build provenance
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && !github.event.repository.private
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: artifacts/*
