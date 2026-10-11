@@ -51,7 +51,7 @@ Streamlink Team). It is not part of any build.
 
 Linked into `vod` and `vlrecd`.
 
-### Go standard library and runtime go1.26.8
+### Go standard library and runtime go1.26.9
 
 LICENSE:
 
@@ -3363,7 +3363,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-### golang.org/x/net v0.58.0
+### golang.org/x/net v0.60.0
 
 LICENSE:
 

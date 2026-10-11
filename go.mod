@@ -5,7 +5,7 @@ go 1.26.0
 // The toolchain every build uses, so released binaries, container images and
 // a developer's laptop are not each compiled by whatever Go they happen to
 // have. CI follows this file rather than naming a version of its own.
-toolchain go1.26.8
+toolchain go1.26.9
 
 require (
 	github.com/DeRuina/timberjack v1.4.7
@@ -24,6 +24,7 @@ require (
 	github.com/nats-io/nats.go v1.54.0
 	github.com/nats-io/nkeys v0.4.16
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/pion/dtls/v3 v3.1.10
 	github.com/pion/interceptor v0.1.49
 	github.com/pion/rtcp v1.2.19
 	github.com/pion/rtp v1.10.5
@@ -56,7 +57,6 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pion/datachannel v1.6.3 // indirect
-	github.com/pion/dtls/v3 v3.1.10 // indirect
 	github.com/pion/ice/v4 v4.4.7 // indirect
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.2.2 // indirect
@@ -72,7 +72,7 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
