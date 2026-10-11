@@ -33,6 +33,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   tilive: "TiLive",
   mico: "MICO",
   rplay: "RPLAY",
+  stripchat: "Stripchat",
   x: "X",
   generic: "Web",
 }
