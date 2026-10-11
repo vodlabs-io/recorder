@@ -44,11 +44,19 @@ func TestPickPublisher(t *testing.T) {
 	list := json.RawMessage(`{"userList":[
 		{"srcTinyId":"","userId":"9","role":20},
 		{"srcTinyId":"111","userId":"7","role":20},
-		{"srcTinyId":"222","userId":"273178158","role":20}]}`)
+		{"srcTinyId":"222","userId":"273178158","role":20},
+		{"srcTinyId":333,"userId":"8","role":20}]}`)
 
 	s := &session{room: Room{Source: "273178158"}}
 	if u, ok := s.pickPublisher(list); !ok || u.SrcTinyID != "222" {
 		t.Errorf("named source: got %+v %v", u, ok)
+	}
+	s = &session{room: Room{Source: "8"}}
+	if u, ok := s.pickPublisher(list); !ok || u.SrcTinyID != "333" {
+		t.Errorf("numeric id: got %+v %v", u, ok)
+	}
+	if b, _ := json.Marshal(tinyID("222")); string(b) != "222" {
+		t.Errorf("tinyID marshals as %s", b)
 	}
 	s = &session{}
 	if u, ok := s.pickPublisher(list); !ok || u.SrcTinyID != "111" {
