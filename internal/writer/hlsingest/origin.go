@@ -134,6 +134,10 @@ func (o *ingest) pollPlaylist(playlistURL string) (*m3u8.MediaPlaylist, error) {
 	// parser keeps only the ones HLS defines. Reset every poll, so a playlist
 	// that stops carrying the tag stops unmasking.
 	o.bigo.observe(body)
+	body, err = restoreMouflon(body, o.cfg.MouflonKeys)
+	if err != nil {
+		return nil, fmt.Errorf("restore media playlist: %w", err)
+	}
 	playlist, _, err := m3u8.Decode(*bytes.NewBuffer(o.sanitize(body)), false)
 	if err != nil {
 		return nil, fmt.Errorf("parse media playlist: %w", err)

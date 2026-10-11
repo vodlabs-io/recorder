@@ -98,6 +98,10 @@ type Config struct {
 	// for the Origins that need it. Nil means the URL is good for the whole
 	// Broadcast, and no refresh is attempted.
 	RefreshURL func(context.Context) (string, error)
+	// MouflonKeys decrypts the segment names of an Origin that publishes them
+	// encrypted, by the key id its playlist names (see mouflon.go). Nil for
+	// every other Origin.
+	MouflonKeys map[string]string
 }
 
 // Map is an fMP4 initialisation segment, named by EXT-X-MAP. Every Segment

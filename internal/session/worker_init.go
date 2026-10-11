@@ -203,6 +203,7 @@ func (w *worker) initPart() error {
 		// the swap rather than stopping at the first 403.
 		StreamURLTTL:     w.streamsTTL,
 		RefreshStreamURL: w.refreshStreamURL,
+		MouflonKeys:      w.str.Load().MouflonKeys,
 		// The writer reports the part's codec config key on the recording
 		// goroutine as the part finishes; recordGroupPart reads it right
 		// after Record returns. The groups mutex covers the concurrent
