@@ -3,6 +3,8 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -342,4 +344,83 @@ func TestRequestLoginRefresh(t *testing.T) {
 	if msg, err := sub.NextMsg(300 * time.Millisecond); err == nil {
 		t.Fatalf("refresh requested for a signed-out login: %s", msg.Data)
 	}
+}
+
+// A check that fails while its platform is holding off must run again after
+// the hold, not be dropped: the cloud pushes an update only when a status
+// changes, so a streamer that stays live would never be checked again.
+func TestServeRequeuesCheckFailedDuringHold(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	origURL, origBackoff := apiBaseURL, statusFetchRetryBackoff
+	apiBaseURL = srv.URL
+	statusFetchRetryBackoff = time.Millisecond
+	t.Cleanup(func() { apiBaseURL, statusFetchRetryBackoff = origURL, origBackoff })
+
+	logger, err := vllog.NewFileLogger(vlconfig.LoggerConfig{Mode: "off", Level: "error"}, "test")
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	c := &Client{
+		logger:     logger,
+		httpClient: srv.Client(),
+		ceiling:    newTokenBucket(t.Context(), vlconfig.RateLimit{Burst: 64, Interval: time.Millisecond}),
+	}
+	log := logger.With("func", "test")
+	id := streamer.StreamerRef{
+		StreamerKey: streamer.StreamerKey{Platform: "niconico", Username: "595347"},
+	}
+	newLimiter := func() *platformLimiter {
+		return &platformLimiter{
+			platform: "niconico",
+			highPri:  make(chan streamer.StreamerRef, laneDepth),
+			authPri:  make(chan streamer.StreamerRef, laneDepth),
+			lowPri:   make(chan streamer.StreamerRef, laneDepth),
+			stream:   make(chan streamer.StreamerRef, laneDepth),
+			status:   newTokenBucket(t.Context(), vlconfig.RateLimit{Burst: 64, Interval: time.Hour}),
+			streams:  newTokenBucket(t.Context(), vlconfig.RateLimit{Burst: 64, Interval: time.Hour}),
+			resumed:  make(chan struct{}),
+		}
+	}
+	// requeued reports what landed back in the lane for this kind, and checks
+	// the hold is still in force so the lane cannot run it straight away.
+	requeued := func(t *testing.T, l *platformLimiter, lane chan streamer.StreamerRef) {
+		t.Helper()
+		select {
+		case got := <-lane:
+			if got != id {
+				t.Fatalf("re-queued %v, want %v", got, id)
+			}
+		default:
+			t.Fatal("a check that failed during a hold was dropped instead of re-queued")
+		}
+		if wait, _ := l.hold(time.Now()); wait == 0 {
+			t.Fatal("the platform is not holding off, so the re-queued check would run at once")
+		}
+	}
+
+	t.Run("failureThatStartsTheHold", func(t *testing.T) {
+		l := newLimiter()
+		// One failure short of a hold, so the served check is the one that trips it.
+		for range laneFailureThreshold - 1 {
+			l.noteFailure(time.Now())
+		}
+		c.serve(t.Context(), log, l, id, kindStatus)
+		c.waitFetches()
+		requeued(t, l, l.highPri)
+	})
+
+	t.Run("retryThatHitsTheHold", func(t *testing.T) {
+		l := newLimiter()
+		// The first attempt failed outside a hold; a retry is the one that trips it.
+		for range laneFailureThreshold - 1 {
+			l.noteFailure(time.Now())
+		}
+		c.retryStatusFetch(t.Context(), log, l, id, kindAuthed)
+		requeued(t, l, l.authPri)
+	})
+
 }
