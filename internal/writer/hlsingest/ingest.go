@@ -113,9 +113,10 @@ type Map struct {
 
 // Key is the EXT-X-KEY in effect for a Segment.
 //
-// The bytes are fetched here so a Sink needs no client of its own, but nothing
-// is decrypted: a Sink that cares reads Body, and one that does not is free to
-// refuse the Segment instead.
+// A whole-segment AES-128 Segment whose key was fetched is decrypted here and
+// handed over with no Key. A Segment that still carries one could not be: its
+// method is another (SAMPLE-AES), or its key fetch failed. A Sink that cares
+// reads Body, and one that does not is free to refuse the Segment instead.
 type Key struct {
 	// Method is the METHOD attribute verbatim ("AES-128", "SAMPLE-AES", …).
 	Method string
@@ -538,6 +539,19 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				seen.mark(seg.SeqId, absSeg)
 				retry.clear()
 				continue
+			}
+
+			// Ahead of the Sink, so every Sink, and the joining of a separate
+			// audio rendition, works on plaintext. A segment that cannot be
+			// decrypted here keeps its Key for the Sink to judge.
+			if key != nil {
+				plain, ok, err := decryptSegment(key, seg.SeqId, body)
+				if err != nil {
+					o.logger.Error("Failed to decrypt segment", "error", err, "segment_url", absSeg)
+				}
+				if ok {
+					body, key = plain, nil
+				}
 			}
 
 			// BIGO-SPECIFIC (see bigo_webprotect.go) — delete this block with
