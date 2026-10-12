@@ -464,9 +464,19 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 		}
 
 		pre := o.prefetch(ctx, o.unseenURLs(media.Segments, playlistURL, seen), fetchBudget)
+		// The EXT-X-KEY in effect, carried down the playlist: the parser
+		// attaches a tag to the one segment after it, but it applies until
+		// the next.
+		var effKey *m3u8.Key
+		if len(media.Keys) > 0 {
+			effKey = &media.Keys[len(media.Keys)-1]
+		}
 		for _, seg := range media.Segments {
 			if seg == nil || seg.URI == "" {
 				continue
+			}
+			if len(seg.Keys) > 0 {
+				effKey = &seg.Keys[len(seg.Keys)-1]
 			}
 
 			absSeg, err := absoluteURL(playlistURL, seg.URI)
@@ -478,14 +488,6 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				continue
 			}
 
-			// The EXT-X-KEY in effect: the segment's own overrides the
-			// playlist's, and the last of either wins.
-			var effKey *m3u8.Key
-			if len(seg.Keys) > 0 {
-				effKey = &seg.Keys[len(seg.Keys)-1]
-			} else if len(media.Keys) > 0 {
-				effKey = &media.Keys[len(media.Keys)-1]
-			}
 			var key *Key
 			if effKey != nil {
 				var ivBytes []byte
