@@ -179,6 +179,17 @@
 		}
 	},
 	{
+		"name": "chaturbate",
+		"display_name": "Chaturbate",
+		"channel_url": "https://chaturbate.com/{username}/",
+		"login": {
+			"url": "https://chaturbate.com/auth/login/",
+			"refresh_url": "https://chaturbate.com/",
+			"cookie_domains": ["chaturbate.com"],
+			"session_cookie": "sessionid"
+		}
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
