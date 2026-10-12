@@ -349,8 +349,12 @@ func (c *Client) serve(
 			str, err = c.fetchSingleStatus(ctx, id, kind == kindAuthed, kind == kindStream)
 		}
 		if err != nil {
-			if started, holding := l.noteFailure(time.Now()); holding {
+			started, holding := l.noteFailure(time.Now())
+			if holding {
 				logHold(log, id, kind, started, err)
+			}
+			if holding && !errors.Is(err, ErrCheckNotRunnable) {
+				requeueHeld(log, l, id, kind)
 				return
 			}
 			if errors.Is(err, ErrCheckNotRunnable) {
@@ -405,6 +409,27 @@ func logHold(log *slog.Logger, id streamer.StreamerRef, kind requestKind, starte
 		"id", id, "kind", kind, "hold", started, "error", err)
 }
 
+// requeueHeld puts a request that failed while its platform is holding off
+// back in its lane, where the lane waits out the hold before running it again.
+// Dropping it instead would strand an already-live streamer: the cloud pushes an
+// update only when a status changes. Each failure re-queues only itself, so a
+// hold still admits one round of probes per expiry rather than a retry storm.
+func requeueHeld(log *slog.Logger, l *platformLimiter, id streamer.StreamerRef, kind requestKind) {
+	lane := l.highPri
+	switch kind {
+	case kindAuthed:
+		lane = l.authPri
+	case kindStream:
+		lane = l.stream
+	}
+	select {
+	case lane <- id:
+	default:
+		log.Warn("Platform request lane is full, dropping held request",
+			"platform", l.platform, "id", id, "kind", kind)
+	}
+}
+
 // resumeLanes releases every platform's hold, on a reconnect: the path to the
 // cloud is back.
 func (c *Client) resumeLanes() {
@@ -456,7 +481,8 @@ var (
 // retryStatusFetch re-attempts a status fetch that failed in transit. The cloud
 // pushes an update only when a status changes, so a dropped fetch would strand
 // an already-live streamer without a recording. Retries spend tokens like first
-// attempts and stop once the platform starts holding off.
+// attempts; once the platform starts holding off, the request is re-queued to
+// run after the hold.
 func (c *Client) retryStatusFetch(
 	ctx context.Context,
 	log *slog.Logger,
@@ -478,6 +504,7 @@ func (c *Client) retryStatusFetch(
 		if err != nil {
 			if started, holding := l.noteFailure(time.Now()); holding {
 				logHold(log, id, kind, started, err)
+				requeueHeld(log, l, id, kind)
 				return
 			}
 			log.Debug("Status fetch retry failed",
