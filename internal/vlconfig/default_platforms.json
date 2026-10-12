@@ -190,6 +190,11 @@
 		}
 	},
 	{
+		"name": "17live",
+		"display_name": "17LIVE",
+		"channel_url": "https://17.live/en/live/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
