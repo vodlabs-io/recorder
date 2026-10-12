@@ -34,6 +34,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   mico: "MICO",
   rplay: "RPLAY",
   stripchat: "Stripchat",
+  chaturbate: "Chaturbate",
   x: "X",
   generic: "Web",
 }
