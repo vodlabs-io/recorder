@@ -199,9 +199,12 @@ func Run(
 		}
 	}()
 
-	playlistURL, err := o.resolveMediaPlaylist(cfg.URL)
+	playlistURL, audioURL, err := o.resolveRenditions(cfg.URL)
 	if err != nil {
 		return err
+	}
+	if audioURL != "" {
+		return o.runDemuxed(ctx, playlistURL, audioURL)
 	}
 	return o.run(ctx, playlistURL)
 }
