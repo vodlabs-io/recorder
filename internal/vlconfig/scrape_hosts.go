@@ -144,6 +144,10 @@ var scrapeDomains = map[string][]string{
 	"chaturbate": {
 		"chaturbate.com",
 	},
+	"17live": {
+		"17.live",
+		"17app.co",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
