@@ -23,6 +23,33 @@ func encryptAES128(t *testing.T, plain, key, iv []byte) []byte {
 	return out
 }
 
+// TestRotatedKeyAppliesUntilTheNext pins that an EXT-X-KEY partway down a
+// playlist decrypts every segment after it, not only the first.
+func TestRotatedKeyAppliesUntilTheNext(t *testing.T) {
+	k1, k2 := []byte("0123456789abcdef"), []byte("fedcba9876543210")
+	iv1, iv2 := bytes.Repeat([]byte{1}, 16), bytes.Repeat([]byte{2}, 16)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/live/media.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n")
+		fmt.Fprint(w, "#EXT-X-KEY:METHOD=AES-128,URI=\"1.key\",IV=0x01010101010101010101010101010101\n#EXTINF:2.000,\na.ts\n")
+		fmt.Fprint(w, "#EXT-X-KEY:METHOD=AES-128,URI=\"2.key\",IV=0x02020202020202020202020202020202\n#EXTINF:2.000,\nb.ts\n#EXTINF:2.000,\nc.ts\n#EXT-X-ENDLIST\n")
+	})
+	mux.HandleFunc("/live/1.key", func(w http.ResponseWriter, r *http.Request) { w.Write(k1) })
+	mux.HandleFunc("/live/2.key", func(w http.ResponseWriter, r *http.Request) { w.Write(k2) })
+	for name, k := range map[string][2][]byte{"a": {k1, iv1}, "b": {k2, iv2}, "c": {k2, iv2}} {
+		body := encryptAES128(t, []byte("segment "+name), k[0], k[1])
+		mux.HandleFunc("/live/"+name+".ts", func(w http.ResponseWriter, r *http.Request) { w.Write(body) })
+	}
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	sink := &capture{}
+	if err := ingestOrigin(t, srv, sink, 0); err != nil {
+		t.Fatal(err)
+	}
+	assertBodies(t, sink.bodies(), "segment a", "segment b", "segment c")
+}
+
 // TestAES128SegmentsReachTheSinkDecrypted pins that whole-segment AES-128 is
 // undone before the Sink, with the key gone from what it is handed, whether
 // the key names an IV or the media sequence number stands in for one; and that
