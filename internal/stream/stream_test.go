@@ -96,6 +96,7 @@ func TestIsHLS(t *testing.T) {
 		{Stream{URL: "https://cdn.example/live/stream.flv"}, false},
 		{Stream{URL: "https://cdn.example/live/manifest", Format: FormatHLS}, true},
 		{Stream{URL: "https://cdn.example/live.m3u8.flv", Format: FormatFLV}, false},
+		{Stream{URL: "nicolive://lv351585633"}, true},
 	} {
 		if got := tc.s.IsHLS(); got != tc.want {
 			t.Errorf("IsHLS(%+v) = %v, want %v", tc.s, got, tc.want)
