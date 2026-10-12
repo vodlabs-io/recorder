@@ -23,7 +23,17 @@ import (
 const maxMasterHops = 3
 
 // resolveMediaPlaylist follows master playlists until a media playlist is
-// reached, returning the URL to poll.
+// reached, returning the URL to poll. A separate audio rendition the chosen
+// variant names is not followed; see resolveRenditions.
+func (o *ingest) resolveMediaPlaylist(playlistURL string) (string, error) {
+	media, _, err := o.resolveRenditions(playlistURL)
+	return media, err
+}
+
+// resolveRenditions follows master playlists until a media playlist is
+// reached, returning the URL to poll, and the URL of the audio rendition the
+// chosen variant names when the master publishes its audio separately (empty
+// otherwise).
 //
 // Usually the URL is already a media playlist selected by the Plugin, but it
 // cannot be assumed: some Origins answer a per-quality pull URL with a
@@ -31,35 +41,41 @@ const maxMasterHops = 3
 // another host (Douyin rooms fronted by Wangsu do exactly this). Reading those
 // needs the indirection followed, not rejected.
 //
-// The variants of a master reached this way are usually a single entry — the
-// Origin is redirecting, not offering a quality ladder — but when there are
-// several, the session's own preference decides, so "worst" stays "worst"
-// wherever the choice happens to be made.
-func (o *ingest) resolveMediaPlaylist(playlistURL string) (string, error) {
+// When a master offers several variants, the session's own preference
+// decides, so "worst" stays "worst" wherever the choice happens to be made.
+func (o *ingest) resolveRenditions(playlistURL string) (string, string, error) {
+	audioURL := ""
 	for hop := 0; ; hop++ {
 		body, err := o.fetch(playlistURL)
 		if err != nil {
-			return "", fmt.Errorf("fetch playlist: %w", err)
+			return "", "", fmt.Errorf("fetch playlist: %w", err)
 		}
 		playlist, _, err := m3u8.Decode(*bytes.NewBuffer(o.sanitize(body)), false)
 		if err != nil {
-			return "", fmt.Errorf("parse playlist: %w", err)
+			return "", "", fmt.Errorf("parse playlist: %w", err)
 		}
 
 		master, ok := playlist.(*m3u8.MasterPlaylist)
 		if !ok {
-			return playlistURL, nil // already a media playlist: the common case
+			return playlistURL, audioURL, nil // already a media playlist: the common case
 		}
 		if hop >= maxMasterHops {
-			return "", fmt.Errorf("master playlist nested more than %d deep", maxMasterHops)
+			return "", "", fmt.Errorf("master playlist nested more than %d deep", maxMasterHops)
 		}
 
-		next, err := selectVariant(master, playlistURL, o.cfg.Variant)
+		next, v, err := selectRendition(master, playlistURL, o.cfg.Variant)
 		if err != nil {
-			return "", err
+			return "", "", err
+		}
+		audioURL = ""
+		if uri := audioRendition(v); uri != "" {
+			if audioURL, err = absoluteURL(playlistURL, uri); err != nil {
+				return "", "", fmt.Errorf("resolve audio rendition URL %q: %w", uri, err)
+			}
 		}
 		o.logger.Info("Followed master playlist to a media playlist",
-			"variants", len(master.Variants), "variant_pref", o.cfg.Variant, "url", next)
+			"variants", len(master.Variants), "variant_pref", o.cfg.Variant, "url", next,
+			"separate_audio", audioURL != "")
 		playlistURL = next
 	}
 }
@@ -67,7 +83,14 @@ func (o *ingest) resolveMediaPlaylist(playlistURL string) (string, error) {
 // selectVariant picks a variant from a master playlist and returns its absolute
 // URL, honouring the session's quality preference.
 func selectVariant(master *m3u8.MasterPlaylist, baseURL, variant string) (string, error) {
+	u, _, err := selectRendition(master, baseURL, variant)
+	return u, err
+}
+
+// selectRendition is selectVariant, also returning the variant chosen.
+func selectRendition(master *m3u8.MasterPlaylist, baseURL, variant string) (string, *m3u8.Variant, error) {
 	streams := make(stream.List, 0, len(master.Variants))
+	byURI := make(map[string]*m3u8.Variant, len(master.Variants))
 	for _, v := range master.Variants {
 		// An I-frame playlist is keyframes only, for scrubbing: never a stream
 		// to record.
@@ -84,9 +107,10 @@ func selectVariant(master *m3u8.MasterPlaylist, baseURL, variant string) (string
 			ResWidth:  width,
 			ResHeight: height,
 		})
+		byURI[v.URI] = v
 	}
 	if len(streams) == 0 {
-		return "", errors.New("master playlist has no variants")
+		return "", nil, errors.New("master playlist has no variants")
 	}
 
 	// Select reads the list as worst-to-best, which a master playlist does not
@@ -100,10 +124,33 @@ func selectVariant(master *m3u8.MasterPlaylist, baseURL, variant string) (string
 
 	selected := streams.Select(variant)
 	if selected == nil {
-		return "", fmt.Errorf("no variant matches %q among %d in the master playlist",
+		return "", nil, fmt.Errorf("no variant matches %q among %d in the master playlist",
 			variant, len(streams))
 	}
-	return absoluteURL(baseURL, selected.URL)
+	u, err := absoluteURL(baseURL, selected.URL)
+	return u, byURI[selected.URL], err
+}
+
+// audioRendition returns the URI of the audio rendition a variant plays with
+// when it is a playlist of its own, preferring the group's default, and ""
+// when the variant's audio (if any) travels in its own segments.
+func audioRendition(v *m3u8.Variant) string {
+	if v == nil || v.Audio == "" {
+		return ""
+	}
+	uri := ""
+	for _, a := range v.Alternatives {
+		if a == nil || a.Type != "AUDIO" || a.GroupId != v.Audio || a.URI == "" {
+			continue
+		}
+		if a.Default {
+			return a.URI
+		}
+		if uri == "" {
+			uri = a.URI
+		}
+	}
+	return uri
 }
 
 // variantQualityID names a master-playlist variant the way the Plugins do, so a
