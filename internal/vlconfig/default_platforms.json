@@ -200,6 +200,11 @@
 		"channel_url": "https://live.nicovideo.jp/watch/user/{username}"
 	},
 	{
+		"name": "streamate",
+		"display_name": "Streamate",
+		"channel_url": "https://streamate.com/cam/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
