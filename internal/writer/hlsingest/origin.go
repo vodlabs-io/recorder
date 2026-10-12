@@ -203,6 +203,17 @@ func (o *ingest) sanitize(b []byte) []byte {
 	return sanitizePlaylistTimestamps(b)
 }
 
+// userAgent is the User-Agent requests carry: a header's, else the
+// configured one.
+func (o *ingest) userAgent() string {
+	for k, v := range o.cfg.Headers {
+		if strings.EqualFold(strings.TrimSpace(k), "User-Agent") && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return o.cfg.UserAgent
+}
+
 func (o *ingest) buildRequest(u string) (*http.Request, error) {
 	req, err := http.NewRequest("GET", u, nil)
 	if err != nil {

@@ -32,7 +32,9 @@ func (s Stream) IsHLS() bool {
 	case FormatFLV:
 		return false
 	}
-	return strings.Contains(s.URL, ".m3u8")
+	// A Niconico program (nicolive://) is recorded from the HLS its seat is
+	// granted.
+	return strings.Contains(s.URL, ".m3u8") || strings.HasPrefix(s.URL, "nicolive://")
 }
 
 // Resolution returns the resolution of the stream as a string in the format "WIDTHxHEIGHT"
