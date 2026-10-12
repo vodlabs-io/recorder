@@ -7,9 +7,6 @@ package hls
 import (
 	"bufio"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -132,14 +129,12 @@ func (s *archiveSink) Init(m hlsingest.Map, body []byte) error {
 	return nil
 }
 
-// Segment decrypts what it can, writes the segment, and appends it to the
-// playlist.
+// Segment writes the segment and appends it to the playlist.
 func (s *archiveSink) Segment(seg hlsingest.Segment, body []byte) error {
 	if seg.IsFMP4 {
 		s.isFMP4 = true
 	}
-	data, decrypted := decryptSegment(seg, body, s.logger)
-	s.recordKeyLine(seg.Key, decrypted)
+	s.recordKeyLine(seg.Key)
 
 	// A fragmented-MP4 segment is named for what it is rather than for whatever
 	// the Origin called it: ffmpeg's HLS demuxer refuses a segment whose
@@ -156,10 +151,10 @@ func (s *archiveSink) Segment(seg hlsingest.Segment, body []byte) error {
 		}
 	}
 	name := fmt.Sprintf("%06d%s", seg.Sequence, ext)
-	if err := os.WriteFile(filepath.Join(s.outDir, name), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.outDir, name), body, 0o644); err != nil {
 		return fmt.Errorf("failed to write segment file %s: %w", name, err)
 	}
-	s.report(len(data))
+	s.report(len(body))
 
 	dur := seg.Duration
 	if dur <= 0 {
@@ -197,15 +192,12 @@ func (s *archiveSink) report(n int) {
 	}
 }
 
-// recordKeyLine carries an EXT-X-KEY through to the recorded playlist for the
-// methods this writer cannot decrypt itself, so assembly can still be told the
+// recordKeyLine carries an EXT-X-KEY through to the recorded playlist for a
+// segment hlsingest could not decrypt, so assembly can still be told the
 // segments are encrypted.
-func (s *archiveSink) recordKeyLine(key *hlsingest.Key, decrypted bool) {
+func (s *archiveSink) recordKeyLine(key *hlsingest.Key) {
 	if key == nil {
 		s.lastWrittenKeyLine = ""
-		return
-	}
-	if decrypted {
 		return
 	}
 	attrs := fmt.Sprintf("METHOD=%s", key.Method)
@@ -235,35 +227,6 @@ func (s *archiveSink) writePlaylist() error {
 		fmt.Fprintln(s.idxWriter, line)
 	}
 	return s.idxWriter.Flush()
-}
-
-// decryptSegment decrypts an AES-128 segment in place, reporting whether it
-// did. Anything else is left as it arrived, for recordKeyLine to declare.
-func decryptSegment(seg hlsingest.Segment, body []byte, logger *slog.Logger) ([]byte, bool) {
-	key := seg.Key
-	if key == nil || len(key.Body) != 16 {
-		return body, false
-	}
-	if key.Method != "AES-128" && key.Method != "AES128" {
-		return body, false
-	}
-	iv := key.IV
-	if len(iv) == 0 {
-		// With no IV attribute the media sequence number is the IV, per the
-		// spec — here, the segment's position in what was handed over.
-		iv = make([]byte, 16)
-		n := seg.Sequence
-		for i := 0; i < 8; i++ {
-			iv[15-i] = byte(n & 0xFF)
-			n >>= 8
-		}
-	}
-	dec, err := decryptAES128CBC(body, key.Body, iv)
-	if err != nil {
-		logger.Error("Failed to decrypt segment", "error", err)
-		return body, false
-	}
-	return dec, true
 }
 
 func writePlaylistHeader(w *bufio.Writer, target float64, isFMP4 bool, prov string) {
@@ -302,37 +265,4 @@ func writeFinalPlaylist(
 	}
 	fmt.Fprintln(w, "#EXT-X-ENDLIST")
 	return w.Flush()
-}
-
-func decryptAES128CBC(ciphertext, key, iv []byte) ([]byte, error) {
-	if len(key) != 16 || len(iv) != 16 {
-		return nil, errors.New("invalid key/iv size for AES-128-CBC")
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	if len(ciphertext)%aes.BlockSize != 0 {
-		pad := aes.BlockSize - (len(ciphertext) % aes.BlockSize)
-		ciphertext = append(ciphertext, make([]byte, pad)...)
-	}
-	mode := cipher.NewCBCDecrypter(block, iv)
-	out := make([]byte, len(ciphertext))
-	mode.CryptBlocks(out, ciphertext)
-	if n := len(out); n > 0 {
-		pad := int(out[n-1])
-		if pad > 0 && pad <= aes.BlockSize && pad <= n {
-			good := true
-			for i := 0; i < pad; i++ {
-				if out[n-1-i] != byte(pad) {
-					good = false
-					break
-				}
-			}
-			if good {
-				out = out[:n-pad]
-			}
-		}
-	}
-	return out, nil
 }
