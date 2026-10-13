@@ -179,6 +179,10 @@ var scrapeDomains = map[string][]string{
 		"xlovecam.com",
 		"wlresources.com",
 	},
+	"eplay": {
+		"eplay.com",
+		"letso.live",
+	},
 	"myfreecams": {
 		"myfreecams.com",
 		"mfcimg.com",
