@@ -37,6 +37,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   chaturbate: "Chaturbate",
   "17live": "17LIVE",
   niconico: "Niconico",
+  fc2live: "FC2 Live",
   streamate: "Streamate",
   cam4: "CAM4",
   camsoda: "CamSoda",
