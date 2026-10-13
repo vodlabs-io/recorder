@@ -235,6 +235,11 @@
 		"channel_url": "https://www.xlovecam.com/en/model/{username}/"
 	},
 	{
+		"name": "imlive",
+		"display_name": "ImLive",
+		"channel_url": "https://imlive.com/live-sex-chat/cam-girls/{username}/"
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"
