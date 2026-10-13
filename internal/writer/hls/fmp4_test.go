@@ -131,3 +131,48 @@ func TestTSSegmentNamingUnchanged(t *testing.T) {
 		t.Errorf("non-fMP4 output must stay at version 3:\n%s", playlist)
 	}
 }
+
+// TestUnknownSegmentExtensionNamedTS: a transport stream segment whose Origin
+// extension ffmpeg's HLS demuxer refuses (MyFreeCams' ".pts") is named ".ts".
+func TestUnknownSegmentExtensionNamedTS(t *testing.T) {
+	var polls atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/live/media.m3u8", func(w http.ResponseWriter, r *http.Request) {
+		n := polls.Add(1)
+		fmt.Fprint(w, "#EXTM3U\n#EXT-X-VERSION:5\n#EXT-X-TARGETDURATION:2\n#EXT-X-MEDIA-SEQUENCE:0\n")
+		fmt.Fprint(w, "#EXTINF:1.000,\nstream_b1.msn0.pts\n#EXTINF:1.000,\nstream_b1.msn1.PTS\n#EXTINF:1.000,\nseg2.aac\n")
+		if n > 1 {
+			fmt.Fprint(w, "#EXT-X-ENDLIST\n")
+		}
+	})
+	mux.HandleFunc("/live/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "TSDATA")
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := Record(ctx, Config{
+		URL:          srv.URL + "/live/media.m3u8",
+		OutDir:       dir,
+		PollInterval: 10 * time.Millisecond,
+		Retries:      1,
+		FileName:     "index.m3u8",
+	}, srv.Client(), slog.New(slog.DiscardHandler), nil); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "index.m3u8"))
+	if err != nil {
+		t.Fatalf("read playlist: %v", err)
+	}
+	for _, want := range []string{"000000.ts", "000001.ts", "000002.aac"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("playlist lacks %s:\n%s", want, body)
+		}
+		if _, err := os.Stat(filepath.Join(dir, want)); err != nil {
+			t.Errorf("segment file: %v", err)
+		}
+	}
+}
