@@ -40,6 +40,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   streamate: "Streamate",
   cam4: "CAM4",
   camsoda: "CamSoda",
+  bongacams: "BongaCams",
   myfreecams: "MyFreeCams",
   x: "X",
   generic: "Web",

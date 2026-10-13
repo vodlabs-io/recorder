@@ -215,6 +215,11 @@
 		"channel_url": "https://www.camsoda.com/{username}"
 	},
 	{
+		"name": "bongacams",
+		"display_name": "BongaCams",
+		"channel_url": "https://bongacams.com/{username}"
+	},
+	{
 		"name": "myfreecams",
 		"display_name": "MyFreeCams",
 		"channel_url": "https://www.myfreecams.com/#{username}"
