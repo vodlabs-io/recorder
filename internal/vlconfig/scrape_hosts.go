@@ -159,6 +159,10 @@ var scrapeDomains = map[string][]string{
 		"cam4.com",
 		"xcdnpro.com",
 	},
+	"myfreecams": {
+		"myfreecams.com",
+		"mfcimg.com",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host

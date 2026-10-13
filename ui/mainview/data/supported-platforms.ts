@@ -39,6 +39,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   niconico: "Niconico",
   streamate: "Streamate",
   cam4: "CAM4",
+  myfreecams: "MyFreeCams",
   x: "X",
   generic: "Web",
 }
