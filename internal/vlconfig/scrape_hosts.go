@@ -160,6 +160,10 @@ var scrapeDomains = map[string][]string{
 		"cam4.com",
 		"xcdnpro.com",
 	},
+	"camsoda": {
+		"camsoda.com",
+		"livemediahost.com",
+	},
 	"myfreecams": {
 		"myfreecams.com",
 		"mfcimg.com",

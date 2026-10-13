@@ -210,6 +210,11 @@
 		"channel_url": "https://www.cam4.com/{username}"
 	},
 	{
+		"name": "camsoda",
+		"display_name": "CamSoda",
+		"channel_url": "https://www.camsoda.com/{username}"
+	},
+	{
 		"name": "myfreecams",
 		"display_name": "MyFreeCams",
 		"channel_url": "https://www.myfreecams.com/#{username}"
