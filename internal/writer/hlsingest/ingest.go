@@ -19,7 +19,6 @@ import (
 	"time"
 
 	m3u8 "github.com/Eyevinn/hls-m3u8/m3u8"
-	"github.com/vodlabs-io/recorder/internal/nicolive"
 )
 
 // defaultPollInterval is the cadence a media playlist is re-fetched at when
@@ -201,15 +200,15 @@ func Run(
 		}
 	}()
 
-	// A Niconico program's playlist is granted per seat: take one for this
-	// ingest and hold it while the playlist is read.
-	if nicolive.IsURL(cfg.URL) {
-		seat, err := nicolive.Open(ctx, cfg.URL, client, o.userAgent(), logger)
-		if errors.Is(err, nicolive.ErrEnded) {
+	// A Niconico program's or an FC2 Live channel's playlist is granted per
+	// seat: take one for this ingest and hold it while the playlist is read.
+	if isSeatURL(cfg.URL) {
+		seat, oerr := openSeat(ctx, cfg.URL, client, o.userAgent(), logger)
+		if seatEnded(oerr) {
 			return nil
 		}
-		if err != nil {
-			return err
+		if oerr != nil {
+			return oerr
 		}
 		defer seat.Close()
 		var cancel context.CancelFunc
@@ -222,15 +221,15 @@ func Run(
 			case <-ctx.Done():
 			}
 		}()
-		// A seat lost while the program runs ends the attempt as a failure,
-		// so the caller takes a new one; the program's end is a clean end.
+		// A seat lost while the broadcast runs ends the attempt as a failure,
+		// so the caller takes a new one; the broadcast's end is a clean end.
 		defer func() {
-			if serr := seat.Err(); err == nil && serr != nil && !errors.Is(serr, nicolive.ErrEnded) {
+			if serr := seat.Err(); err == nil && serr != nil && !seatEnded(serr) {
 				err = serr
 			}
 		}()
 		o.client = seat.Client(client)
-		o.cfg.URL = seat.MasterURL
+		o.cfg.URL = seat.master()
 	}
 
 	playlistURL, audioURL, err := o.resolveRenditions(o.cfg.URL)
