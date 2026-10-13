@@ -215,6 +215,11 @@
 		"channel_url": "https://www.camsoda.com/{username}"
 	},
 	{
+		"name": "livejasmin",
+		"display_name": "LiveJasmin",
+		"channel_url": "https://www.livejasmin.com/en/chat/{username}"
+	},
+	{
 		"name": "bongacams",
 		"display_name": "BongaCams",
 		"channel_url": "https://bongacams.com/{username}"

@@ -164,6 +164,9 @@ var scrapeDomains = map[string][]string{
 		"camsoda.com",
 		"livemediahost.com",
 	},
+	"livejasmin": {
+		"livejasmin.com",
+	},
 	"bongacams": {
 		"bongacams.com",
 		"bcvcdn.com",
