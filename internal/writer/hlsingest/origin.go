@@ -114,12 +114,16 @@ func selectRendition(master *m3u8.MasterPlaylist, baseURL, variant string) (stri
 	}
 
 	// Select reads the list as worst-to-best, which a master playlist does not
-	// promise; sort so "worst" and "best" mean what they say.
+	// promise; sort so "worst" and "best" mean what they say. Variants of one
+	// resolution, or with none given, rank by bandwidth.
 	sort.SliceStable(streams, func(i, j int) bool {
 		if streams[i].ResHeight != streams[j].ResHeight {
 			return streams[i].ResHeight < streams[j].ResHeight
 		}
-		return streams[i].ResWidth < streams[j].ResWidth
+		if streams[i].ResWidth != streams[j].ResWidth {
+			return streams[i].ResWidth < streams[j].ResWidth
+		}
+		return byURI[streams[i].URL].Bandwidth < byURI[streams[j].URL].Bandwidth
 	})
 
 	selected := streams.Select(variant)
