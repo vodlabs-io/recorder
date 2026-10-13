@@ -168,6 +168,10 @@ var scrapeDomains = map[string][]string{
 		"bongacams.com",
 		"bcvcdn.com",
 	},
+	"dreamcam": {
+		"dreamcam.com",
+		"dreamcamtrue.com",
+	},
 	"myfreecams": {
 		"myfreecams.com",
 		"mfcimg.com",

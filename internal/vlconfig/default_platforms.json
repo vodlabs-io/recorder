@@ -220,6 +220,11 @@
 		"channel_url": "https://bongacams.com/{username}"
 	},
 	{
+		"name": "dreamcam",
+		"display_name": "Dreamcam",
+		"channel_url": "https://dreamcam.com/live/{username}"
+	},
+	{
 		"name": "myfreecams",
 		"display_name": "MyFreeCams",
 		"channel_url": "https://www.myfreecams.com/#{username}"
