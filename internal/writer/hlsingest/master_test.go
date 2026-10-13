@@ -148,3 +148,22 @@ func TestSelectVariantSkipsIFramePlaylists(t *testing.T) {
 		t.Fatalf("selectVariant = %q, %v; want the media variant", got, err)
 	}
 }
+
+// A master that names no resolutions, listed best-first (FC2 Live), still
+// ranks its variants: by bandwidth.
+func TestSelectVariantRanksUnsizedVariantsByBandwidth(t *testing.T) {
+	body := "#EXTM3U\n" +
+		"#EXT-X-STREAM-INF:BANDWIDTH=5400000,CODECS=\"avc1.640029,mp4a.40.2\"\n51.m3u8\n" +
+		"#EXT-X-STREAM-INF:BANDWIDTH=720000,CODECS=\"avc1.4d401e,mp4a.40.2\"\n21.m3u8\n" +
+		"#EXT-X-STREAM-INF:BANDWIDTH=2160000,CODECS=\"avc1.640029,mp4a.40.2\"\n31.m3u8\n"
+	p, listType, err := m3u8.DecodeFrom(strings.NewReader(body), true)
+	if err != nil || listType != m3u8.MASTER {
+		t.Fatalf("decode: %v", err)
+	}
+	for variant, want := range map[string]string{"best": "51.m3u8", "worst": "21.m3u8", "": "51.m3u8"} {
+		got, err := selectVariant(p.(*m3u8.MasterPlaylist), "https://origin.test/live/master.m3u8", variant)
+		if err != nil || !strings.HasSuffix(got, "/live/"+want) {
+			t.Errorf("selectVariant(%q) = %s, %v; want %s", variant, got, err, want)
+		}
+	}
+}
