@@ -139,6 +139,7 @@ var scrapeDomains = map[string][]string{
 	},
 	"stripchat": {
 		"stripchat.com",
+		"xhamsterlive.com", // Stripchat's white label, the same API
 		"doppiocdn.net",
 	},
 	"chaturbate": {
