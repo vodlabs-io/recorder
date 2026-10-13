@@ -205,6 +205,11 @@
 		"channel_url": "https://streamate.com/cam/{username}"
 	},
 	{
+		"name": "cam4",
+		"display_name": "CAM4",
+		"channel_url": "https://www.cam4.com/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
