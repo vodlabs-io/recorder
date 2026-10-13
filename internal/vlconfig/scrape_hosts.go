@@ -152,6 +152,9 @@ var scrapeDomains = map[string][]string{
 	"niconico": {
 		"nicovideo.jp",
 	},
+	"fc2live": {
+		"fc2.com",
+	},
 	"streamate": {
 		"streamate.com",
 		"naiadsystems.com",

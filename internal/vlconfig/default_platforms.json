@@ -195,6 +195,11 @@
 		"channel_url": "https://17.live/en/live/{username}"
 	},
 	{
+		"name": "fc2live",
+		"display_name": "FC2 Live",
+		"channel_url": "https://live.fc2.com/{username}/"
+	},
+	{
 		"name": "niconico",
 		"display_name": "Niconico",
 		"channel_url": "https://live.nicovideo.jp/watch/user/{username}"
