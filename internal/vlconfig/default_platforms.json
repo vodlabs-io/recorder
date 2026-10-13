@@ -230,6 +230,11 @@
 		"channel_url": "https://dreamcam.com/live/{username}"
 	},
 	{
+		"name": "xlovecam",
+		"display_name": "XLoveCam",
+		"channel_url": "https://www.xlovecam.com/en/model/{username}/"
+	},
+	{
 		"name": "myfreecams",
 		"display_name": "MyFreeCams",
 		"channel_url": "https://www.myfreecams.com/#{username}"
