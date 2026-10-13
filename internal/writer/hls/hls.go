@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/provenance"
@@ -25,6 +26,18 @@ const (
 	fmp4InitExt = ".mp4"
 	fmp4SegExt  = ".m4s"
 )
+
+// ffmpegSegmentExts are the segment extensions ffmpeg's HLS demuxer accepts
+// (its allowed_segment_extensions default). It refuses to open a playlist
+// naming any other.
+var ffmpegSegmentExts = map[string]bool{
+	".3gp": true, ".aac": true, ".avi": true, ".ac3": true, ".eac3": true,
+	".flac": true, ".mkv": true, ".m3u8": true, ".m4a": true, ".m4s": true,
+	".m4v": true, ".mpg": true, ".mov": true, ".mp2": true, ".mp3": true,
+	".mp4": true, ".mpeg": true, ".mpegts": true, ".ogg": true, ".ogv": true,
+	".oga": true, ".ts": true, ".vob": true, ".vtt": true, ".wav": true,
+	".webvtt": true, ".cmfv": true, ".cmfa": true,
+}
 
 func playlistVersion(isFMP4 bool) int {
 	if isFMP4 {
@@ -140,13 +153,15 @@ func (s *archiveSink) Segment(seg hlsingest.Segment, body []byte) error {
 	// the Origin called it: ffmpeg's HLS demuxer refuses a segment whose
 	// extension does not match the container it detects, so CHZZK's ".m4v"
 	// fragments would make the recorded playlist unreadable at assembly time.
+	// Any other segment keeps the Origin's extension when the demuxer accepts
+	// it and is otherwise named ".ts", the container HLS assumes.
 	ext := fmp4SegExt
 	if !s.isFMP4 {
 		ext = ""
 		if u, err := url.Parse(seg.URI); err == nil {
-			ext = path.Ext(u.Path)
+			ext = strings.ToLower(path.Ext(u.Path))
 		}
-		if ext == "" {
+		if !ffmpegSegmentExts[ext] {
 			ext = ".ts"
 		}
 	}
