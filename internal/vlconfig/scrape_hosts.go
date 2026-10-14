@@ -190,6 +190,10 @@ var scrapeDomains = map[string][]string{
 		// CacheFly is a shared CDN, so only the host ImLive's HLS is on.
 		"hls-delivery.cachefly.net",
 	},
+	"sexchat": {
+		"sexchat.hu",
+		"apn2.com",
+	},
 	"eplay": {
 		"eplay.com",
 		"letso.live",
