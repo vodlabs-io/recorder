@@ -95,7 +95,7 @@ func TestPlayRefused(t *testing.T) {
 	} {
 		ws := fakeServer(t, tc.reply)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		_, err := Play(ctx, Grant{WebSocketURL: ws, StreamID: "abc", Token: "tok", SubscriberID: "sub", SubscriberCode: "123456"}, nil, quietLogger())
+		_, err := Play(ctx, Grant{WebSocketURL: ws, StreamID: "abc", Token: "tok", SubscriberID: "sub", SubscriberCode: "123456"}, quietLogger())
 		cancel()
 		if !errors.Is(err, tc.want) {
 			t.Errorf("%v: Play = %v, want %v", tc.reply, err, tc.want)
@@ -108,7 +108,7 @@ func TestPlayNoOfferTimesOut(t *testing.T) {
 	startTimeout = 300 * time.Millisecond
 	defer func() { startTimeout = old }()
 	ws := fakeServer(t, map[string]any{"command": "notification", "definition": "bitrateMeasurement"})
-	_, err := Play(context.Background(), Grant{WebSocketURL: ws, StreamID: "abc", Token: "tok", SubscriberID: "sub", SubscriberCode: "123456"}, nil, quietLogger())
+	_, err := Play(context.Background(), Grant{WebSocketURL: ws, StreamID: "abc", Token: "tok", SubscriberID: "sub", SubscriberCode: "123456"}, quietLogger())
 	if err == nil || !strings.Contains(err.Error(), "start timeout") {
 		t.Errorf("Play = %v, want a start timeout", err)
 	}

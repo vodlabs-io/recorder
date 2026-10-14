@@ -1,6 +1,6 @@
 //go:build live
 
-package asiancammodels
+package asiancammodels_test
 
 import (
 	"context"
@@ -9,10 +9,14 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/vodlabs-io/recorder/internal/asiancammodels"
+	"github.com/vodlabs-io/recorder/internal/writer/flv"
 )
 
-// TestOpen_Network records a live room. ACM_URL is its asiancammodels:// URL;
-// ACM_SECONDS bounds the recording (default 30) and ACM_OUT keeps the FLV.
+// TestOpen_Network records a live room through the FLV writer's client, as a
+// recording does. ACM_URL is its asiancammodels:// URL; ACM_SECONDS bounds the
+// recording (default 30) and ACM_OUT keeps the FLV.
 //
 //	ACM_URL='asiancammodels://<room>?chatroom=<id>&stream=<hash>' go test -tags live -run TestOpen_Network -v ./internal/asiancammodels/
 func TestOpen_Network(t *testing.T) {
@@ -29,7 +33,7 @@ func TestOpen_Network(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(secs)*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	stream, err := Open(ctx, u, nil, logger)
+	stream, err := asiancammodels.Open(ctx, u, flv.Client(), logger)
 	if err != nil {
 		t.Fatal(err)
 	}

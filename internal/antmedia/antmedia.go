@@ -114,17 +114,16 @@ type streamInfo struct {
 // server offers. Reading ends with io.EOF when the server finishes the
 // playback, or with the error that ended it. Close, or the end of ctx, stops
 // the playback.
-func Play(ctx context.Context, g Grant, client *http.Client, logger *slog.Logger) (io.ReadCloser, error) {
+//
+// The signalling socket is dialled with a client of its own: it can stay
+// quiet for longer than the per-read deadlines a stream client sets.
+func Play(ctx context.Context, g Grant, logger *slog.Logger) (io.ReadCloser, error) {
 	dialURL, err := g.dialURL()
 	if err != nil {
 		return nil, err
 	}
 	if g.StreamID == "" {
 		return nil, errors.New("antmedia: grant names no stream")
-	}
-	if client == nil || client.Timeout != 0 {
-		// The signalling socket outlives any whole-request timeout.
-		client = &http.Client{}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	pr, pw := io.Pipe()
@@ -136,7 +135,7 @@ func Play(ctx context.Context, g Grant, client *http.Client, logger *slog.Logger
 		inbox:  make(chan message, 64),
 		done:   make(chan struct{}),
 	}
-	if err := s.connect(ctx, client, dialURL); err != nil {
+	if err := s.connect(ctx, &http.Client{}, dialURL); err != nil {
 		s.teardown()
 		return nil, err
 	}

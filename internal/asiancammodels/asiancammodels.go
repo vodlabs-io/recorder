@@ -110,7 +110,7 @@ func Open(ctx context.Context, u string, client *http.Client, logger *slog.Logge
 		if err != nil {
 			return nil, err
 		}
-		stream, err := antmedia.Play(ctx, g, client, logger)
+		stream, err := antmedia.Play(ctx, g, logger)
 		if err == nil {
 			return watch(ctx, stream, client, b, logger), nil
 		}
