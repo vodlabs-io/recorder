@@ -200,6 +200,11 @@
 		"channel_url": "https://live.fc2.com/{username}/"
 	},
 	{
+		"name": "flirt4free",
+		"display_name": "Flirt4Free",
+		"channel_url": "https://www.flirt4free.com/?model={username}"
+	},
+	{
 		"name": "niconico",
 		"display_name": "Niconico",
 		"channel_url": "https://live.nicovideo.jp/watch/user/{username}"

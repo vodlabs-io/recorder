@@ -155,6 +155,11 @@ var scrapeDomains = map[string][]string{
 	"fc2live": {
 		"fc2.com",
 	},
+	"flirt4free": {
+		"flirt4free.com",
+		"camster.com",
+		"vscdns.com",
+	},
 	"streamate": {
 		"streamate.com",
 		"naiadsystems.com",
