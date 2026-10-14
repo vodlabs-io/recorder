@@ -168,3 +168,24 @@ func TestMediaClock(t *testing.T) {
 		t.Fatalf("arrival fallback: got %v %v, want %v", at, ok, start.Add(time.Second))
 	}
 }
+
+// TestMediaClockDistrustsForeignReports pins that a track whose Sender
+// Reports name another RTP timestamp base than its packets is stamped from
+// arrival instead, and stays that way.
+func TestMediaClockDistrustsForeignReports(t *testing.T) {
+	c := newMediaClock()
+	start := time.Unix(1_800_000_000, 0)
+	ntp := uint64(1_800_000_000+2208988800) << 32
+	c.wall(1, 48000, 1000, start) // the first packet arrives
+	// The report pairs the present with an RTP time some 4.5 hours ahead of
+	// the packets'.
+	c.senderReport(1, 48000, ntp, 1000+782_000_000)
+	at, ok := c.wall(1, 48000, 1000+48000, start.Add(time.Second))
+	if !ok || !at.Equal(start.Add(time.Second)) {
+		t.Fatalf("got %v %v, want %v", at, ok, start.Add(time.Second))
+	}
+	c.senderReport(1, 48000, ntp+(uint64(2)<<32), 1000+782_000_000+96000)
+	if at, _ := c.wall(1, 48000, 1000+96000, start.Add(2*time.Second)); !at.Equal(start.Add(2 * time.Second)) {
+		t.Fatalf("a later report brought the foreign timeline back: %v", at)
+	}
+}
