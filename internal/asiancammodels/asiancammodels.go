@@ -6,6 +6,11 @@
 // lapses within seconds, and a time-based subscriber code. So an
 // asiancammodels:// URL names the broadcast, and the recorder takes a fresh
 // grant each time it opens it.
+//
+// The public chatroom a URL names closes when the model starts a paid show,
+// but the media server goes on sending the stream to viewers already playing
+// it. So while playing, the recorder asks the site for a grant every
+// checkEvery, and ends the recording once the site refuses one.
 package asiancammodels
 
 import (
@@ -19,6 +24,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/antmedia"
@@ -34,6 +40,12 @@ var siteOrigin = "https://www.asiancammodels.com"
 
 // grantAttempts bounds the grants tried when the server refuses one.
 const grantAttempts = 2
+
+// checkEvery spaces the checks that the chatroom is still open.
+var checkEvery = 10 * time.Second
+
+// errRefused is a grant the site turned down: the chatroom is gone.
+var errRefused = errors.New("asiancammodels play grant refused")
 
 var (
 	namePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
@@ -100,7 +112,7 @@ func Open(ctx context.Context, u string, client *http.Client, logger *slog.Logge
 		}
 		stream, err := antmedia.Play(ctx, g, client, logger)
 		if err == nil {
-			return stream, nil
+			return watch(ctx, stream, client, b, logger), nil
 		}
 		errs = append(errs, err)
 		if !errors.Is(err, antmedia.ErrUnauthorized) {
@@ -110,6 +122,54 @@ func Open(ctx context.Context, u string, client *http.Client, logger *slog.Logge
 		logger.Debug("Play grant refused, taking another", "error", err)
 	}
 	return nil, errors.Join(errs...)
+}
+
+// watched is a playback that ends, with io.EOF, once the site refuses a grant
+// for its chatroom.
+type watched struct {
+	io.ReadCloser
+	ended  atomic.Bool
+	cancel context.CancelFunc
+}
+
+func watch(ctx context.Context, stream io.ReadCloser, client *http.Client, b Broadcast, logger *slog.Logger) *watched {
+	ctx, cancel := context.WithCancel(ctx)
+	w := &watched{ReadCloser: stream, cancel: cancel}
+	go func() {
+		t := time.NewTicker(checkEvery)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+			_, err := fetchGrant(ctx, client, b)
+			if errors.Is(err, errRefused) {
+				logger.Info("Chatroom closed, ending the recording", "reason", err)
+				w.ended.Store(true)
+				_ = stream.Close()
+				return
+			}
+			if err != nil && ctx.Err() == nil {
+				logger.Debug("Chatroom check failed", "error", err)
+			}
+		}
+	}()
+	return w
+}
+
+func (w *watched) Read(p []byte) (int, error) {
+	n, err := w.ReadCloser.Read(p)
+	if err != nil && w.ended.Load() {
+		return n, io.EOF
+	}
+	return n, err
+}
+
+func (w *watched) Close() error {
+	w.cancel()
+	return w.ReadCloser.Close()
 }
 
 // grantReply is the site's play grant.
@@ -157,7 +217,7 @@ func fetchGrant(ctx context.Context, client *http.Client, b Broadcast) (antmedia
 		return antmedia.Grant{}, fmt.Errorf("asiancammodels play grant: %w", err)
 	}
 	if len(r.Error) > 0 && string(r.Error) != "null" {
-		return antmedia.Grant{}, fmt.Errorf("asiancammodels play grant refused: %s", r.Error)
+		return antmedia.Grant{}, fmt.Errorf("%w: %s", errRefused, r.Error)
 	}
 	ws, err := url.Parse(r.WSURL)
 	if err != nil || ws.Scheme != "wss" || !strings.HasSuffix(ws.Hostname(), ".asiancammodels.com") {

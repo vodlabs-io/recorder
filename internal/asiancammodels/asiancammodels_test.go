@@ -2,10 +2,14 @@ package asiancammodels
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestBroadcastURLRoundTrip(t *testing.T) {
@@ -76,5 +80,64 @@ func TestFetchGrantRefusesForeignServers(t *testing.T) {
 		} else if strings.Contains(body, "error") && !strings.Contains(err.Error(), "refused") {
 			t.Errorf("%s: %v", body, err)
 		}
+	}
+}
+
+// TestWatchEndsWhenChatroomCloses pins that a playback ends with io.EOF once
+// the site refuses a grant for its chatroom, and runs on while it grants one.
+func TestWatchEndsWhenChatroomCloses(t *testing.T) {
+	old := checkEvery
+	checkEvery = 20 * time.Millisecond
+	defer func() { checkEvery = old }()
+	var refuse atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if refuse.Load() {
+			w.Write([]byte(`{"error":"CHATROOM:NOT_FOUND"}`))
+			return
+		}
+		w.Write([]byte(`{"token":"1","ws_url":"wss:\/\/sf2.asiancammodels.com:5443\/WebRTCAppEE\/websocket","subscriber":{"id":"a","code":"1"}}`))
+	}))
+	defer srv.Close()
+	oldOrigin := siteOrigin
+	siteOrigin = srv.URL
+	defer func() { siteOrigin = oldOrigin }()
+
+	pr, pw := io.Pipe()
+	go func() {
+		for {
+			if _, err := pw.Write([]byte("x")); err != nil {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}()
+	b := Broadcast{Room: "trinity", Chatroom: "10505781", Stream: "c24ad750d65315ebd48820aa263cf651"}
+	w := watch(context.Background(), pr, http.DefaultClient, b, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	defer w.Close()
+
+	buf := make([]byte, 16)
+	deadline := time.Now().Add(150 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if _, err := w.Read(buf); err != nil {
+			t.Fatalf("read while the chatroom is open: %v", err)
+		}
+	}
+	refuse.Store(true)
+	done := make(chan error, 1)
+	go func() {
+		for {
+			if _, err := w.Read(buf); err != nil {
+				done <- err
+				return
+			}
+		}
+	}()
+	select {
+	case err := <-done:
+		if err != io.EOF {
+			t.Fatalf("read after the chatroom closed: %v, want io.EOF", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("playback did not end after the chatroom closed")
 	}
 }
