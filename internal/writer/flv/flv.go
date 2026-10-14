@@ -14,6 +14,7 @@ import (
 
 	"github.com/vodlabs-io/recorder/internal/agora"
 	"github.com/vodlabs-io/recorder/internal/flvfix"
+	"github.com/vodlabs-io/recorder/internal/fmp4"
 	"github.com/vodlabs-io/recorder/internal/livejasmin"
 	"github.com/vodlabs-io/recorder/internal/trtc"
 	"github.com/vodlabs-io/recorder/internal/vlerror"
@@ -240,7 +241,8 @@ func (w *flvWriter) openStream(ctx context.Context, url string) (io.ReadCloser, 
 		return fail(fmt.Errorf("server returned status %d: %s", resp.StatusCode, resp.Status))
 	}
 
-	return resp.Body, nil
+	// An origin may serve a progressive fragmented MP4 in place of FLV.
+	return fmp4.Sniff(resp.Body), nil
 }
 
 // guardStream aborts the in-flight request when the part's context ends, so a
