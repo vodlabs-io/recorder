@@ -295,6 +295,16 @@
 		"channel_url": "https://live.vkvideo.ru/{username}"
 	},
 	{
+		"name": "younow",
+		"display_name": "YouNow",
+		"channel_url": "https://www.younow.com/{username}",
+		"login": {
+			"url": "https://www.younow.com/explore",
+			"cookie_domains": ["younow.com"],
+			"session_cookie": "slt"
+		}
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"

@@ -20,6 +20,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/trtc"
 	"github.com/vodlabs-io/recorder/internal/vlerror"
 	"github.com/vodlabs-io/recorder/internal/xcams"
+	"github.com/vodlabs-io/recorder/internal/younow"
 )
 
 const (
@@ -193,8 +194,9 @@ func (w *flvWriter) closeOutputFile() {
 // openStream issues the stream request (or joins the Agora channel or TRTC room
 // an agora:// or trtc:// URL names, takes a seat in the LiveJasmin room a
 // livejasmin:// URL names, plays the AsianCamModels broadcast an
-// asiancammodels:// URL names, or takes a seat in the XCams room an xcams://
-// URL names) on a context of its own so the response can outlive
+// asiancammodels:// URL names, takes a seat in the XCams room an xcams://
+// URL names, or joins the YouNow broadcast a younow:// URL names) on a context
+// of its own so the response can outlive
 // the part that opened it (see Handoff). guardStream ties it back to the part
 // for every other kind of ending — including the dial, which a cancelled part
 // must still abort.
@@ -241,6 +243,13 @@ func (w *flvWriter) openStream(ctx context.Context, url string) (io.ReadCloser, 
 		stream, err := xcams.Open(streamCtx, url, w.logger)
 		if err != nil {
 			return fail(fmt.Errorf("failed to take a seat: %w", err))
+		}
+		return stream, nil
+	}
+	if younow.IsURL(url) {
+		stream, err := younow.Open(streamCtx, url, w.logger)
+		if err != nil {
+			return fail(fmt.Errorf("failed to join broadcast: %w", err))
 		}
 		return stream, nil
 	}

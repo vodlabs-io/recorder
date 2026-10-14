@@ -232,6 +232,9 @@ var scrapeDomains = map[string][]string{
 		"okcdn.ru",   // the stream CDN
 		"vkuser.net", // the stream CDN
 	},
+	"younow": {
+		"younow.com",
+	},
 	"eplay": {
 		"eplay.com",
 		"letso.live",
