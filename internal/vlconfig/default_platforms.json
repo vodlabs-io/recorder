@@ -275,6 +275,11 @@
 		"channel_url": "https://www.xcams.com/chat/{username}/"
 	},
 	{
+		"name": "vklive",
+		"display_name": "VK Video Live",
+		"channel_url": "https://live.vkvideo.ru/{username}"
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"

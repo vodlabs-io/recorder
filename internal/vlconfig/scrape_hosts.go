@@ -216,6 +216,12 @@ var scrapeDomains = map[string][]string{
 		"webxcams.cam",
 		"images-dnxlive.com",
 	},
+	"vklive": {
+		"vkvideo.ru",
+		"vkplay.live",
+		"okcdn.ru",   // the stream CDN
+		"vkuser.net", // the stream CDN
+	},
 	"eplay": {
 		"eplay.com",
 		"letso.live",
