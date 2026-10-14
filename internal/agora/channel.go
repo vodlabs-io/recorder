@@ -20,7 +20,7 @@ const Scheme = "agora"
 //
 // Its URL form is agora://<app id>/<channel>?token=<t>&uid=<n>, optionally with
 // mint=<platform>&room=<id>&user=<id> when the platform binds a token to one
-// viewer.
+// viewer, and codec=vp8 for a channel whose broadcasters send VP8.
 type Channel struct {
 	AppID string
 	Name  string
@@ -35,7 +35,15 @@ type Channel struct {
 	// User the broadcaster's, for finding a broadcast that replaced it.
 	Room string
 	User string
+	// Codec is the video codec the channel's broadcasters send: CodecVP8,
+	// or empty for H.264.
+	Codec string
 }
+
+// CodecVP8 marks a channel carrying VP8 video. An Agora app picks one codec
+// for all its clients, and a gateway forwards a broadcaster's video only to an
+// audience that joined with the same one.
+const CodecVP8 = "vp8"
 
 // IsURL reports whether u names an Agora channel.
 func IsURL(u string) bool {
@@ -58,6 +66,10 @@ func Parse(raw string) (Channel, error) {
 		Mint:  u.Query().Get("mint"),
 		Room:  u.Query().Get("room"),
 		User:  u.Query().Get("user"),
+		Codec: u.Query().Get("codec"),
+	}
+	if c.Codec != "" && c.Codec != CodecVP8 {
+		return Channel{}, fmt.Errorf("agora url: unsupported codec %q", c.Codec)
 	}
 	if uid := u.Query().Get("uid"); uid != "" {
 		n, err := strconv.ParseUint(uid, 10, 32)
@@ -89,6 +101,9 @@ func (c Channel) URL() string {
 	}
 	if c.User != "" {
 		q.Set("user", c.User)
+	}
+	if c.Codec != "" {
+		q.Set("codec", c.Codec)
 	}
 	u := url.URL{Scheme: Scheme, Host: c.AppID, Path: "/" + c.Name, RawQuery: q.Encode()}
 	return u.String()

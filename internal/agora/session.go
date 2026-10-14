@@ -17,10 +17,12 @@ import (
 	"github.com/vodlabs-io/recorder/internal/rtcflv"
 )
 
-// Payload types offered for the two codecs recorded, matching the Web SDK's.
+// Payload types offered for the codecs recorded, matching the Web SDK's.
 const (
 	ptH264    = rtcflv.PTH264
 	ptH264RTX = rtcflv.PTH264RTX
+	ptVP8     = rtcflv.PTVP8
+	ptVP8RTX  = rtcflv.PTVP8RTX
 	ptOpus    = rtcflv.PTOpus
 )
 
@@ -106,7 +108,7 @@ func (s *session) connect(ctx context.Context, client *http.Client) error {
 		s.ch.UID = grant.UID
 	}
 
-	pc, offer, err := newPeer()
+	pc, offer, err := newPeer(s.ch.Codec == CodecVP8)
 	if err != nil {
 		return err
 	}
@@ -131,7 +133,7 @@ func (s *session) connect(ctx context.Context, client *http.Client) error {
 	if err := json.Unmarshal(reply, &joined); err != nil {
 		return fmt.Errorf("decode join reply: %w", err)
 	}
-	answer, err := joined.answerSDP()
+	answer, err := joined.answerSDP(s.ch.Codec == CodecVP8)
 	if err != nil {
 		return err
 	}
@@ -157,6 +159,12 @@ func (s *session) joinMessage(sid string, grant apGrant, offer localParams) map[
 		"level-asymmetry-allowed": "1", "packetization-mode": "1", "profile-level-id": "42001f"}}})
 	rtx := codec(ptH264RTX, "rtx", 90000, map[string]any{"rtcpFeedbacks": []any{},
 		"fmtp": map[string]any{"parameters": map[string]string{"apt": fmt.Sprint(ptH264)}}})
+	video, codecName := h264, "h264"
+	if s.ch.Codec == CodecVP8 {
+		video, codecName = codec(ptVP8, "VP8", 90000, map[string]any{"rtcpFeedbacks": fb}), CodecVP8
+		rtx = codec(ptVP8RTX, "rtx", 90000, map[string]any{"rtcpFeedbacks": []any{},
+			"fmtp": map[string]any{"parameters": map[string]string{"apt": fmt.Sprint(ptVP8)}}})
+	}
 	opus := codec(ptOpus, "opus", 48000, map[string]any{"rtcpFeedbacks": []any{},
 		"fmtp": map[string]any{"parameters": map[string]string{"minptime": "10", "useinbandfec": "1"}}})
 	opus["rtpMap"].(map[string]any)["encodingParameters"] = 2
@@ -165,7 +173,7 @@ func (s *session) joinMessage(sid string, grant apGrant, offer localParams) map[
 	return map[string]any{
 		"p2p_id": 1, "session_id": sid, "app_id": s.ch.AppID, "channel_key": s.ch.Token,
 		"channel_name": s.ch.Name, "sdk_version": sdkVersion, "browser": userAgent,
-		"process_id": "process-" + randomHex(16), "mode": "live", "codec": "h264", "role": "audience",
+		"process_id": "process-" + randomHex(16), "mode": "live", "codec": codecName, "role": "audience",
 		"has_changed_gateway": false, "ap_response": grant.joinResponse(), "extend": "",
 		"details": map[string]any{}, "features": map[string]any{"rejoin": true},
 		"attributes": map[string]any{"userAttributes": map[string]any{
@@ -186,7 +194,7 @@ func (s *session) joinMessage(sid string, grant apGrant, offer localParams) map[
 			"rtpCapabilities": map[string]any{
 				"send": none, "recv": none,
 				"sendrecv": map[string]any{"audioCodecs": []any{opus}, "audioExtensions": []any{},
-					"videoCodecs": []any{h264, rtx}, "videoExtensions": []any{}},
+					"videoCodecs": []any{video, rtx}, "videoExtensions": []any{}},
 			},
 			"version": "2",
 		},
@@ -280,12 +288,14 @@ type localParams struct {
 	ufrag, pwd, fingerprint string
 }
 
-// newPeer creates a peer connection with one receive-only video and audio
-// transceiver, and returns it with its offer applied.
-func newPeer() (*webrtc.PeerConnection, localParams, error) {
+// newPeer creates a peer connection with one receive-only video (H.264, or
+// VP8 when vp8 is set) and audio transceiver, and returns it with its offer
+// applied.
+func newPeer(vp8 bool) (*webrtc.PeerConnection, localParams, error) {
 	pc, err := rtcflv.NewPeerConnection(webrtc.Configuration{}, rtcflv.PeerOptions{
 		H264Fmtp: "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f",
 		Kinds:    []webrtc.RTPCodecType{webrtc.RTPCodecTypeVideo, webrtc.RTPCodecTypeAudio},
+		VP8:      vp8,
 	})
 	if err != nil {
 		return nil, localParams{}, err

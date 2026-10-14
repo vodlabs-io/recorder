@@ -44,9 +44,9 @@ type joinReply struct {
 }
 
 // answerSDP renders the gateway's join answer as the SDP answer to the local
-// offer: an ICE-lite peer sending H.264 (with RTX) and Opus on the SSRCs it
-// pre-subscribed the client to.
-func (j joinReply) answerSDP() (string, error) {
+// offer: an ICE-lite peer sending H.264 (or VP8 when vp8 is set, with RTX) and
+// Opus on the SSRCs it pre-subscribed the client to.
+func (j joinReply) answerSDP(vp8 bool) (string, error) {
 	o := j.Ortc
 	if o.IceParameters.IceUfrag == "" || len(o.IceParameters.Candidates) == 0 {
 		return "", errors.New("join reply lacks ICE parameters")
@@ -85,16 +85,24 @@ func (j joinReply) answerSDP() (string, error) {
 	w("a=msid-semantic:WMS")
 	w("a=ice-lite")
 
-	w("m=video 9 UDP/TLS/RTP/SAVPF %d %d", ptH264, ptH264RTX)
+	pt, rtx := ptH264, ptH264RTX
+	if vp8 {
+		pt, rtx = ptVP8, ptVP8RTX
+	}
+	w("m=video 9 UDP/TLS/RTP/SAVPF %d %d", pt, rtx)
 	transport()
 	w("a=mid:0")
-	w("a=rtpmap:%d H264/90000", ptH264)
-	w("a=fmtp:%d level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f", ptH264)
-	w("a=rtcp-fb:%d nack", ptH264)
-	w("a=rtcp-fb:%d nack pli", ptH264)
-	w("a=rtcp-fb:%d ccm fir", ptH264)
-	w("a=rtpmap:%d rtx/90000", ptH264RTX)
-	w("a=fmtp:%d apt=%d", ptH264RTX, ptH264)
+	if vp8 {
+		w("a=rtpmap:%d VP8/90000", pt)
+	} else {
+		w("a=rtpmap:%d H264/90000", pt)
+		w("a=fmtp:%d level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f", pt)
+	}
+	w("a=rtcp-fb:%d nack", pt)
+	w("a=rtcp-fb:%d nack pli", pt)
+	w("a=rtcp-fb:%d ccm fir", pt)
+	w("a=rtpmap:%d rtx/90000", rtx)
+	w("a=fmtp:%d apt=%d", rtx, pt)
 	w("a=sendonly")
 	w("a=rtcp-mux")
 	w("a=rtcp-rsize")

@@ -20,14 +20,16 @@ const (
 	nalAUD = 9
 )
 
-// flvMuxer writes H.264 access units and Opus packets as an FLV stream: AVC
-// video in the classic layout, Opus audio in the enhanced (ex-header) layout,
-// each preceded by its sequence header. It is not safe for concurrent use.
+// flvMuxer writes H.264 access units, VP8 frames and Opus packets as an FLV
+// stream: AVC video in the classic layout, VP8 and Opus in the enhanced
+// (ex-header) layout, each preceded by its sequence header. It is not safe for
+// concurrent use.
 type flvMuxer struct {
 	w          io.Writer
 	headerDone bool
 	sps, pps   []byte
 	avcSent    []byte // the AVCDecoderConfigurationRecord last written
+	vp8Sent    bool
 	opusSent   bool
 	channels   int
 }
@@ -83,6 +85,28 @@ func (m *flvMuxer) writeVideo(tsMs int64, au []byte) error {
 	return m.tag(flvVideo, tsMs, append(head, body.Bytes()...))
 }
 
+// writeVP8 writes one VP8 frame at tsMs, under the enhanced-FLV FourCC
+// "vp08". Frames before the first keyframe are dropped by the caller; the
+// first frame is preceded by a SequenceStart carrying the VP codec
+// configuration record (VP8 has no out-of-band decoder setup, so the record
+// only names the profile and colour format).
+func (m *flvMuxer) writeVP8(tsMs int64, frame []byte) error {
+	if len(frame) == 0 {
+		return nil
+	}
+	if !m.vp8Sent {
+		if err := m.tag(flvVideo, tsMs, append([]byte{0x80 | 1<<4 | 0, 'v', 'p', '0', '8'}, vp8Config(frame)...)); err != nil {
+			return err
+		}
+		m.vp8Sent = true
+	}
+	head := []byte{0x80 | 2<<4 | 1, 'v', 'p', '0', '8'} // inter frame, CodedFrames
+	if isVP8Keyframe(frame) {
+		head[0] = 0x80 | 1<<4 | 1
+	}
+	return m.tag(flvVideo, tsMs, append(head, frame...))
+}
+
 // writeAudio writes one Opus packet at tsMs.
 func (m *flvMuxer) writeAudio(tsMs int64, pkt []byte) error {
 	if len(pkt) == 0 {
@@ -136,6 +160,27 @@ func opusHead(channels int) []byte {
 	h = binary.LittleEndian.AppendUint32(h, 48000)
 	h = binary.LittleEndian.AppendUint16(h, 0) // output gain
 	return append(h, 0)                        // channel mapping family 0
+}
+
+// vp8Config is the VPCodecConfigurationRecord for a VP8 stream (the vpcC box
+// payload after its version and flags): 8-bit 4:2:0, colour unspecified.
+func vp8Config(frame []byte) []byte {
+	profile := byte(0)
+	if len(frame) > 0 {
+		profile = frame[0] >> 1 & 0x07 // VP8 "version", which the record calls profile
+	}
+	return []byte{
+		profile, 10, // profile, level (unused by VP8)
+		8<<4 | 1<<1 | 0, // bit depth 8, chroma 4:2:0 colocated, limited range
+		2, 2, 2,         // colour primaries, transfer, matrix: unspecified
+		0, 0, // no codec initialization data
+	}
+}
+
+// isVP8Keyframe reports whether a VP8 frame is a key frame: its frame tag's
+// first bit is 0, and a key frame carries the start code 9d 01 2a.
+func isVP8Keyframe(frame []byte) bool {
+	return len(frame) >= 10 && frame[0]&1 == 0 && frame[3] == 0x9d && frame[4] == 0x01 && frame[5] == 0x2a
 }
 
 // hasIDR reports whether an AVCC access unit contains an IDR slice.
