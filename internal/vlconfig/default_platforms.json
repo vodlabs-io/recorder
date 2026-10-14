@@ -255,6 +255,11 @@
 		"channel_url": "https://sexchat.hu/mypage/{username}/"
 	},
 	{
+		"name": "cams",
+		"display_name": "Cams.com",
+		"channel_url": "https://www.cams.com/{username}"
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"

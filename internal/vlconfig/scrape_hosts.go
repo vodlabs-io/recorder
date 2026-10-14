@@ -199,6 +199,11 @@ var scrapeDomains = map[string][]string{
 		"sexchat.hu",
 		"apn2.com",
 	},
+	"cams": {
+		"cams.com",
+		"streamray.com",
+		"securedataimages.com",
+	},
 	"eplay": {
 		"eplay.com",
 		"letso.live",
