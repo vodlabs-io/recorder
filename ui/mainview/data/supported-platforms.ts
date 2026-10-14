@@ -38,6 +38,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   "17live": "17LIVE",
   niconico: "Niconico",
   fc2live: "FC2 Live",
+  flirt4free: "Flirt4Free",
   streamate: "Streamate",
   cam4: "CAM4",
   camsoda: "CamSoda",
