@@ -24,6 +24,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   liveme: "LiveMe",
   twitcasting: "TwitCasting",
   douyu: "Douyu",
+  huya: "Huya",
   mixch: "Mixch",
   kuaishou: "Kuaishou",
   rumble: "Rumble",

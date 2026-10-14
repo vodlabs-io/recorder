@@ -103,6 +103,11 @@
 		"channel_url": "https://www.douyu.com/{username}"
 	},
 	{
+		"name": "huya",
+		"display_name": "Huya",
+		"channel_url": "https://www.huya.com/{username}"
+	},
+	{
 		"name": "mixch",
 		"display_name": "Mixch",
 		"channel_url": "https://mixch.tv/u/{username}/live"

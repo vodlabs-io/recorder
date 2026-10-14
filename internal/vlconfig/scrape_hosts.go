@@ -103,6 +103,9 @@ var scrapeDomains = map[string][]string{
 		"douyu.com",
 		"douyucdn.cn",
 	},
+	"huya": {
+		"huya.com",
+	},
 	"mixch": {
 		"mixch.tv",
 		"live-video.net",
