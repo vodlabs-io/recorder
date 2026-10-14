@@ -189,3 +189,40 @@ func TestMediaClockDistrustsForeignReports(t *testing.T) {
 		t.Fatalf("a later report brought the foreign timeline back: %v", at)
 	}
 }
+
+func TestFLVMuxerVP8(t *testing.T) {
+	key := []byte{0xb0, 0x03, 0x04, 0x9d, 0x01, 0x2a, 0x00, 0x05, 0xd0, 0x02, 0xaa}
+	inter := []byte{0x31, 0x22, 0x00, 0xbb}
+	var buf bytes.Buffer
+	m := newFLVMuxer(&buf, 2)
+	if err := m.writeVP8(0, key); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.writeVP8(33, inter); err != nil {
+		t.Fatal(err)
+	}
+	tags := readFLV(t, buf.Bytes())
+	if len(tags) != 3 {
+		t.Fatalf("got %d tags, want 3", len(tags))
+	}
+	for i, want := range []struct {
+		first byte
+		ts    uint32
+		body  []byte
+	}{
+		{0x90, 0, nil}, // key frame, SequenceStart
+		{0x91, 0, key},
+		{0xa1, 33, inter}, // inter frame, CodedFrames
+	} {
+		p := tags[i].payload
+		if tags[i].typ != 9 || p[0] != want.first || string(p[1:5]) != "vp08" || tags[i].ts != want.ts {
+			t.Errorf("tag %d: type %d ts %d head % x", i, tags[i].typ, tags[i].ts, p[:min(len(p), 5)])
+		}
+		if want.body != nil && !bytes.Equal(p[5:], want.body) {
+			t.Errorf("tag %d: frame not carried verbatim", i)
+		}
+	}
+	if !isVP8Keyframe(key) || isVP8Keyframe(inter) {
+		t.Error("isVP8Keyframe misclassifies")
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -19,6 +20,8 @@ func mint(ctx context.Context, client *http.Client, ch Channel) (Channel, error)
 	switch ch.Mint {
 	case "superlive":
 		return superlive.mint(ctx, client, ch)
+	case "manyvids":
+		return manyvids.mint(ctx, client, ch)
 	}
 	return Channel{}, fmt.Errorf("unknown token mint %q", ch.Mint)
 }
@@ -197,4 +200,55 @@ func (m *superliveMinter) call(ctx context.Context, client *http.Client, path, d
 		return fmt.Errorf("superlive %s: decode: %w", path, err)
 	}
 	return nil
+}
+
+// manyvids mints ManyVids viewer grants. Joining a room's channel as a guest
+// hands out a fresh uid and token each time, so every recording takes its own.
+var manyvids = &manyvidsMinter{base: "https://api.manyvids.com/live/room/"}
+
+type manyvidsMinter struct {
+	base string
+}
+
+func (m *manyvidsMinter) mint(ctx context.Context, client *http.Client, ch Channel) (Channel, error) {
+	if ch.Room == "" {
+		return Channel{}, errors.New("manyvids mint needs the room id")
+	}
+	b, _ := json.Marshal(map[string]string{"visibility": "PUBLIC"})
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.base+url.PathEscape(ch.Room)+"/joinChannel", bytes.NewReader(b))
+	if err != nil {
+		return Channel{}, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Origin", "https://www.manyvids.com")
+	req.Header.Set("Referer", "https://www.manyvids.com/")
+	resp, err := client.Do(req)
+	if err != nil {
+		return Channel{}, fmt.Errorf("manyvids joinChannel: %w", err)
+	}
+	defer resp.Body.Close()
+	var reply struct {
+		Message     string `json:"message"`
+		MeetingInfo struct {
+			ChannelID string `json:"channelId"`
+			RTC       string `json:"rtc"`
+			UID       uint32 `json:"uid"`
+		} `json:"meetingInfo"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&reply); err != nil {
+		return Channel{}, fmt.Errorf("manyvids joinChannel: status %d: %w", resp.StatusCode, err)
+	}
+	mi := reply.MeetingInfo
+	if resp.StatusCode != http.StatusOK || mi.RTC == "" || mi.UID == 0 {
+		// A room that is not broadcasting answers 401 "Creator is not currently Live".
+		return Channel{}, fmt.Errorf("manyvids joinChannel: status %d: %s", resp.StatusCode, reply.Message)
+	}
+	ch.Token, ch.UID = mi.RTC, mi.UID
+	if mi.ChannelID != "" {
+		ch.Name = mi.ChannelID
+	}
+	return ch, nil
 }
