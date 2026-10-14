@@ -124,10 +124,7 @@ export function SettingsProcessing() {
             }
           >
             <SettingsHint>
-              Used when merging VOD files recorded at different resolutions.
-              "Automatic" picks the fastest working hardware encoder on this
-              machine, falling back to software. Hardware options that fail a
-              self-test are disabled.
+              "Automatic" picks the fastest working hardware encoder on this machine, falling back to software.
             </SettingsHint>
           </SettingsRow>
 
