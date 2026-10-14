@@ -51,6 +51,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   cams: "Cams.com",
   asiancammodels: "AsianCamModels",
   manyvids: "ManyVids",
+  xcams: "XCams",
   eplay: "ePlay",
   myfreecams: "MyFreeCams",
   x: "X",

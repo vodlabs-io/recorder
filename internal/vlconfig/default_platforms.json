@@ -270,6 +270,11 @@
 		"channel_url": "https://www.manyvids.com/live/cam/{username}"
 	},
 	{
+		"name": "xcams",
+		"display_name": "XCams",
+		"channel_url": "https://www.xcams.com/chat/{username}/"
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"
