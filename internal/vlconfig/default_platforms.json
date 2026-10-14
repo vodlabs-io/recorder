@@ -265,6 +265,11 @@
 		"channel_url": "https://www.asiancammodels.com/{username}/webcam/"
 	},
 	{
+		"name": "manyvids",
+		"display_name": "ManyVids",
+		"channel_url": "https://www.manyvids.com/live/cam/{username}"
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"
