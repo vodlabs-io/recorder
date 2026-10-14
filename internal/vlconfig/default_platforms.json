@@ -245,6 +245,11 @@
 		"channel_url": "https://imlive.com/live-sex-chat/cam-girls/{username}/"
 	},
 	{
+		"name": "sexchat",
+		"display_name": "Sexchat",
+		"channel_url": "https://sexchat.hu/mypage/{username}/"
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"

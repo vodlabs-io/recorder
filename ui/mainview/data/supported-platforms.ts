@@ -46,6 +46,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   dreamcam: "Dreamcam",
   xlovecam: "XLoveCam",
   imlive: "ImLive",
+  sexchat: "Sexchat",
   eplay: "ePlay",
   myfreecams: "MyFreeCams",
   x: "X",
