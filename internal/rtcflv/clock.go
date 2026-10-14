@@ -13,6 +13,11 @@ const srWait = 3 * time.Second
 // before the track is re-anchored on it.
 const reanchorAfter = 500 * time.Millisecond
 
+// maxSkew is how far from its arrival a sample stamped from the Sender
+// Reports may land before the track's reports are taken to describe another
+// timeline than its packets.
+const maxSkew = 30 * time.Second
+
 // mediaClock maps each track's RTP timestamps onto one wall clock, so audio
 // and video line up the way the broadcaster captured them.
 //
@@ -22,7 +27,10 @@ const reanchorAfter = 500 * time.Millisecond
 // them would step the timeline back and forth. A report that disagrees with
 // the anchor by more than reanchorAfter means the RTP clock itself jumped, and
 // re-anchors the track. A track whose sender never reports within srWait is
-// stamped from when its first packet arrived instead, and stays that way.
+// stamped from when its first packet arrived instead, and stays that way; so
+// is a track whose reports place a sample more than maxSkew from when it
+// arrived, which happens when a server reports one RTP timestamp base and
+// sends packets on another.
 type mediaClock struct {
 	mu     sync.Mutex
 	tracks map[uint32]*trackClock
@@ -81,7 +89,11 @@ func (c *mediaClock) wall(ssrc uint32, rate uint32, rtpTS uint32, now time.Time)
 	switch {
 	case t.arrival:
 	case t.haveSR:
-		return t.srNTP.Add(ticks(rtpTS-t.srRTP, t.rate)), true
+		at := t.srNTP.Add(ticks(rtpTS-t.srRTP, t.rate))
+		if at.Sub(now).Abs() <= maxSkew {
+			return at, true
+		}
+		t.arrival = true
 	case now.Sub(t.firstAt) < srWait:
 		return time.Time{}, false
 	default:
