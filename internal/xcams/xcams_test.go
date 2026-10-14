@@ -46,13 +46,13 @@ func frame(lines ...string) []byte {
 func TestEnded(t *testing.T) {
 	for line, want := range map[string]bool{
 		`{"ACTION":"CLOSE_REASON","VOYEUR_ALLOWED":"Y","REASON":"CAMMER_TO_GROUP"}`:                    true,
-		`{"ACTION":"CLOSE_REASON","REASON":"CAMMER_BLUR_DISAPPEARED"}`:                                  false,
+		`{"ACTION":"CLOSE_REASON","REASON":"CAMMER_BLUR_DISAPPEARED"}`:                                 false,
 		`{"ACCOUNT":"c239252","NEW_VALUE":"O2M","ACTION":"CAMMER_UPDATE","EVENT":"UPDATE_CHAT_TYPE"}`:  true,
 		`{"ACCOUNT":"c239252","NEW_VALUE":"FREE","ACTION":"CAMMER_UPDATE","EVENT":"UPDATE_CHAT_TYPE"}`: false,
-		`{"ACTION":"CHAT_CONTROL_chatroom_remove","OBJECT_TYPE":"chatroom"}`:                            true,
-		`{"SUCCESS":false,"ACTION":"PING","INFO":"NO_ACCESS","ACCESS":false}`:                           true,
-		`{"SUCCESS":true,"ACTION":"PING","ACCESS":true}`:                                                false,
-		`{"ACTION":"TEXT","MESSAGE_TYPE":"TEXT","TEXT":"hi"}`:                                           false,
+		`{"ACTION":"CHAT_CONTROL_chatroom_remove","OBJECT_TYPE":"chatroom"}`:                           true,
+		`{"SUCCESS":false,"ACTION":"PING","INFO":"NO_ACCESS","ACCESS":false}`:                          true,
+		`{"SUCCESS":true,"ACTION":"PING","ACCESS":true}`:                                               false,
+		`{"ACTION":"TEXT","MESSAGE_TYPE":"TEXT","TEXT":"hi"}`:                                          false,
 	} {
 		lines := parseFrame(frame(line))
 		if len(lines) != 1 {
@@ -66,6 +66,9 @@ func TestEnded(t *testing.T) {
 		t.Error("a frame that is not a visitorApp event parsed")
 	}
 }
+
+// initReply is the stub visitor socket's INIT_PAGE reply.
+var initReply = `{"SUCCESS":true,"ACTION":"INIT_PAGE","FREE_SECONDS_LEFT":1800,"VISITOR_HASH":"abc_1"}`
 
 // stubSocket is a visitor socket that seats a guest with enter as the
 // ENTER_VISITOR reply, then sends after.
@@ -95,7 +98,7 @@ func stubSocket(t *testing.T, enter string, after ...string) {
 			case "TEST_CONNECTION":
 				_ = c.Write(ctx, websocket.MessageText, frame(`{"ACTION":"TEST_CONNECTION"}`))
 			case "INIT_PAGE":
-				_ = c.Write(ctx, websocket.MessageText, frame(`{"SUCCESS":true,"ACTION":"INIT_PAGE","VISITOR_HASH":"abc_1"}`))
+				_ = c.Write(ctx, websocket.MessageText, frame(initReply))
 			case "ENTER_VISITOR":
 				if m["CAMMER"] != "c239252" || m["CHAT_MODE"] != "FREE" {
 					t.Errorf("enter %v", m)
@@ -182,6 +185,41 @@ func TestWatchEndsOnAPaidShow(t *testing.T) {
 	_ = pw.CloseWithError(errors.New("closed pipe"))
 	if _, err := w.Read(make([]byte, 1)); err != io.EOF {
 		t.Errorf("read after a paid show = %v, want EOF", err)
+	}
+	_ = w.Close()
+}
+
+func TestTakeSeatWithTheAllowanceSpent(t *testing.T) {
+	stubSocket(t, `{"SUCCESS":false,"ACTION":"ENTER_VISITOR","INFO":"NO_FREE_SECONDS_LEFT","FREE_SECONDS":0,"NO_FREE_SECONDS_LEFT_REASON":"IP_LIMIT"}`)
+	if _, err := takeSeat(context.Background(), Room{Account: "c239252"}, quietLogger()); !errors.Is(err, ErrNoFreeTime) {
+		t.Errorf("takeSeat = %v, want ErrNoFreeTime", err)
+	}
+	old := initReply
+	initReply = `{"SUCCESS":true,"ACTION":"INIT_PAGE","FREE_SECONDS_LEFT":0,"VISITOR_HASH":"abc_1"}`
+	defer func() { initReply = old }()
+	if _, err := takeSeat(context.Background(), Room{Account: "c239252"}, quietLogger()); !errors.Is(err, ErrNoFreeTime) {
+		t.Errorf("takeSeat with none left = %v, want ErrNoFreeTime", err)
+	}
+}
+
+func TestWatchEndsWhenTheAllowanceRunsOut(t *testing.T) {
+	stubSocket(t, `{"SUCCESS":true,"ACTION":"ENTER_VISITOR","CHAT_TYPE":"FREE","VISITOR_HASH":"def_2"}`,
+		`{"SUCCESS":true,"ACTION":"PING","FREE_SECONDS":0,"INFO":"NO_FREE_SECONDS_LEFT","NO_FREE_SECONDS_LEFT_REASON":"IP_LIMIT","ACCESS":true}`)
+	s, err := takeSeat(context.Background(), Room{Account: "c239252"}, quietLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, pw := io.Pipe()
+	stream := &closer{Reader: pr, closed: make(chan struct{})}
+	w := s.watch(stream)
+	select {
+	case <-stream.closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the playback was not stopped")
+	}
+	_ = pw.CloseWithError(errors.New("closed pipe"))
+	if _, err := w.Read(make([]byte, 1)); !errors.Is(err, ErrNoFreeTime) {
+		t.Errorf("read after the allowance ran out = %v, want ErrNoFreeTime", err)
 	}
 	_ = w.Close()
 }

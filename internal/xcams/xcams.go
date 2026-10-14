@@ -6,6 +6,10 @@
 // to that hash. So an xcams:// URL names the model's account, and the recorder
 // takes a seat of its own each time it opens it. It holds the seat while it
 // plays, and ends the recording once the model leaves the free chat.
+//
+// The site meters guests' free viewing per address: every guest seated from
+// one address draws on a shared allowance (1800 s), and once it is spent no
+// guest from there may watch. A recording then ends with ErrNoFreeTime.
 package xcams
 
 import (
@@ -42,6 +46,14 @@ var (
 	seatAttempts   = 2
 	errNotFreeChat = errors.New("xcams: the room is not in its free chat")
 )
+
+// ErrNoFreeTime reports that the site's free viewing allowance for this
+// address is spent.
+var ErrNoFreeTime = errors.New("xcams: the free viewing time for this address has run out")
+
+// infoNoFreeTime is the INFO the visitor socket gives a guest whose
+// address's allowance is spent.
+const infoNoFreeTime = "NO_FREE_SECONDS_LEFT"
 
 // userAgent is the browser the seat presents itself as.
 const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
@@ -128,6 +140,9 @@ type message struct {
 	Event       string `json:"EVENT"`
 	NewValue    string `json:"NEW_VALUE"`
 	Reason      string `json:"REASON"`
+	// FreeSecondsLeft is what remains of the address's free viewing
+	// allowance, in INIT_PAGE.
+	FreeSecondsLeft *int `json:"FREE_SECONDS_LEFT"`
 }
 
 // seat is a guest's place in a room, held on the visitor socket.
@@ -186,6 +201,9 @@ func (s *seat) join(ctx context.Context, r Room) error {
 	if init.Success == nil || !*init.Success {
 		return fmt.Errorf("xcams visitor socket refused the guest: %s", init.Info)
 	}
+	if init.FreeSecondsLeft != nil && *init.FreeSecondsLeft <= 0 {
+		return ErrNoFreeTime
+	}
 	if err := s.send(ctx, map[string]any{
 		"ACTION": "ENTER_VISITOR", "CHAT_MODE": "FREE", "MOBILE_STREAM": "Y", "CAMMER": r.Account,
 		"STREAM_TYPE": "WebRTCStream", "MOBILE_APP": "N", "IS_NICKNAME_PROMOTION": "N",
@@ -196,6 +214,9 @@ func (s *seat) join(ctx context.Context, r Room) error {
 	enter, err := s.await(ctx, "ENTER_VISITOR")
 	if err != nil {
 		return err
+	}
+	if enter.Info == infoNoFreeTime {
+		return ErrNoFreeTime
 	}
 	if enter.Success == nil || !*enter.Success {
 		return fmt.Errorf("%w: %s", errNotFreeChat, enter.Info)
@@ -362,11 +383,13 @@ func ended(m message) string {
 }
 
 // watched is a playback that ends, with io.EOF, once the model leaves the
-// free chat.
+// free chat, or with ErrNoFreeTime once the address's allowance is spent.
 type watched struct {
 	io.ReadCloser
 	seat  *seat
 	ended atomic.Bool
+	// spent is set before ended when the allowance ran out.
+	spent atomic.Bool
 }
 
 func (s *seat) watch(stream io.ReadCloser) *watched {
@@ -383,6 +406,13 @@ func (s *seat) watch(stream io.ReadCloser) *watched {
 				}
 				return
 			case m := <-s.lines:
+				if m.Action == "PING" && m.Info == infoNoFreeTime {
+					s.logger.Info("The site's free viewing time for this address ran out, ending the recording")
+					w.spent.Store(true)
+					w.ended.Store(true)
+					_ = stream.Close()
+					return
+				}
 				if why := ended(m); why != "" {
 					s.logger.Info("Free chat ended, ending the recording", "reason", why)
 					w.ended.Store(true)
@@ -398,6 +428,9 @@ func (s *seat) watch(stream io.ReadCloser) *watched {
 func (w *watched) Read(p []byte) (int, error) {
 	n, err := w.ReadCloser.Read(p)
 	if err != nil && w.ended.Load() {
+		if w.spent.Load() {
+			return n, ErrNoFreeTime
+		}
 		return n, io.EOF
 	}
 	return n, err
