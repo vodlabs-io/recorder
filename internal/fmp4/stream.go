@@ -72,6 +72,14 @@ func (s *flvStream) Close() error {
 	return err
 }
 
+// maxJump is the largest step in a stream's decode times taken as the stream
+// running on; a larger one, either way, is a restart of its clock.
+const maxJump = 5000
+
+// frameGap is the step placed between the last frame before a clock restart
+// and the first after it.
+const frameGap = 33
+
 func remux(src io.Reader, w io.Writer) error {
 	d := NewDemuxer(src)
 	mux := NewFLVMuxer(w)
@@ -92,6 +100,15 @@ func remux(src io.Reader, w io.Writer) error {
 		}
 		ts := base + smp.DTS
 		if smp.Video {
+			if lastVideo >= 0 && (ts < lastVideo-maxJump || ts > lastVideo+maxJump) {
+				// The stream's clock restarted: carry the timeline on from
+				// its next keyframe.
+				if !smp.Key {
+					continue
+				}
+				base = lastVideo + frameGap - smp.DTS
+				ts = base + smp.DTS
+			}
 			if ts <= lastVideo {
 				continue
 			}
@@ -108,7 +125,9 @@ func remux(src io.Reader, w io.Writer) error {
 			}
 			continue
 		}
-		if ts < 0 || ts <= lastAudio {
+		// Audio from across a clock restart the video has not re-based yet
+		// is dropped.
+		if ts < 0 || ts <= lastAudio || ts < lastVideo-maxJump || ts > lastVideo+maxJump {
 			continue
 		}
 		lastAudio = ts
