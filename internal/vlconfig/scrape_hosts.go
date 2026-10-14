@@ -211,6 +211,11 @@ var scrapeDomains = map[string][]string{
 	"manyvids": {
 		"manyvids.com",
 	},
+	"xcams": {
+		"xcams.com",
+		"webxcams.cam",
+		"images-dnxlive.com",
+	},
 	"eplay": {
 		"eplay.com",
 		"letso.live",
