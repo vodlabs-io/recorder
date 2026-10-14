@@ -275,40 +275,6 @@ export function About() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="space-y-3">
-            <div className="flex items-start gap-2">
-              <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div className="space-y-2 text-sm">
-                <p className="font-medium">How the free service works</p>
-                <p className="text-muted-foreground">
-                  Whether a streamer is live is answered by the VodLabs service,
-                  which is free to use. In return, your recorder also runs some
-                  of those checks for other people, from your IP address — which
-                  is what keeps the service affordable to run. Platforms see
-                  those requests coming from your address, the same as the
-                  checks for your own streamers.
-                </p>
-                <p className="text-muted-foreground">
-                  Your platform logins are never used for them, and never leave
-                  this device.
-                </p>
-                <Button
-                  variant="link"
-                  className="h-auto p-0 text-sm"
-                  onClick={() =>
-                    getDaemonClient().openExternal(
-                      "https://vodlabs.io/docs/privacy",
-                    )
-                  }
-                >
-                  What the service receives
-                  <ExternalLink className="ml-1 h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
           <CardContent>
             {!info ? (
               <p className="text-sm text-muted-foreground">
