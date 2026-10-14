@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vodlabs-io/recorder/internal/fmp4"
 	"github.com/vodlabs-io/recorder/internal/useragent"
 )
 
@@ -132,7 +133,7 @@ func Open(ctx context.Context, u string, client *http.Client, userAgent string, 
 	pr, pw := io.Pipe()
 	rec := &recording{
 		room: r, client: client, userAgent: userAgent, logger: logger,
-		mux: newFLVMuxer(pw), lastVideo: -1, lastAudio: -1,
+		mux: fmp4.NewFLVMuxer(pw), lastVideo: -1, lastAudio: -1,
 	}
 	go func() {
 		err := rec.run(ctx, first)
@@ -158,7 +159,7 @@ func (s *stream) Close() error {
 type feed struct {
 	seat    seatStream
 	joined  time.Time
-	samples chan sample
+	samples chan fmp4.Sample
 	err     error // why samples closed; read after it has
 	avcC    []byte
 	asc     []byte
@@ -166,17 +167,16 @@ type feed struct {
 }
 
 func startFeed(s seatStream) *feed {
-	f := &feed{seat: s, joined: time.Now(), samples: make(chan sample, 256)}
+	f := &feed{seat: s, joined: time.Now(), samples: make(chan fmp4.Sample, 256)}
 	go func() {
 		defer close(f.samples)
-		d := newDemuxer(s.Stream())
+		d := fmp4.NewDemuxer(s.Stream())
 		for {
-			smp, err := d.next()
+			smp, err := d.Next()
 			if err != nil {
 				f.err = err
 				return
 			}
-			smp.avcC, smp.asc = d.videoConfig(), d.audioConfig()
 			select {
 			case f.samples <- smp:
 			case <-s.Done():
@@ -196,7 +196,7 @@ type recording struct {
 	client    *http.Client
 	userAgent string
 	logger    *slog.Logger
-	mux       *flvMuxer
+	mux       *fmp4.FLVMuxer
 
 	// base maps the current feed's timestamps onto the output timeline.
 	base                 int64
@@ -244,7 +244,7 @@ func (rec *recording) run(ctx context.Context, first seatStream) error {
 	defer stall.Stop()
 
 	for {
-		var curSamples, nextSamples chan sample
+		var curSamples, nextSamples chan fmp4.Sample
 		if cur != nil {
 			curSamples = cur.samples
 		}
@@ -287,7 +287,7 @@ func (rec *recording) run(ctx context.Context, first seatStream) error {
 				}
 				continue
 			}
-			if !smp.video || !smp.key {
+			if !smp.Video || !smp.Key {
 				continue
 			}
 			if cur != nil {
@@ -345,34 +345,34 @@ func (rec *recording) run(ctx context.Context, first seatStream) error {
 
 // write puts one sample of f on the output timeline. A feed starts at its
 // first keyframe, placed one frame after the last frame written.
-func (rec *recording) write(f *feed, smp sample) error {
+func (rec *recording) write(f *feed, smp fmp4.Sample) error {
 	if !f.started {
-		if !smp.video || !smp.key {
+		if !smp.Video || !smp.Key {
 			return nil
 		}
 		f.started = true
 		if rec.lastVideo < 0 {
-			rec.base = -smp.dts
+			rec.base = -smp.DTS
 		} else {
-			rec.base = rec.lastVideo + frameGap - smp.dts
+			rec.base = rec.lastVideo + frameGap - smp.DTS
 		}
-		if err := rec.mux.setConfig(rec.base+smp.dts, smp.avcC, smp.asc); err != nil {
+		if err := rec.mux.SetConfig(rec.base+smp.DTS, smp.AVCC, smp.ASC); err != nil {
 			return err
 		}
 	}
-	ts := rec.base + smp.dts
-	if smp.video {
+	ts := rec.base + smp.DTS
+	if smp.Video {
 		if ts <= rec.lastVideo {
 			return nil
 		}
 		rec.lastVideo = ts
-		return rec.mux.writeVideo(ts, smp.cts, smp.key, smp.data)
+		return rec.mux.WriteVideo(ts, smp.CTS, smp.Key, smp.Data)
 	}
 	if ts < 0 || ts <= rec.lastAudio {
 		return nil
 	}
 	rec.lastAudio = ts
-	return rec.mux.writeAudio(ts, smp.data)
+	return rec.mux.WriteAudio(ts, smp.Data)
 }
 
 func resetTimer(t *time.Timer, d time.Duration) {

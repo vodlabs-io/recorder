@@ -1,4 +1,6 @@
-package livejasmin
+// Package fmp4 reads a progressive fragmented MP4 stream (H.264 and AAC) and
+// writes its samples as FLV.
+package fmp4
 
 import (
 	"bufio"
@@ -8,20 +10,19 @@ import (
 	"io"
 )
 
-// maxBox bounds one box read whole (moov, moof, mdat). The stream sends one
-// sample per fragment, so an mdat is one frame; the cap only stops a corrupt
-// size from allocating without bound.
+// maxBox bounds one box read whole (moov, moof, mdat). The cap only stops a
+// corrupt size from allocating without bound.
 const maxBox = 32 << 20
 
-// sample is one access unit of the stream.
-type sample struct {
-	video bool
-	dts   int64 // decode time, ms from the stream's start
-	cts   int64 // composition offset, ms (video only)
-	key   bool
-	data  []byte
-	// avcC and asc are the stream's codec configuration as of this sample.
-	avcC, asc []byte
+// Sample is one access unit of the stream.
+type Sample struct {
+	Video bool
+	DTS   int64 // decode time, ms from the stream's start
+	CTS   int64 // composition offset, ms (video only)
+	Key   bool
+	Data  []byte
+	// AVCC and ASC are the stream's codec configuration as of this sample.
+	AVCC, ASC []byte
 }
 
 // track is what the init segment says about one track.
@@ -38,16 +39,16 @@ type track struct {
 	decoded uint64
 }
 
-// demuxer reads a progressive fragmented MP4 stream: an init segment (ftyp,
+// Demuxer reads a progressive fragmented MP4 stream: an init segment (ftyp,
 // moov), then moof/mdat pairs.
-type demuxer struct {
+type Demuxer struct {
 	r      *bufio.Reader
 	pos    int64 // stream offset of the next unread byte
 	tracks map[uint32]*track
 	// pending are the samples of the last moof, waiting for their mdat.
 	pending []pendingSample
 	moofPos int64
-	out     []sample
+	out     []Sample
 }
 
 type pendingSample struct {
@@ -59,16 +60,17 @@ type pendingSample struct {
 	key    bool
 }
 
-func newDemuxer(r io.Reader) *demuxer {
-	return &demuxer{r: bufio.NewReaderSize(r, 64<<10), tracks: map[uint32]*track{}}
+// NewDemuxer reads the stream r carries from its start.
+func NewDemuxer(r io.Reader) *Demuxer {
+	return &Demuxer{r: bufio.NewReaderSize(r, 64<<10), tracks: map[uint32]*track{}}
 }
 
-// videoConfig and audioConfig return the codec configuration the init
+// VideoConfig and AudioConfig return the codec configuration the init
 // segment declared, nil before it has been read.
-func (d *demuxer) videoConfig() []byte { return d.config(true) }
-func (d *demuxer) audioConfig() []byte { return d.config(false) }
+func (d *Demuxer) VideoConfig() []byte { return d.config(true) }
+func (d *Demuxer) AudioConfig() []byte { return d.config(false) }
 
-func (d *demuxer) config(video bool) []byte {
+func (d *Demuxer) config(video bool) []byte {
 	for _, t := range d.tracks {
 		if t.video == video {
 			return t.config
@@ -77,20 +79,21 @@ func (d *demuxer) config(video bool) []byte {
 	return nil
 }
 
-// next returns the stream's next sample, in the order the stream carries
-// them.
-func (d *demuxer) next() (sample, error) {
+// Next returns the stream's next sample, in the order the stream carries
+// them, with the codec configuration in force.
+func (d *Demuxer) Next() (Sample, error) {
 	for len(d.out) == 0 {
 		if err := d.readBox(); err != nil {
-			return sample{}, err
+			return Sample{}, err
 		}
 	}
 	s := d.out[0]
 	d.out = d.out[1:]
+	s.AVCC, s.ASC = d.VideoConfig(), d.AudioConfig()
 	return s, nil
 }
 
-func (d *demuxer) readBox() error {
+func (d *Demuxer) readBox() error {
 	start := d.pos
 	var hdr [8]byte
 	if _, err := io.ReadFull(d.r, hdr[:]); err != nil {
@@ -183,7 +186,7 @@ func child(b []byte, typ string) []byte {
 	return found
 }
 
-func (d *demuxer) parseMoov(b []byte) error {
+func (d *Demuxer) parseMoov(b []byte) error {
 	tracks := map[uint32]*track{}
 	err := boxes(b, func(typ string, body []byte) error {
 		if typ != "trak" {
@@ -351,7 +354,7 @@ const (
 // sampleNonSync marks a sample that is not a random access point.
 const sampleNonSync = 0x10000
 
-func (d *demuxer) parseMoof(b []byte) error {
+func (d *Demuxer) parseMoof(b []byte) error {
 	d.pending = d.pending[:0]
 	return boxes(b, func(typ string, traf []byte) error {
 		if typ != "traf" {
@@ -462,7 +465,7 @@ func (d *demuxer) parseMoof(b []byte) error {
 
 // takeMdat slices the pending samples out of an mdat whose payload starts at
 // stream offset at.
-func (d *demuxer) takeMdat(at int64, body []byte) {
+func (d *Demuxer) takeMdat(at int64, body []byte) {
 	for _, ps := range d.pending {
 		lo := ps.offset - at
 		hi := lo + int64(ps.size)
@@ -470,17 +473,17 @@ func (d *demuxer) takeMdat(at int64, body []byte) {
 			continue
 		}
 		t := ps.trk
-		s := sample{
-			video: t.video,
-			dts:   int64(ps.dts * 1000 / uint64(t.timescale)),
-			data:  body[lo:hi],
-			key:   !t.video || ps.key,
+		s := Sample{
+			Video: t.video,
+			DTS:   int64(ps.dts * 1000 / uint64(t.timescale)),
+			Data:  body[lo:hi],
+			Key:   !t.video || ps.key,
 		}
 		if t.video {
-			s.cts = int64(ps.cts) * 1000 / int64(t.timescale)
+			s.CTS = int64(ps.cts) * 1000 / int64(t.timescale)
 			// The sample flags of some encoders mark every frame a sync
 			// sample; an IDR slice is what a decoder can start from.
-			s.key = hasIDR(s.data, nalLengthSize(t.config))
+			s.Key = hasIDR(s.Data, nalLengthSize(t.config))
 		}
 		d.out = append(d.out, s)
 	}

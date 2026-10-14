@@ -1,4 +1,4 @@
-package livejasmin
+package fmp4
 
 import (
 	"bytes"
@@ -12,23 +12,23 @@ const (
 	flvVideo = 9
 )
 
-// flvMuxer writes AVC video and AAC audio as an FLV stream, each preceded by
+// FLVMuxer writes AVC video and AAC audio as an FLV stream, each preceded by
 // its sequence header, which is re-sent whenever the configuration changes.
 // It is not safe for concurrent use.
-type flvMuxer struct {
+type FLVMuxer struct {
 	w          io.Writer
 	headerDone bool
 	avcSent    []byte
 	aacSent    []byte
 }
 
-func newFLVMuxer(w io.Writer) *flvMuxer {
-	return &flvMuxer{w: w}
+func NewFLVMuxer(w io.Writer) *FLVMuxer {
+	return &FLVMuxer{w: w}
 }
 
-// setConfig sends the sequence headers for avcC and asc where they differ
+// SetConfig sends the sequence headers for avcC and asc where they differ
 // from the ones last sent; tsMs stamps them.
-func (m *flvMuxer) setConfig(tsMs int64, avcC, asc []byte) error {
+func (m *FLVMuxer) SetConfig(tsMs int64, avcC, asc []byte) error {
 	if len(avcC) > 0 && !bytes.Equal(avcC, m.avcSent) {
 		if err := m.tag(flvVideo, tsMs, append([]byte{0x17, 0, 0, 0, 0}, avcC...)); err != nil {
 			return err
@@ -44,8 +44,8 @@ func (m *flvMuxer) setConfig(tsMs int64, avcC, asc []byte) error {
 	return nil
 }
 
-// writeVideo writes one access unit of length-prefixed NAL units.
-func (m *flvMuxer) writeVideo(tsMs, ctsMs int64, key bool, au []byte) error {
+// WriteVideo writes one access unit of length-prefixed NAL units.
+func (m *FLVMuxer) WriteVideo(tsMs, ctsMs int64, key bool, au []byte) error {
 	frame := byte(0x27)
 	if key {
 		frame = 0x17
@@ -58,14 +58,14 @@ func (m *flvMuxer) writeVideo(tsMs, ctsMs int64, key bool, au []byte) error {
 	return m.tag(flvVideo, tsMs, append(payload, au...))
 }
 
-// writeAudio writes one raw AAC frame.
-func (m *flvMuxer) writeAudio(tsMs int64, frame []byte) error {
+// WriteAudio writes one raw AAC frame.
+func (m *FLVMuxer) WriteAudio(tsMs int64, frame []byte) error {
 	payload := make([]byte, 2, 2+len(frame))
 	payload[0], payload[1] = 0xaf, 1
 	return m.tag(flvAudio, tsMs, append(payload, frame...))
 }
 
-func (m *flvMuxer) tag(typ byte, tsMs int64, payload []byte) error {
+func (m *FLVMuxer) tag(typ byte, tsMs int64, payload []byte) error {
 	if !m.headerDone {
 		// Signature, version 1, audio and video present, header size 9, and
 		// the first PreviousTagSize.
