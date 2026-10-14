@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/agora"
+	"github.com/vodlabs-io/recorder/internal/asiancammodels"
 	"github.com/vodlabs-io/recorder/internal/flvfix"
 	"github.com/vodlabs-io/recorder/internal/fmp4"
 	"github.com/vodlabs-io/recorder/internal/livejasmin"
@@ -177,8 +178,9 @@ func (w *flvWriter) closeOutputFile() {
 }
 
 // openStream issues the stream request (or joins the Agora channel or TRTC room
-// an agora:// or trtc:// URL names, or takes a seat in the LiveJasmin room a
-// livejasmin:// URL names) on a context of its own so the response can outlive
+// an agora:// or trtc:// URL names, takes a seat in the LiveJasmin room a
+// livejasmin:// URL names, or plays the AsianCamModels broadcast an
+// asiancammodels:// URL names) on a context of its own so the response can outlive
 // the part that opened it (see Handoff). guardStream ties it back to the part
 // for every other kind of ending — including the dial, which a cancelled part
 // must still abort.
@@ -211,6 +213,13 @@ func (w *flvWriter) openStream(ctx context.Context, url string) (io.ReadCloser, 
 		stream, err := livejasmin.Open(streamCtx, url, w.client, livejasmin.UserAgent(w.config.UserAgent, w.config.Headers), w.logger)
 		if err != nil {
 			return fail(fmt.Errorf("failed to take a seat: %w", err))
+		}
+		return stream, nil
+	}
+	if asiancammodels.IsURL(url) {
+		stream, err := asiancammodels.Open(streamCtx, url, w.client, w.logger)
+		if err != nil {
+			return fail(fmt.Errorf("failed to play broadcast: %w", err))
 		}
 		return stream, nil
 	}

@@ -204,6 +204,10 @@ var scrapeDomains = map[string][]string{
 		"streamray.com",
 		"securedataimages.com",
 	},
+	"asiancammodels": {
+		"asiancammodels.com",
+		"asianslive.com",
+	},
 	"eplay": {
 		"eplay.com",
 		"letso.live",
