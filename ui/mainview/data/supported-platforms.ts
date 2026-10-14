@@ -50,6 +50,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   sexchat: "Sexchat",
   cams: "Cams.com",
   asiancammodels: "AsianCamModels",
+  manyvids: "ManyVids",
   eplay: "ePlay",
   myfreecams: "MyFreeCams",
   x: "X",
