@@ -33,14 +33,17 @@ type StreamerState struct {
 	// MouflonKeys decrypts the segment names of a platform whose playlists
 	// publish them encrypted, by the key id the playlist names. Nil on every
 	// other platform.
-	MouflonKeys      map[string]string `json:"mouflon_keys,omitempty"`
-	LiveMetadata     LiveMetadata      `json:"live_metadata"`                // Metadata about the live stream (title, author, etc.)
-	AvatarURL        string            `json:"avatar_url,omitempty"`         // Re-hosted avatar image URL (from the cloud backend)
-	LastLiveStart    int64             `json:"last_live_start,omitempty"`    // Unix timestamp
-	LastLiveDuration int64             `json:"last_live_duration,omitempty"` // Duration in seconds
-	LastStatusChange int64             `json:"last_status_change,omitempty"` // Unix timestamp
-	SessionStats     recording.Stats   `json:"session_stats"`                // Bytes recorded, duration, speed
-	Monitor          *bool             `json:"monitor,omitempty"`            // Whether the streamer's status will be monitored while not live
+	MouflonKeys map[string]string `json:"mouflon_keys,omitempty"`
+	// SegmentRename rewrites the segment URLs of a platform whose playlists
+	// name a lower quality than the one recorded. Nil on every other platform.
+	SegmentRename    *stream.SegmentRename `json:"segment_rename,omitempty"`
+	LiveMetadata     LiveMetadata          `json:"live_metadata"`                // Metadata about the live stream (title, author, etc.)
+	AvatarURL        string                `json:"avatar_url,omitempty"`         // Re-hosted avatar image URL (from the cloud backend)
+	LastLiveStart    int64                 `json:"last_live_start,omitempty"`    // Unix timestamp
+	LastLiveDuration int64                 `json:"last_live_duration,omitempty"` // Duration in seconds
+	LastStatusChange int64                 `json:"last_status_change,omitempty"` // Unix timestamp
+	SessionStats     recording.Stats       `json:"session_stats"`                // Bytes recorded, duration, speed
+	Monitor          *bool                 `json:"monitor,omitempty"`            // Whether the streamer's status will be monitored while not live
 }
 
 func (s StreamerState) Recordable() bool {

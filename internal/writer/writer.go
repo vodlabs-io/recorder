@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vodlabs-io/recorder/internal/stream"
 	"github.com/vodlabs-io/recorder/internal/writer/flv"
 	"github.com/vodlabs-io/recorder/internal/writer/hls"
 )
@@ -40,6 +41,9 @@ type Config struct {
 	// MouflonKeys decrypts the segment names of a playlist that publishes them
 	// encrypted (hlswriter only; see hlsingest.Config.MouflonKeys).
 	MouflonKeys map[string]string
+	// SegmentRename rewrites a playlist's segment URLs (hlswriter only; see
+	// hlsingest.Config.SegmentRename).
+	SegmentRename *stream.SegmentRename
 	// Provenance describes the build and session that produced this Part, for
 	// writers that author their own output files rather than passing the
 	// origin's bytes through unchanged.
@@ -146,18 +150,19 @@ func (h *hlsWriter) Record(
 	progressCh chan<- int64,
 ) error {
 	hlsConfig := hls.Config{
-		URL:          cfg.StreamURL,
-		OutDir:       part.Dir,
-		UserAgent:    cfg.UserAgent,
-		Headers:      cfg.Headers,
-		PollInterval: 2 * time.Second,
-		Retries:      cfg.Retries,
-		FileName:     part.FileName,
-		Variant:      cfg.Variant,
-		URLTTL:       cfg.StreamURLTTL,
-		RefreshURL:   cfg.RefreshStreamURL,
-		MouflonKeys:  cfg.MouflonKeys,
-		Provenance:   cfg.Provenance,
+		URL:           cfg.StreamURL,
+		OutDir:        part.Dir,
+		UserAgent:     cfg.UserAgent,
+		Headers:       cfg.Headers,
+		PollInterval:  2 * time.Second,
+		Retries:       cfg.Retries,
+		FileName:      part.FileName,
+		Variant:       cfg.Variant,
+		URLTTL:        cfg.StreamURLTTL,
+		RefreshURL:    cfg.RefreshStreamURL,
+		MouflonKeys:   cfg.MouflonKeys,
+		SegmentRename: cfg.SegmentRename,
+		Provenance:    cfg.Provenance,
 	}
 
 	return hls.Record(ctx, hlsConfig, client, logger, progressCh)

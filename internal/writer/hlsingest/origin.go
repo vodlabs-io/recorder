@@ -189,6 +189,7 @@ func (o *ingest) pollPlaylist(playlistURL string) (*m3u8.MediaPlaylist, error) {
 	if err != nil {
 		return nil, fmt.Errorf("restore media playlist: %w", err)
 	}
+	body = renameSegments(body, o.cfg.SegmentRename)
 	playlist, _, err := m3u8.Decode(*bytes.NewBuffer(o.sanitize(body)), false)
 	if err != nil {
 		return nil, fmt.Errorf("parse media playlist: %w", err)

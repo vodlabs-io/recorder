@@ -204,6 +204,7 @@ func (w *worker) initPart() error {
 		StreamURLTTL:     w.streamsTTL,
 		RefreshStreamURL: w.refreshStreamURL,
 		MouflonKeys:      w.str.Load().MouflonKeys,
+		SegmentRename:    w.str.Load().SegmentRename,
 		// The writer reports the part's codec config key on the recording
 		// goroutine as the part finishes; recordGroupPart reads it right
 		// after Record returns. The groups mutex covers the concurrent

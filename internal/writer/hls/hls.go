@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/provenance"
+	"github.com/vodlabs-io/recorder/internal/stream"
 	"github.com/vodlabs-io/recorder/internal/writer/hlsingest"
 )
 
@@ -64,6 +65,8 @@ type Config struct {
 	RefreshURL func(context.Context) (string, error)
 	// MouflonKeys decrypts encrypted segment names; see hlsingest.Config.
 	MouflonKeys map[string]string
+	// SegmentRename rewrites segment URLs; see hlsingest.Config.
+	SegmentRename *stream.SegmentRename
 	// Provenance is written as a playlist comment; see provenance.Record.
 	Provenance string
 }
@@ -105,6 +108,7 @@ func Record(
 		URLTTL:             cfg.URLTTL,
 		RefreshURL:         cfg.RefreshURL,
 		MouflonKeys:        cfg.MouflonKeys,
+		SegmentRename:      cfg.SegmentRename,
 	}, client, logger, sink)
 }
 

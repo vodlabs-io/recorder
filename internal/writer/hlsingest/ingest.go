@@ -19,6 +19,8 @@ import (
 	"time"
 
 	m3u8 "github.com/Eyevinn/hls-m3u8/m3u8"
+
+	"github.com/vodlabs-io/recorder/internal/stream"
 )
 
 // defaultPollInterval is the cadence a media playlist is re-fetched at when
@@ -102,6 +104,9 @@ type Config struct {
 	// encrypted, by the key id its playlist names (see mouflon.go). Nil for
 	// every other Origin.
 	MouflonKeys map[string]string
+	// SegmentRename is applied to every segment URL the media playlist names
+	// (see stream.SegmentRename). Nil for every Origin but the one that needs it.
+	SegmentRename *stream.SegmentRename
 }
 
 // Map is an fMP4 initialisation segment, named by EXT-X-MAP. Every Segment

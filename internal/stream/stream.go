@@ -38,6 +38,23 @@ func (s Stream) IsHLS() bool {
 		strings.HasPrefix(s.URL, "fc2live://")
 }
 
+// SegmentRename rewrites a media playlist's segment URLs before they are
+// fetched: the first From in each is replaced by To. The cloud sends one for
+// a platform whose playlists name a lower quality than the CDN serves under a
+// sibling name.
+type SegmentRename struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// Apply returns uri with the rename made, or uri unchanged when r is nil.
+func (r *SegmentRename) Apply(uri string) string {
+	if r == nil || r.From == "" {
+		return uri
+	}
+	return strings.Replace(uri, r.From, r.To, 1)
+}
+
 // Resolution returns the resolution of the stream as a string in the format "WIDTHxHEIGHT"
 func (s Stream) Resolution() string {
 	return fmt.Sprintf("%dx%d", s.ResWidth, s.ResHeight)
