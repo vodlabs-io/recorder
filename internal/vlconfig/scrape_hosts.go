@@ -106,6 +106,9 @@ var scrapeDomains = map[string][]string{
 	"huya": {
 		"huya.com",
 	},
+	"kwai": {
+		"kwai.com",
+	},
 	"mixch": {
 		"mixch.tv",
 		"live-video.net",
