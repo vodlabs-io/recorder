@@ -262,6 +262,10 @@ func (c *Client) handleSubscription(ctx context.Context) {
 			if time.Now().Before(holdUntil) {
 				continue // holding off after a failed subscribe
 			}
+			if failures > 0 {
+				c.triggerResubscribe()
+				continue
+			}
 			ids, _ := c.subscriptions.Load().(streamer.StreamerRefs)
 			if _, remote := splitLocal(ids); len(remote) == 0 {
 				continue // Nothing keeping the connection alive, skip resubscribe checks
@@ -277,8 +281,15 @@ func (c *Client) handleSubscription(ctx context.Context) {
 	}
 }
 
-func (c *Client) newSubscription(ctx context.Context) error {
+func (c *Client) newSubscription(ctx context.Context) (err error) {
 	log := c.logger.With("func", "newSubscription")
+	// A cycle that fails after subscribe() succeeded has no connection or
+	// handlers behind it, so it must not read as subscribed.
+	defer func() {
+		if err != nil {
+			c.setSubscribed(false)
+		}
+	}()
 
 	if c.stopWatchHandler != nil {
 		c.stopWatchHandler()

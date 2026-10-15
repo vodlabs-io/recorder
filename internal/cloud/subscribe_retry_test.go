@@ -1,10 +1,18 @@
 package cloud
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/nats-io/nkeys"
+
+	"github.com/vodlabs-io/recorder/internal/vlstate"
 )
 
 // TestSubscribeRetryHoldGrows pins the shape of the backoff: the first retry is
@@ -103,5 +111,50 @@ func TestRejectionNamesTheStreamer(t *testing.T) {
 	byURL := subscribeRejection{URL: "https://example.com/nope", Error: codeUnsupportedSite}
 	if got := byURL.name(); got != "https://example.com/nope" {
 		t.Errorf("name = %q, want the URL", got)
+	}
+}
+
+// TestFailedConnectIsNotSubscribed covers a subscribe the cloud accepted whose
+// NATS connect then failed. Left marked subscribed, with a JWT valid for weeks,
+// the ticker would never retry and no notification would reach the daemon.
+func TestFailedConnectIsNotSubscribed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req subscribeRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		json.NewEncoder(w).Encode(subscribeResponse{
+			UserJWT:      "jwt",
+			ExpiresAt:    time.Now().Add(30 * 24 * time.Hour).Unix(),
+			ConsumerName: "consumer",
+			StreamerIDs:  req.StreamerIDs,
+		})
+	}))
+	defer srv.Close()
+	// A port nothing listens on.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	deadNATS := "ws://" + ln.Addr().String()
+	ln.Close()
+	prevAPI, prevNATS := apiBaseURL, natsEndpoint
+	apiBaseURL, natsEndpoint = srv.URL, deadNATS
+	defer func() { apiBaseURL, natsEndpoint = prevAPI, prevNATS }()
+
+	c, _ := diffClient(t, "[streamers]\ntwitch = [\"somebody\"]\n")
+	_, kv := newTestKV(t)
+	c.kv, c.store = kv, vlstate.NewStore(kv)
+	c.httpClient = srv.Client()
+	kp, _ := nkeys.CreateUser()
+	seed, _ := kp.Seed()
+	c.nkeySeed = string(seed)
+
+	if err := c.newSubscription(context.Background()); err == nil {
+		t.Fatal("newSubscription succeeded against a dead NATS endpoint")
+	}
+	c.mu.RLock()
+	subscribed := c.isSubscribed
+	c.mu.RUnlock()
+	if subscribed {
+		t.Fatal("a cycle whose connect failed left the client marked subscribed")
 	}
 }
