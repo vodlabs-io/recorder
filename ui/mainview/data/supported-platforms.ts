@@ -26,6 +26,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   douyu: "Douyu",
   huya: "Huya",
   kwai: "Kwai",
+  nimotv: "Nimo TV",
   mixch: "Mixch",
   kuaishou: "Kuaishou",
   rumble: "Rumble",

@@ -113,6 +113,11 @@
 		"channel_url": "https://m.kwai.com/user/{username}"
 	},
 	{
+		"name": "nimotv",
+		"display_name": "Nimo TV",
+		"channel_url": "https://www.nimo.tv/live/{username}"
+	},
+	{
 		"name": "mixch",
 		"display_name": "Mixch",
 		"channel_url": "https://mixch.tv/u/{username}/live"

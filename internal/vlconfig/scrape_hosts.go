@@ -109,6 +109,9 @@ var scrapeDomains = map[string][]string{
 	"kwai": {
 		"kwai.com",
 	},
+	"nimotv": {
+		"nimo.tv",
+	},
 	"mixch": {
 		"mixch.tv",
 		"live-video.net",
