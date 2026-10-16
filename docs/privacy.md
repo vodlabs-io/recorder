@@ -5,7 +5,6 @@
 - Recording happens on your computer. Video goes straight from the platform to
   your disk, and VodLabs never receives it.
 - Your platform logins stay on your computer, encrypted.
-- There is no telemetry: no analytics, no usage tracking, no crash reports.
 - The VodLabs service tells your recorder when the streamers you follow go
   live. To do that, it knows which streamers you follow.
 - The service is free. In return, your recorder runs some live checks for
