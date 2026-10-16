@@ -357,6 +357,18 @@ export function About() {
             )}
           </CardContent>
         </Card>
+        {connected &&
+          (daemon.serverVersion || daemon.serverStartedAt !== null) && (
+            <p className="self-end text-xs text-muted-foreground">
+              {daemon.serverVersion && <>backend {daemon.serverVersion}</>}
+              {daemon.serverStartedAt !== null && (
+                <>
+                  {daemon.serverVersion && " · "}
+                  up {formatUptime(Math.floor(now / 1000) - daemon.serverStartedAt)}
+                </>
+              )}
+            </p>
+          )}
       </div>
     </>
   )

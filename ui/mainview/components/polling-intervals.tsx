@@ -7,6 +7,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { appStore } from "@/state/app-state"
 import { getDaemonClient, type CloudIntervals } from "@/lib/daemon"
@@ -34,7 +43,6 @@ function healthColor(estSec: number | null, targetSec: number): string {
 export function PollingIntervals() {
   const connection = appStore((s) => s.connection)
   const connected = connection.state === "connected"
-  const daemon = appStore((s) => s.daemon)
 
   const [data, setData] = useState<CloudIntervals | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -63,82 +71,84 @@ export function PollingIntervals() {
 
   return (
     <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2 text-sm">
+      <div className="flex items-center justify-between gap-4 text-sm">
+        <div className="flex flex-col gap-0.5">
           <span className="font-medium">How often streamers are checked</span>
-
-          {/* Two short columns, so this one stays well inside the app-wide
-              max-w-table ceiling (see index.css). */}
-          <div className="mx-auto w-full max-w-sm rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Platform</TableHead>
-                  <TableHead className="text-right">Interval</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!data || data.intervals.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={2}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      {!data
-                        ? `${connected ? "Loading polling intervals…" : "Daemon not connected."}${error ? ` ${error}` : ""}`
-                        : "No platforms reported."}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  data.intervals.map((pi) => (
-                    <TableRow key={pi.platform}>
-                      <TableCell>
-                        <span className="flex items-center gap-2">
-                          <span
-                            className={cn(
-                              "inline-flex h-2.5 w-2.5 rounded-full",
-                              healthColor(pi.estimated_seconds, targetSec),
-                            )}
-                          />
-                          <span className="font-medium">
-                            {platformDisplayName(pi.platform)}
-                          </span>
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {pi.estimated_seconds === null
-                          ? "unknown"
-                          : formatDuration(pi.estimated_seconds)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {data && error && (
-            <p className="text-xs text-destructive">Failed to refresh: {error}</p>
-          )}
+          <span className="text-xs text-muted-foreground">
+            Estimated polling interval for each platform.
+          </span>
         </div>
 
-        {connected &&
-          (daemon.serverVersion || daemon.serverStartedAt !== null) && (
-            <p className="mt-auto self-end text-xs text-muted-foreground">
-              {daemon.serverVersion && <>backend {daemon.serverVersion}</>}
-              {daemon.serverStartedAt !== null && (
-                <>
-                  {daemon.serverVersion && " · "}
-                  up{" "}
-                  {formatDuration(
-                    Math.max(
-                      0,
-                      Math.floor(Date.now() / 1000) - daemon.serverStartedAt,
-                    ),
-                  )}
-                </>
+        <Sheet onOpenChange={(open) => open && connected && fetchIntervals()}>
+          <SheetTrigger render={<Button size="sm" variant="outline" />}>
+            View
+          </SheetTrigger>
+          <SheetContent className="sm:max-w-md">
+            <SheetHeader>
+              <SheetTitle>How often streamers are checked</SheetTitle>
+              <SheetDescription>
+                Estimated time between checks for each platform.
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 pb-4">
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Platform</TableHead>
+                      <TableHead className="text-right">Interval</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {!data || data.intervals.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={2}
+                          className="h-24 text-center text-muted-foreground"
+                        >
+                          {!data
+                            ? `${connected ? "Loading polling intervals…" : "Daemon not connected."}${error ? ` ${error}` : ""}`
+                            : "No platforms reported."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      data.intervals.map((pi) => (
+                        <TableRow key={pi.platform}>
+                          <TableCell>
+                            <span className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "inline-flex h-2.5 w-2.5 rounded-full",
+                                  healthColor(pi.estimated_seconds, targetSec),
+                                )}
+                              />
+                              <span className="font-medium">
+                                {platformDisplayName(pi.platform)}
+                              </span>
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right font-mono tabular-nums">
+                            {pi.estimated_seconds === null
+                              ? "unknown"
+                              : formatDuration(pi.estimated_seconds)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {data && error && (
+                <p className="text-xs text-destructive">
+                  Failed to refresh: {error}
+                </p>
               )}
-            </p>
-          )}
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
     </div>
   )
 }
