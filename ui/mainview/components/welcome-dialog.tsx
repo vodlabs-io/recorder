@@ -77,22 +77,21 @@ export function WelcomeDialog() {
             <DialogHeader>
               <DialogTitle>Welcome to VodLabs Recorder</DialogTitle>
               <DialogDescription>
-                Add the streamers you follow, and their broadcasts are recorded
+                Add the streamers you follow, and their broadcasts are automatically recorded
                 as they go live.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 text-sm text-muted-foreground">
               <p>
-                Recording happens on this machine, and the files are yours: the
-                VodLabs service is only asked whether someone is live.
+                Recording happens locally on this machine. The
+                VodLabs Cloud service monitors streamers and notifies you when 
+                they're live.
               </p>
               <p>
-                If you sign in to a platform, that login is stored on this
+                If you sign in to a platform on the Accounts page, that login is stored on this
                 device, encrypted, and is never sent to VodLabs.
               </p>
               <p>
-                The service is free. In return, your recorder also runs some
-                live checks for other people, from your IP address.{" "}
                 <Button
                   variant="link"
                   className="h-auto p-0 text-sm"
@@ -100,7 +99,7 @@ export function WelcomeDialog() {
                     getDaemonClient().openExternal("https://vodlabs.io/docs/privacy")
                   }
                 >
-                  What the service receives
+                  Privacy Policy
                   <ExternalLink className="ml-1 h-3 w-3" />
                 </Button>
               </p>
@@ -128,8 +127,7 @@ export function WelcomeDialog() {
                 </Button>
               )}
               <p className="text-sm text-muted-foreground">
-                You can change this later in Settings, and set a separate
-                archive folder for finished recordings.
+                You can change this later in Settings.
               </p>
             </div>
           </>
@@ -140,8 +138,7 @@ export function WelcomeDialog() {
             <DialogHeader>
               <DialogTitle>Catching streams</DialogTitle>
               <DialogDescription>
-                Nothing is recorded while the app is closed, so a stream that
-                starts then is missed.
+                Turn this on to auto-resume recordings after a reboot.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -150,8 +147,7 @@ export function WelcomeDialog() {
                   <div className="space-y-1 text-sm">
                     <p className="font-medium">Start at login</p>
                     <p className="text-muted-foreground">
-                      Opens in the tray when you log in, so a reboot doesn't
-                      cost you a broadcast.
+                      Launches VodLabs Recorder minimized to the system tray when you log in to your computer.
                     </p>
                   </div>
                   <Switch
@@ -161,14 +157,6 @@ export function WelcomeDialog() {
                   />
                 </div>
               )}
-              <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                <Users className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>
-                  Some platforms only show a broadcast to a signed-in viewer.
-                  The Accounts page is where you sign in to those, whenever you
-                  hit one.
-                </p>
-              </div>
             </div>
           </>
         )}

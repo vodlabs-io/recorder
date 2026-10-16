@@ -80,9 +80,7 @@ function SettingsGeneral() {
                 }
               >
                 <SettingsHint>
-                  Nothing is recorded while the app is closed, so a machine that
-                  reboots overnight misses whatever went live. Starts minimized
-                  to the tray.
+                  Launches VodLabs Recorder minimized to the system tray when you log in to your computer.
                 </SettingsHint>
               </SettingsRow>
             )}
