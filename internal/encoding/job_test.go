@@ -1,6 +1,7 @@
 package encoding
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -178,5 +179,49 @@ func TestCopyConcatArgsRaiseAnalyzeDuration(t *testing.T) {
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "-analyzeduration "+ffmpeg.AnalyzeDuration+" -f concat") {
 		t.Errorf("copy args must raise -analyzeduration before the input: %q", joined)
+	}
+}
+
+func TestReencodeArgsSkipDitherWhenDurationUnknown(t *testing.T) {
+	dir := t.TempDir()
+	job := &Job{SessionID: "s1", Output: "vod.mp4"}
+	plan := &mergePlan{
+		parts:    []partProbe{{path: "/v/vod1.webm"}, {path: "/v/vod2.mp4"}},
+		targetW:  1280,
+		targetH:  720,
+		allAudio: true,
+	}
+
+	filter, path, err := writeDither(dir, plan.sumDur)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filter != "" || path != "" {
+		t.Errorf("unknown duration should write no dither, got filter %q path %q", filter, path)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("unknown duration left files behind: %v", entries)
+	}
+	args := strings.Join(reencodeArgs(job, plan, nil, filter, "/v/vod.mp4.merging"), " ")
+	// The embedded ffmpeg fails to configure the graph when sendcmd has no
+	// commands.
+	if strings.Contains(args, "sendcmd") || strings.Contains(args, "eq=brightness") {
+		t.Errorf("args carry the dither: %s", args)
+	}
+	if !strings.Contains(args, "concat=n=2:v=1:a=1[outv][outa]") {
+		t.Errorf("concat should feed [outv] directly: %s", args)
+	}
+
+	plan.sumDur = 2
+	filter, path, err = writeDither(dir, plan.sumDur)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" {
+		t.Fatal("known duration should write a dither script")
+	}
+	args = strings.Join(reencodeArgs(job, plan, nil, filter, "/v/vod.mp4.merging"), " ")
+	if !strings.Contains(args, "[cv]sendcmd=f=") {
+		t.Errorf("args lack the dither: %s", args)
 	}
 }

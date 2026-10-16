@@ -67,8 +67,8 @@ type mergePlan struct {
 	uniform  bool
 	allAudio bool
 	// sumDur is the summed probed duration in seconds (0 when any part's
-	// duration was unknown — progress then reports indeterminate and the
-	// duration verification is skipped).
+	// duration was unknown — progress then reports indeterminate, and the
+	// duration verification and the dither are skipped).
 	sumDur float64
 	// srcMaxBps is the highest part video bitrate (bits/s, 0 when no part
 	// reported one) — caps the re-encode target so low-rate sources aren't
@@ -458,25 +458,50 @@ func (s *Service) runReencodeConcat(ctx context.Context, logger *slog.Logger, jo
 		logger.Info("At least one part has no audio; output will be video-only")
 	}
 
-	// Written beside the output and removed with it; the graph reads it by path.
-	ditherPath := filepath.Join(filepath.Dir(stagedOut), "dither.txt")
-	if err := os.WriteFile(ditherPath, []byte(dither.VideoScript(plan.sumDur)), 0o644); err != nil {
-		return warning, fmt.Errorf("write dither script: %w", err)
+	ditherFilter, ditherPath, err := writeDither(filepath.Dir(stagedOut), plan.sumDur)
+	if err != nil {
+		return warning, err
 	}
-	defer os.Remove(ditherPath)
-	ditherFilter := dither.VideoFilter(ditherPath)
+	if ditherPath != "" {
+		defer os.Remove(ditherPath)
+	} else {
+		logger.Info("Merged duration unknown; skipping dither")
+	}
+	if plan.allAudio {
+		logger.Info("Audio bitrate plan",
+			"target_bps", planAudioBitrate(plan.srcMaxAudioBps), "source_max_bps", plan.srcMaxAudioBps)
+	}
 
+	args := reencodeArgs(job, plan, encArgs, ditherFilter, stagedOut)
+	return warning, s.runFFmpegWithProgress(ctx, logger, job.ID, args, stagedOut, plan.sumDur, logF)
+}
+
+// writeDither writes the dither script for a clip of durationSec into dir and
+// returns the filter chain that reads it, and its path. Both are empty when the
+// duration is unknown: sendcmd rejects an empty script.
+func writeDither(dir string, durationSec float64) (filter, path string, err error) {
+	script := dither.VideoScript(durationSec)
+	if script == "" {
+		return "", "", nil
+	}
+	path = filepath.Join(dir, "dither.txt")
+	if err := os.WriteFile(path, []byte(script), 0o644); err != nil {
+		return "", "", fmt.Errorf("write dither script: %w", err)
+	}
+	return dither.VideoFilter(path), path, nil
+}
+
+// reencodeArgs builds the re-encode concat command line. An empty ditherFilter
+// leaves the dither out of the graph.
+func reencodeArgs(job *Job, plan *mergePlan, encArgs []string, ditherFilter, stagedOut string) []string {
 	args := []string{"-hide_banner", "-loglevel", "warning", "-nostats"}
 	args = append(args, reencodeInputArgs(plan.parts)...)
 	filter := buildReencodeFilter(len(plan.parts), plan.targetW, plan.targetH, plan.allAudio, ditherFilter)
 
 	if plan.allAudio {
-		audioBps := planAudioBitrate(plan.srcMaxAudioBps)
-		logger.Info("Audio bitrate plan",
-			"target_bps", audioBps, "source_max_bps", plan.srcMaxAudioBps)
 		args = append(args, "-filter_complex", filter, "-map", "[outv]", "-map", "[outa]")
 		args = append(args, encArgs...)
-		args = append(args, "-c:a", "aac", "-b:a", strconv.FormatInt(audioBps, 10))
+		args = append(args, "-c:a", "aac", "-b:a", strconv.FormatInt(planAudioBitrate(plan.srcMaxAudioBps), 10))
 	} else {
 		args = append(args, "-filter_complex", filter, "-map", "[outv]")
 		args = append(args, encArgs...)
@@ -488,9 +513,7 @@ func (s *Service) runReencodeConcat(ctx context.Context, logger *slog.Logger, jo
 	args = append(args, "-movflags", provenance.MovFlags("+faststart"))
 	args = append(args, provenance.MetadataArgs(
 		provenance.Record("merge+reencode", job.SessionID, filepath.Base(job.Output)))...)
-	args = append(args, "-progress", "pipe:1", "-y", stagedOut)
-
-	return warning, s.runFFmpegWithProgress(ctx, logger, job.ID, args, stagedOut, plan.sumDur, logF)
+	return append(args, "-progress", "pipe:1", "-y", stagedOut)
 }
 
 // runFFmpegWithProgress executes ffmpeg, streaming -progress output into the

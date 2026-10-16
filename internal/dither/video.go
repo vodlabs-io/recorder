@@ -23,7 +23,8 @@ const (
 //
 //	<seconds> eq brightness <value>;
 //
-// An empty duration yields an empty script, which the filter accepts.
+// A zero or negative duration yields an empty script. sendcmd rejects an empty
+// script, so callers must leave VideoFilter out of the graph in that case.
 func VideoScript(durationSec float64) string {
 	if durationSec <= 0 {
 		return ""
