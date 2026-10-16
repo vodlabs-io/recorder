@@ -76,31 +76,30 @@ func (j *job) processGroupJob(ctx context.Context, logger *slog.Logger, s *Servi
 	return nil
 }
 
-// fileParts reports whether the session's Parts are single files (FLV or
-// WebM), which are converted to .mp4 intermediates, rather than HLS
-// directories.
-func (j *job) fileParts() bool {
-	return recording.PartFileExt(j.vod.WriterName) != ""
-}
-
-// groupInputPaths maps the group's part stems to concat input paths: file parts
-// are the converted .mp4 intermediates, HLS parts are the raw segment directories.
+// groupInputPaths maps the group's part stems to concat input paths: FLV parts
+// are the converted .mp4 intermediates, WebM parts the raw .webm files, HLS
+// parts the raw segment directories.
 func (j *job) groupInputPaths() []string {
 	paths := make([]string, 0, len(j.groupInputs))
 	for _, stem := range j.groupInputs {
-		if j.fileParts() {
+		switch j.vod.WriterName {
+		case "flvwriter":
 			paths = append(paths, filepath.Join(j.vod.BaseOutDir, stem+".mp4"))
-		} else {
+		case "webmwriter":
+			paths = append(paths, filepath.Join(j.vod.BaseOutDir, stem+".webm"))
+		default:
 			paths = append(paths, filepath.Join(j.vod.BaseOutDir, stem))
 		}
 	}
 	return paths
 }
 
-// concatGroup assembles the group's inputs into outPath. A lone file part's
-// intermediate is renamed rather than remuxed.
+// concatGroup assembles the group's inputs into outPath. A lone FLV part's
+// intermediate is renamed rather than remuxed. WebM parts are always remuxed,
+// even alone: a part is written live, with no duration or cues to seek by, and
+// the stream copy adds both.
 func (j *job) concatGroup(ctx context.Context, logger *slog.Logger, inputs []string, outPath string) error {
-	if j.fileParts() && len(inputs) == 1 {
+	if j.vod.WriterName == "flvwriter" && len(inputs) == 1 {
 		if err := os.Rename(inputs[0], outPath); err != nil {
 			return fmt.Errorf("rename single part to %s: %w", filepath.Base(outPath), err)
 		}
@@ -113,10 +112,10 @@ func (j *job) concatGroup(ctx context.Context, logger *slog.Logger, inputs []str
 
 	var sb strings.Builder
 	for _, in := range inputs {
-		// HLS parts are directories; concat their playlists. File parts are
-		// listed as their .mp4 intermediates.
+		// HLS parts are directories; concat their playlists. FLV and WebM
+		// parts are files.
 		listed := in
-		if !j.fileParts() {
+		if recording.PartFileExt(j.vod.WriterName) == "" {
 			listed = filepath.Join(in, "index.m3u8")
 			if _, err := os.Stat(listed); err != nil {
 				logger.Warn("Skipping part with missing playlist", "part", filepath.Base(in), "error", err)
@@ -205,13 +204,15 @@ func endPlaylist(path string) error {
 	return err
 }
 
-// concatArgs returns the ffmpeg arguments for concatenating a group. File-part
-// output gets faststart and timestamp-repair flags; HLS just stream-copies the
-// joined playlists.
+// concatArgs returns the ffmpeg arguments for concatenating a group. FLV output
+// gets faststart and timestamp-repair flags, WebM output the timestamp repair;
+// HLS just stream-copies the joined playlists. Every branch is a stream copy:
+// nothing is encoded while a session records.
 func (j *job) concatArgs(concatFilePath, outPath string) []string {
 	rec := j.provenanceRecord(filepath.Base(outPath))
 	var args []string
-	if j.fileParts() {
+	switch j.vod.WriterName {
+	case "flvwriter":
 		args = []string{
 			"-hide_banner",
 			"-loglevel", "warning",
@@ -225,7 +226,22 @@ func (j *job) concatArgs(concatFilePath, outPath string) []string {
 			"-avoid_negative_ts", "make_zero",
 			"-movflags", provenance.MovFlags("+faststart"),
 		}
-	} else {
+	case "webmwriter":
+		// VP8 parts of different frame sizes join as they are: every VP8 key
+		// frame carries its own size, and WebM players follow it.
+		args = []string{
+			"-hide_banner",
+			"-loglevel", "warning",
+			"-stats",
+			"-f", "concat",
+			"-safe", "0",
+			"-i", concatFilePath,
+			"-c", "copy",
+			"-fflags", "+genpts",
+			"-avoid_negative_ts", "make_zero",
+			"-f", "webm",
+		}
+	default:
 		args = []string{
 			// The listed HLS playlists resolve to MPEG-TS segments, which carry no
 			// container-level decoder config: a part that opens on audio is joined
@@ -247,13 +263,15 @@ func (j *job) concatArgs(concatFilePath, outPath string) []string {
 // for the end-of-session sweep, matching the global delete_part_files policy).
 func (j *job) deleteGroupInputs(logger *slog.Logger, deletePartFiles bool) {
 	for _, stem := range j.groupInputs {
-		if j.fileParts() {
-			mp4 := filepath.Join(j.vod.BaseOutDir, stem+".mp4")
-			if err := os.Remove(mp4); err != nil && !os.IsNotExist(err) {
-				logger.Warn("Failed to remove intermediate part", "path", mp4, "error", err)
+		if ext := recording.PartFileExt(j.vod.WriterName); ext != "" {
+			if j.vod.WriterName == "flvwriter" {
+				mp4 := filepath.Join(j.vod.BaseOutDir, stem+".mp4")
+				if err := os.Remove(mp4); err != nil && !os.IsNotExist(err) {
+					logger.Warn("Failed to remove intermediate part", "path", mp4, "error", err)
+				}
 			}
 			if deletePartFiles {
-				raw := filepath.Join(j.vod.BaseOutDir, stem+recording.PartFileExt(j.vod.WriterName))
+				raw := filepath.Join(j.vod.BaseOutDir, stem+ext)
 				if err := os.Remove(raw); err != nil && !os.IsNotExist(err) {
 					logger.Warn("Failed to remove raw part", "path", raw, "error", err)
 				}

@@ -132,8 +132,9 @@ type Result struct {
 	Scanning bool `json:"scanning"`
 }
 
-// vodFileRe matches produced output files: vod.mp4 (sole group) or vodN.mp4.
-var vodFileRe = regexp.MustCompile(`^vod(\d*)\.mp4$`)
+// vodFileRe matches produced output files: vod.mp4 (sole group) or vodN.mp4,
+// or the same as .webm for a VP8 recording.
+var vodFileRe = regexp.MustCompile(`^vod(\d*)\.(mp4|webm)$`)
 
 // datetimeFormat is the {datetime} output-template token's layout; session
 // folders without a manifest commonly use it as the folder name, so the
@@ -551,8 +552,8 @@ func sortFiles(files []File) {
 	})
 }
 
-// vodFileNum extracts the split index of a vodN.mp4 name; the undecorated
-// vod.mp4 sorts first, unmatched names last.
+// vodFileNum extracts the split index of a vodN.mp4 or vodN.webm name; the
+// undecorated vod.mp4 or vod.webm sorts first, unmatched names last.
 func vodFileNum(name string) int {
 	m := vodFileRe.FindStringSubmatch(name)
 	if m == nil {

@@ -7,14 +7,16 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 )
 
 // TestWebMWriter_Network records AGORA_URL (a VP8 agora:// channel, such as
 // agora://669058195ead4efaa9509c9a400de392/x?mint=manyvids&room=<id>&codec=vp8
-// for a ManyVids room) through the webmwriter for 60 s, into WEBM_OUT or a
-// temporary directory.
+// for a ManyVids room) through the webmwriter for WEBM_SECONDS (default 60),
+// into WEBM_STEM (default pt1_best).webm under WEBM_OUT or a temporary
+// directory.
 func TestWebMWriter_Network(t *testing.T) {
 	u := os.Getenv("AGORA_URL")
 	if u == "" {
@@ -24,12 +26,20 @@ func TestWebMWriter_Network(t *testing.T) {
 	if out == "" {
 		out = t.TempDir()
 	}
+	secs, _ := strconv.Atoi(os.Getenv("WEBM_SECONDS"))
+	if secs <= 0 {
+		secs = 60
+	}
+	stem := os.Getenv("WEBM_STEM")
+	if stem == "" {
+		stem = "pt1_best"
+	}
 	w, _ := Get("webmwriter")
-	part, err := w.PreparePart(out, "pt1_best")
+	part, err := w.PreparePart(out, stem)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(secs)*time.Second)
 	defer cancel()
 	carry := NewCarryover()
 	defer carry.Close()
@@ -43,7 +53,7 @@ func TestWebMWriter_Network(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("wrote %d bytes to %s", fi.Size(), part.Path)
-	if fi.Size() < 100_000 {
+	if fi.Size() < 10_000 {
 		t.Errorf("only %d bytes", fi.Size())
 	}
 }

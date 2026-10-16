@@ -6,7 +6,7 @@ import (
 )
 
 func TestCopyConcatArgsCarryProvenance(t *testing.T) {
-	args := copyConcatArgs("/list.txt", "/out.mp4", "VLWM1 prod=vodlabs-recorder")
+	args := copyConcatArgs("/list.txt", "/out.mp4", "VLWM1 prod=vodlabs-recorder", false)
 
 	n, movflags := 0, ""
 	for i, a := range args {

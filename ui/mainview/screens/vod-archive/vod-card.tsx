@@ -68,10 +68,18 @@ function openFile(s: VOD, file: string): void {
   void getDaemonClient().openPath(joinPath(s.dir, file))
 }
 
-// A session is mergeable when it has ≥2 numbered parts (vodN.mp4) — the only
-// shape the daemon's merge job accepts. A session that already holds a single
-// merged vod.mp4 has no numbered parts, so no menu item appears.
-const partNameRe = /^vod\d+\.mp4$/
+// A session is mergeable when it has ≥2 numbered parts (vodN.mp4 or
+// vodN.webm) — the only shape the daemon's merge job accepts. A session that
+// already holds a single merged vod.mp4 or vod.webm has no numbered parts, so
+// no menu item appears.
+const partNameRe = /^vod\d+\.(mp4|webm)$/
+
+// mergeOutputName is the file a merge of s starts out writing: vod.webm when
+// every part is WebM (joined as recorded), otherwise vod.mp4.
+export function mergeOutputName(s: VOD): string {
+  const files = s.files ?? []
+  return files.length > 0 && files.every((f) => f.name.endsWith(".webm")) ? "vod.webm" : "vod.mp4"
+}
 function isMergeable(s: VOD): boolean {
   const files = s.files ?? []
   return files.length > 1 && files.every((f) => partNameRe.test(f.name))

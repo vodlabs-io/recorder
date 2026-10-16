@@ -94,13 +94,52 @@ func TestCopySignatureSeparatesDecoderConfigs(t *testing.T) {
 // The output muxer is stated rather than inferred, so the copy path keeps
 // working whatever the caller names the output file.
 func TestCopyConcatArgsNameTheOutputMuxer(t *testing.T) {
-	args := copyConcatArgs("/staging/concat_list.txt", "/staging/vod.mp4"+mergingSuffix, "")
-	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "-f mp4") {
-		t.Errorf("copy args must name the output format: %q", joined)
+	for _, tc := range []struct {
+		out    string
+		toWebM bool
+		want   string
+	}{
+		{"/staging/vod.mp4", false, "-f mp4"},
+		{"/staging/vod.webm", true, "-f webm"},
+	} {
+		args := copyConcatArgs("/staging/concat_list.txt", tc.out+mergingSuffix, "", tc.toWebM)
+		joined := strings.Join(args, " ")
+		if !strings.Contains(joined, tc.want) {
+			t.Errorf("copy args must name the output format %q: %q", tc.want, joined)
+		}
+		if tc.toWebM && strings.Contains(joined, "-movflags") {
+			t.Errorf("WebM output takes no -movflags: %q", joined)
+		}
+		if args[len(args)-1] != tc.out+mergingSuffix {
+			t.Errorf("output must come last: %q", joined)
+		}
 	}
-	if args[len(args)-1] != "/staging/vod.mp4"+mergingSuffix {
-		t.Errorf("output must come last: %q", joined)
+}
+
+// VP8 parts of different frame sizes still copy together; any other codec's
+// size change breaks the signature.
+func TestCopySignatureIgnoresVP8FrameSize(t *testing.T) {
+	a := ffmpeg.ProbeResult{VideoCodec: "vp8", Width: 640, Height: 360, PixFmt: "yuv420p",
+		AudioCodec: "opus", AudioSampleRate: 48000, AudioChannels: 2}
+	b := a
+	b.Width, b.Height = 1280, 720
+	if copySignature(a) != copySignature(b) {
+		t.Errorf("VP8 size change broke the signature: %q vs %q", copySignature(a), copySignature(b))
+	}
+}
+
+func TestMergeOutputName(t *testing.T) {
+	for _, tc := range []struct {
+		inputs []string
+		want   string
+	}{
+		{[]string{"vod1.webm", "vod2.webm"}, "vod.webm"},
+		{[]string{"vod1.mp4", "vod2.mp4"}, "vod.mp4"},
+		{[]string{"vod1.webm", "vod2.mp4"}, "vod.mp4"},
+	} {
+		if got := mergeOutputName(tc.inputs); got != tc.want {
+			t.Errorf("mergeOutputName(%v) = %q, want %q", tc.inputs, got, tc.want)
+		}
 	}
 }
 
@@ -135,7 +174,7 @@ func TestReencodeInputArgsRaiseAnalyzeDurationPerPart(t *testing.T) {
 // The concat demuxer opens each listed part itself, so the copy path needs
 // the same widened analysis window.
 func TestCopyConcatArgsRaiseAnalyzeDuration(t *testing.T) {
-	args := copyConcatArgs("/staging/concat_list.txt", "/staging/vod.mp4", "")
+	args := copyConcatArgs("/staging/concat_list.txt", "/staging/vod.mp4", "", false)
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "-analyzeduration "+ffmpeg.AnalyzeDuration+" -f concat") {
 		t.Errorf("copy args must raise -analyzeduration before the input: %q", joined)

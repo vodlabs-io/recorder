@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -214,6 +216,51 @@ func TestRemuxRejectsOtherCodecs(t *testing.T) {
 			_, err := NewRemuxer(&bytes.Buffer{}).Write(f.Bytes())
 			if !errors.Is(err, ErrUnsupportedCodec) {
 				t.Fatalf("err = %v, want ErrUnsupportedCodec", err)
+			}
+		})
+	}
+}
+
+func (f *flvStream) vp8Sized(ts uint32, w, h uint16) {
+	frame := []byte{0x00, 0, 0, 0x9d, 0x01, 0x2a, byte(w), byte(w >> 8), byte(h), byte(h >> 8), 0xcc}
+	f.tag(9, ts, append([]byte{0x80 | 1<<4 | 1, 'v', 'p', '0', '8'}, frame...))
+}
+
+// A stream that steps up in size mid-file reports the largest key frame, not
+// the size its header names, and the rate its usual frame gap gives, whatever
+// its stalls; a file cut off mid-block still scans.
+func TestScan(t *testing.T) {
+	f := newFLV()
+	f.opusHead(0)
+	f.vp8Sized(0, 320, 180)
+	f.opus(20)
+	ts := uint32(0)
+	for i := 0; i < 40; i++ {
+		ts += 33 + uint32(i%3) // 33-35 ms: about 29.4 fps, snapped to 30
+		f.vp8(ts, false)
+	}
+	f.vp8Sized(3000, 1280, 720) // a 1.6 s stall
+	for i := 0; i < 20; i++ {
+		f.vp8(3000+uint32(i+1)*34, false)
+	}
+	f.vp8Sized(6000, 640, 360)
+	out := remux(t, f.Bytes(), f.Len())
+
+	for name, data := range map[string][]byte{"whole": out, "truncated": out[:len(out)-5]} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "pt1.webm")
+			if err := os.WriteFile(path, data, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			v, err := Scan(path)
+			if err != nil {
+				t.Fatalf("Scan: %v", err)
+			}
+			if v.Width != 1280 || v.Height != 720 {
+				t.Errorf("size %dx%d, want 1280x720", v.Width, v.Height)
+			}
+			if v.FrameRate != 30 {
+				t.Errorf("frame rate %v, want 30", v.FrameRate)
 			}
 		})
 	}

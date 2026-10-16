@@ -15,14 +15,32 @@ import (
 	"github.com/vodlabs-io/recorder/internal/provenance"
 	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/vlstate"
+	"github.com/vodlabs-io/recorder/internal/webm"
 )
 
 // mergedOutputName is the merge output file. Multi-part sessions only ever
-// hold vodN.mp4, so the bare name never collides.
+// hold vodN.mp4 or vodN.webm, so the bare names never collide.
 const mergedOutputName = "vod.mp4"
 
+// mergedWebMName is the output of a merge whose parts are all WebM: a stream
+// copy when they join as they are, otherwise mergedOutputName (see
+// switchToMP4).
+const mergedWebMName = "vod.webm"
+
+// mergeOutputName is the output a merge of inputs starts out with.
+func mergeOutputName(inputs []string) string {
+	for _, in := range inputs {
+		if filepath.Ext(in) != ".webm" {
+			return mergedOutputName
+		}
+	}
+	return mergedWebMName
+}
+
+func isWebM(name string) bool { return filepath.Ext(name) == ".webm" }
+
 // mergingSuffix marks the in-flight output in the session dir; the scanner's
-// ^vod(\d*)\.mp4$ regex never matches it, so a partial copy is invisible.
+// ^vod(\d*)\.(mp4|webm)$ regex never matches it, so a partial copy is invisible.
 const mergingSuffix = ".merging"
 
 // bakSuffix hides kept originals from the scanner (and players).
@@ -58,6 +76,14 @@ type mergePlan struct {
 	srcMaxBps int64
 	// srcMaxAudioBps is the audio-stream counterpart, capping the AAC rate.
 	srcMaxAudioBps int64
+	// hasVP8 says a part's video is VP8, which only a WebM output can copy.
+	hasVP8 bool
+	// vp8FrameRate is the highest frame rate measured over the VP8 parts, 0
+	// when none could be. A re-encode runs at it as a constant rate: ffmpeg
+	// cannot guess one from a browser broadcaster's millisecond clock and
+	// falls back to 1000 fps, which starves the hardware encoders' per-frame
+	// bit budget.
+	vp8FrameRate float64
 }
 
 // stagingDir is the job's local scratch space. VOD folders often live on slow
@@ -95,13 +121,9 @@ func removePartial(path string) {
 // originals, manifest). Returns a non-fatal warning (e.g. forced encoder
 // fell back to software) alongside any error.
 func (s *Service) runMergeJob(ctx context.Context, logger *slog.Logger, job *Job) (warning string, err error) {
-	outFinal := filepath.Join(job.Dir, job.Output)
-	outMerging := outFinal + mergingSuffix
-
-	if _, err := os.Stat(outFinal); err == nil {
-		return "", fmt.Errorf("output %s already exists in the session folder", job.Output)
+	if err := checkOutputFree(job); err != nil {
+		return "", err
 	}
-	removePartial(outMerging) // stale partial from a crash mid-copy
 
 	logF, err := os.OpenFile(filepath.Join(job.Dir, encodeLogName), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -117,25 +139,33 @@ func (s *Service) runMergeJob(ctx context.Context, logger *slog.Logger, job *Job
 	if err := os.MkdirAll(staging, 0755); err != nil {
 		return "", fmt.Errorf("create staging dir: %w", err)
 	}
-	stagedOut := filepath.Join(staging, job.Output)
-
 	// Probe every part once (they must all still exist).
 	plan, err := s.buildMergePlan(ctx, logger, job)
 	if err != nil {
 		return "", err
 	}
+	if plan.hasVP8 && !isWebM(job.Output) && plan.uniform {
+		logger.Info("Parts are VP8, which MP4 cannot carry; merge will re-encode")
+		plan.uniform = false
+	}
 	logger.Info("Merge plan",
 		"parts", len(plan.parts), "canvas", fmt.Sprintf("%dx%d", plan.targetW, plan.targetH),
 		"uniform", plan.uniform, "all_audio", plan.allAudio, "sum_duration_sec", plan.sumDur,
 		"source_max_bps", plan.srcMaxBps, "source_max_audio_bps", plan.srcMaxAudioBps)
+	if isWebM(job.Output) && !plan.uniform {
+		if err := s.switchToMP4(ctx, logger, job); err != nil {
+			return "", err
+		}
+	}
 
 	// Resume: a staged output that already verifies means a prior run was
 	// killed between encode and copy — skip straight to the copy stage.
+	stagedOut := filepath.Join(staging, job.Output)
 	if verr := s.verifyStaged(ctx, logger, stagedOut, plan); verr == nil {
 		logger.Info("Resuming from verified staged output", "staged", stagedOut)
 	} else {
 		removePartial(stagedOut)
-		warning, err = s.encodeToStaging(ctx, logger, job, plan, stagedOut, logF)
+		stagedOut, warning, err = s.encodeToStaging(ctx, logger, job, plan, staging, logF)
 		if err != nil {
 			return warning, err
 		}
@@ -143,6 +173,9 @@ func (s *Service) runMergeJob(ctx context.Context, logger *slog.Logger, job *Job
 			return warning, fmt.Errorf("merged output failed verification: %w", verr)
 		}
 	}
+	outFinal := filepath.Join(job.Dir, job.Output)
+	outMerging := outFinal + mergingSuffix
+	removePartial(outMerging) // stale partial from a crash mid-copy
 
 	// Copy stage: deliver the verified result into the session folder. The
 	// VOD Archive shows this as "moving" (the folder may be on slow storage).
@@ -161,6 +194,30 @@ func (s *Service) runMergeJob(ctx context.Context, logger *slog.Logger, job *Job
 	return warning, nil
 }
 
+// checkOutputFree fails a job whose output is already in the session folder.
+func checkOutputFree(job *Job) error {
+	if _, err := os.Stat(filepath.Join(job.Dir, job.Output)); err == nil {
+		return fmt.Errorf("output %s already exists in the session folder", job.Output)
+	}
+	return nil
+}
+
+// switchToMP4 turns a WebM merge into a re-encode to mergedOutputName: the
+// encoders write H.264, which WebM cannot carry. The new output is stored on
+// the job row so a requeued job resumes with it.
+func (s *Service) switchToMP4(ctx context.Context, logger *slog.Logger, job *Job) error {
+	logger.Info("WebM parts cannot be joined as they are; merge will re-encode to MP4",
+		"from", job.Output, "to", mergedOutputName)
+	job.Output = mergedOutputName
+	if err := checkOutputFree(job); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `UPDATE encode_jobs SET output = ? WHERE id = ?`, job.Output, job.ID); err != nil {
+		return fmt.Errorf("record merge output: %w", err)
+	}
+	return nil
+}
+
 // buildMergePlan probes every input and derives the target canvas and
 // copy-compatibility.
 func (s *Service) buildMergePlan(ctx context.Context, logger *slog.Logger, job *Job) (*mergePlan, error) {
@@ -174,6 +231,21 @@ func (s *Service) buildMergePlan(ctx context.Context, logger *slog.Logger, job *
 		res, err := ffmpeg.Probe(ctx, logger, path)
 		if err != nil {
 			return nil, fmt.Errorf("probe %s: %w", name, err)
+		}
+		if res.VideoCodec == "vp8" {
+			plan.hasVP8 = true
+			// A VP8 stream changes size at key frames while its header keeps
+			// the first size, so the canvas takes the largest frame.
+			if v, err := webm.Scan(path); err != nil {
+				logger.Warn("Could not scan VP8 part", "part", name, "error", err)
+			} else {
+				if v.Width*v.Height > res.Width*res.Height {
+					logger.Info("Part has larger frames than its header names", "part", name,
+						"header", fmt.Sprintf("%dx%d", res.Width, res.Height), "max", fmt.Sprintf("%dx%d", v.Width, v.Height))
+					res.Width, res.Height = v.Width, v.Height
+				}
+				plan.vp8FrameRate = max(plan.vp8FrameRate, v.FrameRate)
+			}
 		}
 		p := partProbe{
 			name:      name,
@@ -224,23 +296,31 @@ func (s *Service) buildMergePlan(ctx context.Context, logger *slog.Logger, job *
 // copySignature fingerprints everything the mp4 muxer freezes from the first
 // input: it writes one sample entry per track, so a part whose decoder config
 // differs would be played back with the wrong one. Parts may only be
-// stream-copied together when these match.
+// stream-copied together when these match. VP8 leaves out the frame size:
+// every key frame carries its own, so parts of different sizes join as one
+// WebM stream.
 func copySignature(res ffmpeg.ProbeResult) string {
-	return fmt.Sprintf("v=%s/%dx%d/%s/%s/%s a=%s/%dHz/%dch/%s/%s",
-		res.VideoCodec, res.Width, res.Height, res.PixFmt, res.VideoProfile, res.VideoExtradataFingerprint,
+	size := fmt.Sprintf("%dx%d", res.Width, res.Height)
+	if res.VideoCodec == "vp8" {
+		size = "any"
+	}
+	return fmt.Sprintf("v=%s/%s/%s/%s/%s a=%s/%dHz/%dch/%s/%s",
+		res.VideoCodec, size, res.PixFmt, res.VideoProfile, res.VideoExtradataFingerprint,
 		res.AudioCodec, res.AudioSampleRate, res.AudioChannels, res.AudioProfile, res.AudioExtradataFingerprint)
 }
 
-// encodeToStaging produces the merged file in the staging dir: a lossless
-// stream copy when the parts are uniform, otherwise scale/pad to the common
-// canvas and re-encode. Staging is local on purpose: `+faststart` rewrites the
-// whole output once the mux finishes, which is far slower on a network drive.
-func (s *Service) encodeToStaging(ctx context.Context, logger *slog.Logger, job *Job, plan *mergePlan, stagedOut string, logF *os.File) (string, error) {
+// encodeToStaging produces the merged file in the staging dir and returns its
+// path: a lossless stream copy when the parts are uniform, otherwise scale/pad
+// to the common canvas and re-encode. Staging is local on purpose:
+// `+faststart` rewrites the whole output once the mux finishes, which is far
+// slower on a network drive.
+func (s *Service) encodeToStaging(ctx context.Context, logger *slog.Logger, job *Job, plan *mergePlan, staging string, logF *os.File) (stagedOut, warning string, err error) {
+	stagedOut = filepath.Join(staging, job.Output)
 	if plan.uniform {
 		logger.Info("Parts match; using stream-copy fast path", "signature", plan.parts[0].signature)
 		if err := s.runCopyConcat(ctx, logger, job, plan, stagedOut, logF); err != nil {
 			if ctx.Err() != nil {
-				return "", err
+				return "", "", err
 			}
 			logger.Warn("Stream copy failed; falling back to re-encode", "error", err)
 			removePartial(stagedOut)
@@ -252,10 +332,17 @@ func (s *Service) encodeToStaging(ctx context.Context, logger *slog.Logger, job 
 			logger.Warn("Stream copy failed verification; falling back to re-encode", "error", verr)
 			removePartial(stagedOut)
 		} else {
-			return "", nil
+			return stagedOut, "", nil
+		}
+		if isWebM(job.Output) {
+			if err := s.switchToMP4(ctx, logger, job); err != nil {
+				return "", "", err
+			}
+			stagedOut = filepath.Join(staging, job.Output)
 		}
 	}
-	return s.runReencodeConcat(ctx, logger, job, plan, stagedOut, logF)
+	warning, err = s.runReencodeConcat(ctx, logger, job, plan, stagedOut, logF)
+	return stagedOut, warning, err
 }
 
 // concatListContent builds the concat demuxer's list file: one
@@ -279,20 +366,24 @@ func (s *Service) runCopyConcat(ctx context.Context, logger *slog.Logger, job *J
 	defer os.Remove(listPath)
 
 	rec := provenance.Record("merge", job.SessionID, filepath.Base(out))
-	return s.runFFmpegWithProgress(ctx, logger, job.ID, copyConcatArgs(listPath, out, rec), out, plan.sumDur, logF)
+	return s.runFFmpegWithProgress(ctx, logger, job.ID, copyConcatArgs(listPath, out, rec, isWebM(job.Output)), out, plan.sumDur, logF)
 }
 
-// copyConcatArgs is the concat-demuxer stream copy. The output muxer is named
-// rather than inferred from the filename, so the caller stays free to choose
-// any output path.
-func copyConcatArgs(listPath, out, rec string) []string {
+// copyConcatArgs is the concat-demuxer stream copy, into MP4 or, for WebM
+// parts, WebM. The output muxer is named rather than inferred from the
+// filename, so the caller stays free to choose any output path.
+func copyConcatArgs(listPath, out, rec string, toWebM bool) []string {
+	format := []string{"-f", "mp4", "-movflags", provenance.MovFlags("+faststart")}
+	if toWebM {
+		format = []string{"-f", "webm"}
+	}
 	args := []string{
 		"-hide_banner", "-loglevel", "warning", "-nostats",
 		"-analyzeduration", ffmpeg.AnalyzeDuration,
 		"-f", "concat", "-safe", "0", "-i", listPath,
 		"-c", "copy",
-		"-f", "mp4", "-movflags", provenance.MovFlags("+faststart"),
 	}
+	args = append(args, format...)
 	args = append(args, provenance.MetadataArgs(rec)...)
 	return append(args, "-progress", "pipe:1", "-y", out)
 }
@@ -362,7 +453,7 @@ func (s *Service) runReencodeConcat(ctx context.Context, logger *slog.Logger, jo
 		return warning, err
 	}
 	logger.Info("Re-encoding to common canvas",
-		"encoder", chosen, "canvas", fmt.Sprintf("%dx%d", plan.targetW, plan.targetH))
+		"encoder", chosen, "canvas", fmt.Sprintf("%dx%d", plan.targetW, plan.targetH), "vp8_frame_rate", plan.vp8FrameRate)
 	if !plan.allAudio {
 		logger.Info("At least one part has no audio; output will be video-only")
 	}
@@ -390,6 +481,9 @@ func (s *Service) runReencodeConcat(ctx context.Context, logger *slog.Logger, jo
 		args = append(args, "-filter_complex", filter, "-map", "[outv]")
 		args = append(args, encArgs...)
 		args = append(args, "-an")
+	}
+	if plan.vp8FrameRate > 0 {
+		args = append(args, "-fps_mode", "cfr", "-r", strconv.FormatFloat(plan.vp8FrameRate, 'f', -1, 64))
 	}
 	args = append(args, "-movflags", provenance.MovFlags("+faststart"))
 	args = append(args, provenance.MetadataArgs(

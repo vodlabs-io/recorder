@@ -27,6 +27,28 @@ func TestEnqueueMergeValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("existing merged webm output", func(t *testing.T) {
+		dir := makeSession(t, "vod1.webm", "vod2.webm", "vod.webm")
+		_, err := s.EnqueueMerge(ctx, dir, SessionMeta{}, true, "auto")
+		if !errors.Is(err, ErrInvalid) {
+			t.Fatalf("want ErrInvalid for pre-existing vod.webm, got %v", err)
+		}
+	})
+
+	t.Run("webm parts merge to webm", func(t *testing.T) {
+		dir := makeSession(t, "vod2.webm", "vod10.webm", "vod1.webm")
+		job, err := s.EnqueueMerge(ctx, dir, SessionMeta{}, true, "auto")
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		if job.Output != mergedWebMName {
+			t.Errorf("output = %q, want %q", job.Output, mergedWebMName)
+		}
+		if len(job.Inputs) != 3 || job.Inputs[0] != "vod1.webm" || job.Inputs[2] != "vod10.webm" {
+			t.Errorf("inputs not sorted by number: %v", job.Inputs)
+		}
+	})
+
 	t.Run("valid enqueue and duplicate conflict", func(t *testing.T) {
 		dir := makeSession(t, "vod1.mp4", "vod2.mp4", "vod3.mp4")
 		job, err := s.EnqueueMerge(ctx, dir, SessionMeta{Platform: "tiktok", Username: "bob"}, false, "auto")

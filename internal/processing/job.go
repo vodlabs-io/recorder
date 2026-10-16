@@ -43,8 +43,7 @@ type job struct {
 type jobStage string
 
 const (
-	// jobStageConvert turns one file part (flvwriter .ts or webmwriter .webm)
-	// into .mp4.
+	// jobStageConvert turns one flvwriter .ts part into .mp4 (FLV only).
 	jobStageConvert jobStage = "convert"
 	// jobStageGroup concatenates a worker-defined group of parts into a single
 	// vodN.mp4 and queues it for move.
@@ -103,7 +102,7 @@ func (j *job) process(ctx context.Context, logger *slog.Logger, s *Service) erro
 		"username", j.vod.Username,
 		"session_id", j.vod.SessionID)
 
-	// Determine processing strategy based on the job stage. Convert is file parts only;
+	// Determine processing strategy based on the job stage. Convert is FLV-only;
 	// group and finalize are writer-agnostic (the group job derives its input
 	// paths from the writer name internally).
 	var err error

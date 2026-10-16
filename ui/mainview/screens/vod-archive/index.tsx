@@ -45,7 +45,7 @@ import {
   sessionTime,
 } from "./format"
 import { useRecordings } from "@/state/vods"
-import { VodCard } from "./vod-card"
+import { mergeOutputName, VodCard } from "./vod-card"
 import { RecordingInfoSheet } from "./info-sheet"
 import { retryFailedThumbs } from "./lazy-thumb"
 
@@ -872,7 +872,9 @@ export default function VODArchive() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Merge parts into a single vod.mp4?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Merge parts into a single {mergeTarget ? mergeOutputName(mergeTarget) : "file"}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {mergeTarget && (
                 <>
@@ -899,6 +901,8 @@ export default function VODArchive() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
+            {mergeTarget && mergeOutputName(mergeTarget) === "vod.webm" &&
+              "WebM parts that can't be joined as recorded are re-encoded to vod.mp4. "}
             Monitor progress on the Encoding screen.
           </p>
           <AlertDialogFooter>

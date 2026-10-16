@@ -397,10 +397,10 @@ func (w *worker) deleteEmptyPart() error {
 // that run and starts a new one when the part's codec configuration differs.
 // Keeping a group contiguous is what lets the numbered outputs be replayed in
 // order: a group only ever spans one stretch of the broadcast, so concatenating
-// vod1..vodN reproduces the session's timeline. FLV and WebM parts are sent
-// for eager conversion to .mp4; HLS parts feed the group directly. Closing a group that
-// reached a split limit is the run loop's job, since it happens whether or not
-// this part was kept.
+// vod1..vodN reproduces the session's timeline. FLV parts are sent for eager
+// .ts→.mp4 conversion; WebM and HLS parts feed the group directly. Closing a
+// group that reached a split limit is the run loop's job, since it happens
+// whether or not this part was kept.
 func (w *worker) recordGroupPart() {
 	key := w.curPartKey
 	w.groupsMu.Lock()
@@ -422,7 +422,7 @@ func (w *worker) recordGroupPart() {
 		w.emitGroup(rotated, false)
 	}
 
-	if name := w.writer.Name(); name == "flvwriter" || name == "webmwriter" {
+	if w.writer.Name() == "flvwriter" {
 		w.pendingRecordingsCh <- recording.Job{Output: w.output, Kind: recording.JobPart}
 		w.logger.Info("Sent part for conversion",
 			"part_index", w.output.CurrentPart.Index,
@@ -450,7 +450,7 @@ func (w *worker) closeGroup(key string, sessionEnd bool) {
 
 // emitGroup hands a closed group to processing. The sole group of a whole
 // session is the undecorated vod.mp4; every other group is numbered by
-// creation order.
+// creation order. A webmwriter session's groups are .webm.
 func (w *worker) emitGroup(g *partGroup, sessionEnd bool) {
 	if len(g.stems) == 0 {
 		return
@@ -459,9 +459,13 @@ func (w *worker) emitGroup(g *partGroup, sessionEnd bool) {
 	sole := w.groupSeq == 1
 	w.groupsMu.Unlock()
 
-	outName := fmt.Sprintf("vod%d.mp4", g.index)
+	ext := ".mp4"
+	if w.output.WriterName == "webmwriter" {
+		ext = ".webm"
+	}
+	outName := fmt.Sprintf("vod%d%s", g.index, ext)
 	if sessionEnd && sole {
-		outName = "vod.mp4"
+		outName = "vod" + ext
 	}
 
 	w.pendingRecordingsCh <- recording.Job{

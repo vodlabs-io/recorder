@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"time"
 )
 
@@ -78,8 +79,8 @@ type SessionMeta struct {
 }
 
 // mergeFileRe matches numbered VOD files only — a session that already has a
-// plain vod.mp4 is single-group and never mergeable.
-var mergeFileRe = regexp.MustCompile(`^vod\d+\.mp4$`)
+// plain vod.mp4 or vod.webm is single-group and never mergeable.
+var mergeFileRe = regexp.MustCompile(`^vod(\d+)\.(mp4|webm)$`)
 
 // EnqueueMerge snapshots the session's numbered VOD files and appends a merge job
 // to the queue. Session-level validation (archive state, other services'
@@ -102,9 +103,12 @@ func (s *Service) EnqueueMerge(ctx context.Context, dir string, meta SessionMeta
 	if len(inputs) < 2 {
 		return Job{}, fmt.Errorf("%w: need at least 2 numbered parts, found %d", ErrInvalid, len(inputs))
 	}
-	if _, err := os.Stat(filepath.Join(dir, mergedOutputName)); err == nil {
-		return Job{}, fmt.Errorf("%w: %s already exists in the session folder", ErrInvalid, mergedOutputName)
+	for _, name := range []string{mergedOutputName, mergedWebMName} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			return Job{}, fmt.Errorf("%w: %s already exists in the session folder", ErrInvalid, name)
+		}
 	}
+	output := mergeOutputName(inputs)
 
 	// One active job per session folder.
 	var active int
@@ -131,7 +135,7 @@ func (s *Service) EnqueueMerge(ctx context.Context, dir string, meta SessionMeta
 		VALUES ('merge', 'manual', ?, ?, ?, ?, ?, ?, ?, ?,
 			(SELECT COALESCE(MAX(position), 0) + 1 FROM encode_jobs), 'queued', ?)`,
 		dir, meta.Platform, meta.Username, meta.SessionID,
-		string(inputsJSON), mergedOutputName, boolToInt(deleteParts), normalizeEncoderPref(encoderPref), now)
+		string(inputsJSON), output, boolToInt(deleteParts), normalizeEncoderPref(encoderPref), now)
 	if err != nil {
 		return Job{}, err
 	}
@@ -475,9 +479,11 @@ func (s *Service) pendingCount(ctx context.Context) int {
 }
 
 func partNumber(name string) int {
-	m := mergeFileRe.FindString(name)
-	n := 0
-	fmt.Sscanf(m, "vod%d.mp4", &n)
+	m := mergeFileRe.FindStringSubmatch(name)
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
 	return n
 }
 

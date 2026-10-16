@@ -57,10 +57,6 @@ func TestFLVConvertArgsCarryProvenance(t *testing.T) {
 	assertProvenance(t, flvConvertArgs("/in.ts", "/out.mp4", "VLWM1 prod=vodlabs-recorder"), true)
 }
 
-func TestWebMConvertArgsCarryProvenance(t *testing.T) {
-	assertProvenance(t, webmConvertArgs("/in.webm", "/out.mp4", "VLWM1 prod=vodlabs-recorder"), true)
-}
-
 func TestConcatArgsCarryProvenance(t *testing.T) {
 	for _, tc := range []struct {
 		writer        string
@@ -69,7 +65,7 @@ func TestConcatArgsCarryProvenance(t *testing.T) {
 		// The HLS branch passes no -movflags today; the standard "comment" key
 		// needs none, so that branch must not grow one.
 		{"flvwriter", true},
-		{"webmwriter", true},
+		{"webmwriter", false},
 		{"hlswriter", false},
 	} {
 		t.Run(tc.writer, func(t *testing.T) {

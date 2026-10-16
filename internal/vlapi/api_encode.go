@@ -14,7 +14,7 @@ import (
 // LOCAL-ONLY: see the encode group in service.go.
 type EncodeController interface {
 	// EnqueueMerge queues a merge of a VOD's numbered VOD files into a single
-	// vod.mp4.
+	// vod.mp4, or vod.webm from WebM parts.
 	EnqueueMerge(ctx context.Context, dir string, deleteParts bool) (encoding.Job, error)
 	// ListEncodeQueue returns every retained job plus the paused flag.
 	ListEncodeQueue(ctx context.Context) (encoding.Queue, error)

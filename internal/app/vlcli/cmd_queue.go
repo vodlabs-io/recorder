@@ -17,13 +17,13 @@ import (
 func (a *App) mergeCommand() *cli.Command {
 	return &cli.Command{
 		Name:      "merge",
-		Usage:     "Merge a VOD's files into a single vod.mp4 (queued re-encode)",
+		Usage:     "Merge a VOD's files into a single vod.mp4 or, from WebM parts, vod.webm (queued)",
 		ArgsUsage: "<session_dir>",
 		Before:    a.connectDaemon,
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
 				Name:  "keep-parts",
-				Usage: "Keep the original vodN.mp4 parts (renamed to .bak) instead of deleting them after a verified merge",
+				Usage: "Keep the original vodN parts (renamed to .bak) instead of deleting them after a verified merge",
 			},
 		},
 		Action: a.runMerge,

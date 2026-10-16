@@ -254,6 +254,36 @@ func TestEmitHLSNoPerPartConvert(t *testing.T) {
 	assertEmitted(t, got, want)
 }
 
+func TestEmitWebMNoPerPartConvert(t *testing.T) {
+	w, ch := emitWorker(t, "webmwriter")
+	// WebM parts are joined as recorded: no per-part convert, .webm groups.
+	w.completePart("pt1_best", 1<<30, false)
+	w.completePart("pt2_best", 2<<30, true) // closes group 1
+	w.completePart("pt3_best", 1<<29, false)
+	w.finishSession()
+
+	got := drain(ch)
+	want := []emitted{
+		{kind: "group", output: "vod1.webm", inputs: []string{"pt1_best", "pt2_best"}},
+		{kind: "group", output: "vod2.webm", inputs: []string{"pt3_best"}},
+		{kind: "finalize"},
+	}
+	assertEmitted(t, got, want)
+}
+
+func TestEmitWebMSoleGroup(t *testing.T) {
+	w, ch := emitWorker(t, "webmwriter")
+	w.completePart("pt1_best", 1<<29, false)
+	w.finishSession()
+
+	got := drain(ch)
+	want := []emitted{
+		{kind: "group", output: "vod.webm", inputs: []string{"pt1_best"}},
+		{kind: "finalize"},
+	}
+	assertEmitted(t, got, want)
+}
+
 func assertEmitted(t *testing.T, got, want []emitted) {
 	t.Helper()
 	if len(got) != len(want) {
