@@ -100,6 +100,8 @@ runs some of these checks for streamers that other users follow. In practice:
 A paid plan will be able to turn shared checks off. The free service refuses
 recorders that turn them off.
 
+All live status checks, including the shared ones, are recorded in scraper.log. 
+
 ## Verify it yourself
 
 - **Read and build the code.** Everything on this page is in this repository,
