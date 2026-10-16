@@ -13,12 +13,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   StreamerOptionFields,
@@ -244,27 +245,28 @@ export function AddStreamer({
               <div className="grid grid-cols-3 items-center gap-x-4">
                 <Label className="justify-end text-right">Platform</Label>
                 <div className="col-span-2">
-                  <Select<string>
-                    value={platform}
+                  {/* A page that can only be recorded once is named by its
+                      URL, never by a username. */}
+                  <Combobox<string>
+                    items={platforms
+                      .filter((p) => !platformNoMonitor(p.name))
+                      .map((p) => p.name)}
+                    value={platform || null}
                     onValueChange={(value) => setPlatform(value ?? "")}
+                    itemToStringLabel={platformDisplayName}
                   >
-                    <SelectTrigger className="w-50">
-                      <SelectValue>
-                        {(value: string) =>
-                          value ? platformDisplayName(value) : "Select platform"
-                        }
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {/* A page that can only be recorded once is named by its
-                          URL, never by a username. */}
-                      {platforms.filter((p) => !platformNoMonitor(p.name)).map((p) => (
-                        <SelectItem key={p.name} value={p.name}>
-                          {platformDisplayName(p.name)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <ComboboxInput className="w-50" placeholder="Select platform" />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No platforms found.</ComboboxEmpty>
+                      <ComboboxList>
+                        {(name: string) => (
+                          <ComboboxItem key={name} value={name}>
+                            {platformDisplayName(name)}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                 </div>
               </div>
 
