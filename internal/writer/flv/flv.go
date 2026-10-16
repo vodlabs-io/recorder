@@ -54,6 +54,9 @@ type Config struct {
 	// than a Broadcast lasts; see URLRenewer.
 	URLTTL     time.Duration
 	RefreshURL func(context.Context) (string, error)
+	// Mux, when set, wraps each part's file so the sanitized FLV is written
+	// in another container. It sees a fresh FLV stream, header first, per part.
+	Mux func(io.Writer) io.Writer
 }
 
 // Handoff holds the live stream a codec-configuration change interrupted, so
@@ -147,6 +150,15 @@ func (w *flvWriter) ensureOutputFile(fileName string) error {
 
 	w.file = file
 	return nil
+}
+
+// output is where the sanitizer writes this part: the file, or the file
+// through Config.Mux.
+func (w *flvWriter) output() io.Writer {
+	if w.config.Mux != nil {
+		return w.config.Mux(w.file)
+	}
+	return w.file
 }
 
 // finishPart reports the part's codec config key to the session worker and
@@ -323,7 +335,7 @@ func (w *flvWriter) resume() (io.ReadCloser, error) {
 	w.streamCancel = cancel
 	w.writtenBase = sanitizer.Written()
 	w.statsBase = sanitizer.Stats()
-	if err := sanitizer.RotateOutput(w.file); err != nil {
+	if err := sanitizer.RotateOutput(w.output()); err != nil {
 		// A second configuration change was already buffered: this part is
 		// over before it began. Anything else is a sink failure.
 		if errors.Is(err, flvfix.ErrConfigChange) && w.handOff(stream) {
@@ -442,7 +454,7 @@ func (w *flvWriter) Run(ctx context.Context) error {
 		}
 	}()
 	if w.sanitizer == nil {
-		w.sanitizer = flvfix.New(w.file, w.logger, flvfix.Options{
+		w.sanitizer = flvfix.New(w.output(), w.logger, flvfix.Options{
 			NoResume:        true,
 			RepairsDisabled: !w.config.Sanitize,
 		})

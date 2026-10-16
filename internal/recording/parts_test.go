@@ -56,6 +56,25 @@ func TestRemovePartFiles_FLV(t *testing.T) {
 	assertExists(t, filepath.Join(dir, "session.log"))
 }
 
+func TestRemovePartFiles_WebM(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "pt1_best.webm"), "a")
+	mustWrite(t, filepath.Join(dir, "pt1_best.mp4"), "intermediate")
+	mustWrite(t, filepath.Join(dir, "vod.mp4"), "out")
+
+	v := Output{BaseOutDir: dir, WriterName: "webmwriter"}
+	n, err := v.RemovePartFiles()
+	if err != nil {
+		t.Fatalf("RemovePartFiles: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("removed = %d, want 1", n)
+	}
+	assertGone(t, filepath.Join(dir, "pt1_best.webm"))
+	assertExists(t, filepath.Join(dir, "pt1_best.mp4"))
+	assertExists(t, filepath.Join(dir, "vod.mp4"))
+}
+
 func TestRemovePartFiles_HLS(t *testing.T) {
 	dir := t.TempDir()
 	mustMkdir(t, filepath.Join(dir, "pt1_1080p"))

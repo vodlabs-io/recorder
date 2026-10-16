@@ -104,3 +104,18 @@ func TestIsHLS(t *testing.T) {
 		}
 	}
 }
+
+func TestIsVP8(t *testing.T) {
+	for _, tc := range []struct {
+		url  string
+		want bool
+	}{
+		{"agora://669058195ead4efaa9509c9a400de392/x?mint=manyvids&room=1&codec=vp8", true},
+		{"agora://appid/channel?token=t&uid=1", false},
+		{"https://cdn.example/live/stream.flv?codec=vp8", false},
+	} {
+		if got := (Stream{URL: tc.url}).IsVP8(); got != tc.want {
+			t.Errorf("IsVP8(%q) = %v, want %v", tc.url, got, tc.want)
+		}
+	}
+}

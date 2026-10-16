@@ -118,6 +118,10 @@ func (w *worker) initStream(str streamer.StreamerState) error {
 	}
 
 	writerName := "flvwriter"
+	if selectedStream.IsVP8() {
+		// Neither FLV nor MP4 carries VP8 through ffmpeg; WebM does.
+		writerName = "webmwriter"
+	}
 	if selectedStream.IsHLS() {
 		writerName = "hlswriter"
 		w.selectedHTTPClient = w.basicHTTPClient

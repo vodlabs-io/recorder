@@ -432,7 +432,7 @@ func (a *App) busyVODThumbnail(ctx context.Context, session vodindex.VOD, file s
 
 // busyThumbSources lists the local media a busy session's screenshot can come
 // from, best first: its produced files (one still being written fails and is
-// passed over), then its raw Parts — FLV captures, HLS playlists, then
+// passed over), then its raw Parts — FLV and WebM captures, HLS playlists, then
 // converted intermediates, which may be half written — in Part order.
 func busyThumbSources(dir string, names []string) []string {
 	var sources []string
@@ -456,7 +456,7 @@ func busyThumbSources(dir string, names []string) []string {
 				if _, err := os.Stat(filepath.Join(p, "index.m3u8")); err == nil {
 					raw = append(raw, filepath.Join(p, "index.m3u8"))
 				}
-			case strings.HasSuffix(name, ".ts"):
+			case strings.HasSuffix(name, ".ts"), strings.HasSuffix(name, ".webm"):
 				raw = append(raw, p)
 			case strings.HasSuffix(name, ".mp4"):
 				converted = append(converted, p)

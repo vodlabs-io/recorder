@@ -19,6 +19,7 @@ func TestPreparePartLayout(t *testing.T) {
 	}{
 		{writer: "hlswriter", wantFileName: "index.m3u8", wantRetries: 3, pathIsDir: true},
 		{writer: "flvwriter", wantFileName: "pt1_720p.ts", wantRetries: 2, pathIsDir: false},
+		{writer: "webmwriter", wantFileName: "pt1_720p.webm", wantRetries: 2, pathIsDir: false},
 	}
 
 	for _, tc := range cases {

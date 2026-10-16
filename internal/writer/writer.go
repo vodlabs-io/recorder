@@ -3,6 +3,7 @@ package writer
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/stream"
+	"github.com/vodlabs-io/recorder/internal/webm"
 	"github.com/vodlabs-io/recorder/internal/writer/flv"
 	"github.com/vodlabs-io/recorder/internal/writer/hls"
 )
@@ -21,10 +23,10 @@ type Config struct {
 	Headers   map[string]string
 	UserAgent string
 	Retries   int
-	// Sanitize enables in-flight FLV stream cleanup (flvwriter only).
+	// Sanitize enables in-flight FLV stream cleanup (flvwriter and webmwriter).
 	Sanitize bool
 	// OnConfigKey receives the part's codec configuration key as the part
-	// finishes (flvwriter only; see flv.Config.OnConfigKey).
+	// finishes (flvwriter and webmwriter; see flv.Config.OnConfigKey).
 	OnConfigKey func(key string)
 	// Carryover holds the writer state that must survive this Part. A Config
 	// is built per Part, so the Session owns it and passes the same pointer in
@@ -205,11 +207,16 @@ func (f *flvWriter) Record(
 	logger *slog.Logger,
 	progressCh chan<- int64,
 ) error {
+	return flv.Record(ctx, flvConfig(part, cfg), client, logger, progressCh)
+}
+
+// flvConfig is the FLV writer's configuration for one Part.
+func flvConfig(part PartSpec, cfg *Config) flv.Config {
 	var handoff *flv.Handoff
 	if cfg.Carryover != nil {
 		handoff = cfg.Carryover.flvHandoff
 	}
-	flvConfig := flv.Config{
+	return flv.Config{
 		URL:            cfg.StreamURL,
 		OutDir:         part.Dir,
 		UserAgent:      cfg.UserAgent,
@@ -224,8 +231,50 @@ func (f *flvWriter) Record(
 		URLTTL:         cfg.StreamURLTTL,
 		RefreshURL:     cfg.RefreshStreamURL,
 	}
+}
 
-	return flv.Record(ctx, flvConfig, client, logger, progressCh)
+// webmWriter records an FLV source whose video is VP8 as WebM, which ffmpeg
+// can read back: the FLV writer's connection, retries and sanitizer, with each
+// Part remuxed on its way to disk.
+type webmWriter struct{}
+
+func (wm *webmWriter) Name() string {
+	return "webmwriter"
+}
+
+// PreparePart writes each Part as one file beside the others in the session
+// directory, as the FLV writer does.
+func (wm *webmWriter) PreparePart(baseOutDir, stem string) (PartSpec, error) {
+	if err := os.MkdirAll(baseOutDir, 0o755); err != nil {
+		return PartSpec{}, fmt.Errorf("create part directory: %w", err)
+	}
+	name := stem + ".webm"
+	return PartSpec{
+		Dir:      baseOutDir,
+		FileName: name,
+		Path:     filepath.Join(baseOutDir, name),
+		Retries:  2,
+	}, nil
+}
+
+func (wm *webmWriter) DiscardPart(part PartSpec) error {
+	if err := os.Remove(part.Path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete empty part file: %w", err)
+	}
+	return nil
+}
+
+func (wm *webmWriter) Record(
+	ctx context.Context,
+	part PartSpec,
+	cfg *Config,
+	client *http.Client,
+	logger *slog.Logger,
+	progressCh chan<- int64,
+) error {
+	c := flvConfig(part, cfg)
+	c.Mux = func(out io.Writer) io.Writer { return webm.NewRemuxer(out) }
+	return flv.Record(ctx, c, client, logger, progressCh)
 }
 
 var (
@@ -236,6 +285,7 @@ var (
 func init() {
 	register(&hlsWriter{})
 	register(&flvWriter{})
+	register(&webmWriter{})
 }
 
 // register registers a new writer

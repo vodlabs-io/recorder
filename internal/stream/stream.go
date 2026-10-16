@@ -2,6 +2,7 @@ package stream
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -36,6 +37,16 @@ func (s Stream) IsHLS() bool {
 	// recorded from the HLS its seat is granted.
 	return strings.Contains(s.URL, ".m3u8") || strings.HasPrefix(s.URL, "nicolive://") ||
 		strings.HasPrefix(s.URL, "fc2live://")
+}
+
+// IsVP8 reports whether the stream is known, before it is opened, to carry VP8
+// video: an Agora channel (agora://) joined with codec=vp8.
+func (s Stream) IsVP8() bool {
+	if !strings.HasPrefix(s.URL, "agora://") {
+		return false
+	}
+	u, err := url.Parse(s.URL)
+	return err == nil && u.Query().Get("codec") == "vp8"
 }
 
 // SegmentRename rewrites a media playlist's segment URLs before they are

@@ -11,6 +11,7 @@ import (
 
 	"github.com/vodlabs-io/recorder/internal/ffmpeg"
 	"github.com/vodlabs-io/recorder/internal/provenance"
+	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/stream"
 )
 
@@ -75,12 +76,19 @@ func (j *job) processGroupJob(ctx context.Context, logger *slog.Logger, s *Servi
 	return nil
 }
 
-// groupInputPaths maps the group's part stems to concat input paths: FLV parts
+// fileParts reports whether the session's Parts are single files (FLV or
+// WebM), which are converted to .mp4 intermediates, rather than HLS
+// directories.
+func (j *job) fileParts() bool {
+	return recording.PartFileExt(j.vod.WriterName) != ""
+}
+
+// groupInputPaths maps the group's part stems to concat input paths: file parts
 // are the converted .mp4 intermediates, HLS parts are the raw segment directories.
 func (j *job) groupInputPaths() []string {
 	paths := make([]string, 0, len(j.groupInputs))
 	for _, stem := range j.groupInputs {
-		if j.vod.WriterName == "flvwriter" {
+		if j.fileParts() {
 			paths = append(paths, filepath.Join(j.vod.BaseOutDir, stem+".mp4"))
 		} else {
 			paths = append(paths, filepath.Join(j.vod.BaseOutDir, stem))
@@ -89,10 +97,10 @@ func (j *job) groupInputPaths() []string {
 	return paths
 }
 
-// concatGroup assembles the group's inputs into outPath. A lone FLV part is
-// renamed rather than remuxed.
+// concatGroup assembles the group's inputs into outPath. A lone file part's
+// intermediate is renamed rather than remuxed.
 func (j *job) concatGroup(ctx context.Context, logger *slog.Logger, inputs []string, outPath string) error {
-	if j.vod.WriterName == "flvwriter" && len(inputs) == 1 {
+	if j.fileParts() && len(inputs) == 1 {
 		if err := os.Rename(inputs[0], outPath); err != nil {
 			return fmt.Errorf("rename single part to %s: %w", filepath.Base(outPath), err)
 		}
@@ -105,9 +113,10 @@ func (j *job) concatGroup(ctx context.Context, logger *slog.Logger, inputs []str
 
 	var sb strings.Builder
 	for _, in := range inputs {
-		// HLS parts are directories; concat their playlists. FLV parts are files.
+		// HLS parts are directories; concat their playlists. File parts are
+		// listed as their .mp4 intermediates.
 		listed := in
-		if j.vod.WriterName != "flvwriter" {
+		if !j.fileParts() {
 			listed = filepath.Join(in, "index.m3u8")
 			if _, err := os.Stat(listed); err != nil {
 				logger.Warn("Skipping part with missing playlist", "part", filepath.Base(in), "error", err)
@@ -196,13 +205,13 @@ func endPlaylist(path string) error {
 	return err
 }
 
-// concatArgs returns the ffmpeg arguments for concatenating a group. FLV output
-// gets faststart and timestamp-repair flags; HLS just stream-copies the joined
-// playlists.
+// concatArgs returns the ffmpeg arguments for concatenating a group. File-part
+// output gets faststart and timestamp-repair flags; HLS just stream-copies the
+// joined playlists.
 func (j *job) concatArgs(concatFilePath, outPath string) []string {
 	rec := j.provenanceRecord(filepath.Base(outPath))
 	var args []string
-	if j.vod.WriterName == "flvwriter" {
+	if j.fileParts() {
 		args = []string{
 			"-hide_banner",
 			"-loglevel", "warning",
@@ -233,20 +242,20 @@ func (j *job) concatArgs(concatFilePath, outPath string) []string {
 }
 
 // deleteGroupInputs frees a produced group's local inputs. FLV .mp4 intermediates
-// are always removed; the raw FLV .ts files and raw HLS segment directories are
+// are always removed; the raw part files and raw HLS segment directories are
 // removed only when part-file deletion is enabled (otherwise they are retained
 // for the end-of-session sweep, matching the global delete_part_files policy).
 func (j *job) deleteGroupInputs(logger *slog.Logger, deletePartFiles bool) {
 	for _, stem := range j.groupInputs {
-		if j.vod.WriterName == "flvwriter" {
+		if j.fileParts() {
 			mp4 := filepath.Join(j.vod.BaseOutDir, stem+".mp4")
 			if err := os.Remove(mp4); err != nil && !os.IsNotExist(err) {
 				logger.Warn("Failed to remove intermediate part", "path", mp4, "error", err)
 			}
 			if deletePartFiles {
-				ts := filepath.Join(j.vod.BaseOutDir, stem+".ts")
-				if err := os.Remove(ts); err != nil && !os.IsNotExist(err) {
-					logger.Warn("Failed to remove raw part", "path", ts, "error", err)
+				raw := filepath.Join(j.vod.BaseOutDir, stem+recording.PartFileExt(j.vod.WriterName))
+				if err := os.Remove(raw); err != nil && !os.IsNotExist(err) {
+					logger.Warn("Failed to remove raw part", "path", raw, "error", err)
 				}
 			}
 			continue

@@ -397,8 +397,8 @@ func (w *worker) deleteEmptyPart() error {
 // that run and starts a new one when the part's codec configuration differs.
 // Keeping a group contiguous is what lets the numbered outputs be replayed in
 // order: a group only ever spans one stretch of the broadcast, so concatenating
-// vod1..vodN reproduces the session's timeline. FLV parts are sent for eager
-// .ts→.mp4 conversion; HLS parts feed the group directly. Closing a group that
+// vod1..vodN reproduces the session's timeline. FLV and WebM parts are sent
+// for eager conversion to .mp4; HLS parts feed the group directly. Closing a group that
 // reached a split limit is the run loop's job, since it happens whether or not
 // this part was kept.
 func (w *worker) recordGroupPart() {
@@ -422,7 +422,7 @@ func (w *worker) recordGroupPart() {
 		w.emitGroup(rotated, false)
 	}
 
-	if w.writer.Name() == "flvwriter" {
+	if name := w.writer.Name(); name == "flvwriter" || name == "webmwriter" {
 		w.pendingRecordingsCh <- recording.Job{Output: w.output, Kind: recording.JobPart}
 		w.logger.Info("Sent part for conversion",
 			"part_index", w.output.CurrentPart.Index,
