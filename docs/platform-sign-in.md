@@ -4,8 +4,8 @@ Some streams can only be watched with an account: 18+ streams, subscriber-only
 streams, or higher qualities that a platform keeps for signed-in viewers. To
 record those, sign the recorder in to the platform with your own account.
 
-Sign-in is supported for TikTok, YouTube, Twitch and Bigo. You don't need it
-for anything else.
+[Supported platforms](platforms.md) marks the platforms that support sign-in.
+You don't need it for anything else.
 
 ## What happens to your login
 

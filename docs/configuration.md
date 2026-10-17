@@ -41,7 +41,7 @@ with `vod config edit`. The main settings:
 | `session.sanitize_flv` | `true` | Repair unstable FLV streams while recording. |
 | `processing.archive_dir` | off | Move each finished recording to this folder, for example an external drive. |
 | `processing.scan_dirs` | none | Extra folders, such as an old drive, to list in the VOD Archive. They are only read. |
-| `processing.delete_part_files` | `true` | Delete a recording's parts once they are turned into `vod.mp4`. |
+| `processing.delete_part_files` | `true` | Delete a recording's parts once they are turned into the finished video. |
 | `processing.encoder` | `auto` | The video encoder for merges: `auto` picks a working hardware encoder, `software` uses x264. |
 | `processing.low_space_warn_gb` | `20` | Warn when a recording folder has less free space than this, in GiB. |
 | `logger.level` | `info` | How much to log: `debug`, `info`, `warn` or `error`. |

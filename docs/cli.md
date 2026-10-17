@@ -44,7 +44,7 @@ Every command that takes `<url>` also accepts `<platform> <username>`.
 | Command | What it does |
 | --- | --- |
 | `vod vods list` | List recordings, newest first. Filter with `-p <platform>` and `-u <username>`; `-n` sets how many (50 by default); `--rescan` re-reads the folders first; `--paths` prints only folder paths. Alias: `recordings`. |
-| `vod merge <folder>` | Join a recording's files into one `vod.mp4`. It is queued; `--keep-parts` keeps the originals as `.bak` files. |
+| `vod merge <folder>` | Join a recording's files into one `vod.mp4`, or `vod.webm` when WebM parts can be joined without re-encoding. It is queued; `--keep-parts` keeps the originals as `.bak` files. |
 | `vod queue list` | List merge jobs. |
 | `vod queue cancel <job_id>`<br>`vod queue retry <job_id>`<br>`vod queue rm <job_id>` | Cancel, retry, or remove a job. |
 | `vod queue pause`<br>`vod queue resume` | Pause the queue after the running job, or resume it. |

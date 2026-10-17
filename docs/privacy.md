@@ -31,8 +31,8 @@ that does it, so you can check it for yourself.
 | What | Why | Kept for |
 | --- | --- | --- |
 | A client ID: the public half of a key your recorder generates for itself. It isn't linked to your name or email. | To tell recorders apart, and to verify that requests are really from yours. | Until your recorder has been out of touch for 90 days. |
-| The streamers you follow, as platform and username. | To tell you when they go live. ([subscribe.go](../internal/cloud/subscribe.go), [status.go](../internal/cloud/status.go)) | The same. |
-| Your app version. | To tell you about updates, and to stop serving versions that no longer work. ([heartbeat.go](../internal/cloud/heartbeat.go)) | The same. |
+| The streamers you follow, as platform and username, and any link you paste to add one. | To tell you when they go live, and to work out which streamer a link names. ([subscribe.go](../internal/cloud/subscribe.go), [status.go](../internal/cloud/status.go), [preflight.go](../internal/cloud/preflight.go)) | The same. |
+| Your app version, operating system and CPU type, and whether the app or `vod` started the recorder. | To tell you about updates, and to stop serving versions that no longer work. ([heartbeat.go](../internal/cloud/heartbeat.go), [useragent.go](../internal/cloud/useragent.go)) | The same. |
 | Your IP address. | To limit how much one address can use the free service, and for shared checks (below). | 30 days after your recorder was last connected. |
 | That a recording of a streamer stalled. | So the service can check the stream again and give your recorder a fresh link. ([lag.go](../internal/cloud/lag.go)) | Not stored with your client. |
 
@@ -44,6 +44,13 @@ handles the connection to it.
 Whether a streamer is live, and their profile picture, are shared with
 everyone who follows that streamer: that is public information on the
 platform.
+
+## Other connections
+
+- **The platforms**, to record. On some platforms the recorder joins a
+  broadcast as a guest viewer, from your IP address.
+- **GitHub**, to download the recorder daemon and updates.
+- **VodLabs' image server**, for streamers' profile pictures.
 
 ## Requests your recorder makes for the service
 
@@ -100,7 +107,7 @@ runs some of these checks for streamers that other users follow. In practice:
 A paid plan will be able to turn shared checks off. The free service refuses
 recorders that turn them off.
 
-All live status checks, including the shared ones, are recorded in scraper.log. 
+All live status checks, including the shared ones, are recorded in scraper.log.
 
 ## Verify it yourself
 

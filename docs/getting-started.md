@@ -37,7 +37,8 @@ Each broadcast is written to its own folder inside your download folder,
 `<platform>/<username>/<date and time>` by default. While a stream is live it
 is saved in parts. When the broadcast ends, the parts are turned into
 `vod.mp4` (or `vod1.mp4`, `vod2.mp4`… when [splitting](configuration.md) is on),
-and the parts are deleted.
+and the parts are deleted. Platforms that send VP8 video, such as ManyVids,
+give `vod.webm` instead.
 
 The **VOD Archive** page lists every recording, newest first. Each one can be
 opened in your video player or revealed in its folder. `vod vods list` prints
@@ -45,7 +46,7 @@ the same list.
 
 If a broadcast was saved as several files, for example because the stream
 changed resolution partway through, **Merge parts…** in its menu in the VOD
-Archive (or `vod merge <folder>`) joins them into one `vod.mp4`. Merges run one at a time
+Archive (or `vod merge <folder>`) joins them into one file. Merges run one at a time
 on the **Encoding** page.
 
 To move finished recordings off the download disk, set an **archive folder**

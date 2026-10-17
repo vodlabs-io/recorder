@@ -63,4 +63,4 @@ the desktop app always looks for it on 4222.
 A new file starts whenever the stream's video format changes, for example
 when the streamer's encoder switches resolution, and at the size or length
 limits set in [Configuration](configuration.md). Use **Merge parts…** in the
-VOD Archive, or `vod merge <folder>`, to join them into one `vod.mp4`.
+VOD Archive, or `vod merge <folder>`, to join them into one file.

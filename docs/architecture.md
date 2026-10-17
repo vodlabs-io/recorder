@@ -13,8 +13,10 @@ your computer                                             VodLabs service
 └───────────────┬──────────────────┘                      │   people follow              │
                 │ video straight from the platform        └──────────────────────────────┘
                 ▼
-     TikTok · YouTube · Twitch · Kick · SOOP · CHZZK · PandaLive · Bigo · Douyin
+            the streaming platforms
 ```
+
+The recorder supports [these platforms](platforms.md).
 
 ## On your computer
 

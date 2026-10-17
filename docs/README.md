@@ -4,6 +4,7 @@
   and the first-launch warnings on each system.
 - [Getting started](getting-started.md): add a streamer, and find your
   recordings.
+- [Supported platforms](platforms.md)
 - [Signing in to platforms](platform-sign-in.md): record streams that need an
   account.
 - [Command-line reference](cli.md): every `vod` command.
