@@ -63,9 +63,12 @@ function userCacheDir(): string {
   }
 }
 
-// daemonLogDir is where the daemon writes its own logs (matching vllog's
-// <UserCacheDir>/vodlabs/recorder/logs), so its stderr lands beside them.
+// daemonLogDir is where the daemon writes its own logs (matching vllog:
+// $VLREC_CACHE_DIR/logs, else <UserCacheDir>/vodlabs/recorder/logs), so its
+// stderr lands beside them.
 export function daemonLogDir(): string {
+  const override = process.env.VLREC_CACHE_DIR?.trim();
+  if (override) return join(override, "logs");
   return join(userCacheDir(), "vodlabs", "recorder", "logs");
 }
 
