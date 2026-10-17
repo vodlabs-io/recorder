@@ -69,6 +69,7 @@ export function AddStreamer({
 
   const urlInputRef = useRef<HTMLInputElement>(null)
   const usernameInputRef = useRef<HTMLInputElement>(null)
+  const selectOnFocus = useRef(false)
 
   useEffect(() => {
     if (!open) return
@@ -255,7 +256,20 @@ export function AddStreamer({
                     onValueChange={(value) => setPlatform(value ?? "")}
                     itemToStringLabel={platformDisplayName}
                   >
-                    <ComboboxInput className="w-50" placeholder="Select platform" />
+                    {/* Select on focus so typing replaces the platform; the
+                        focusing mouseup would clear the selection. */}
+                    <ComboboxInput
+                      className="w-50"
+                      placeholder="Select platform"
+                      onFocus={(e) => {
+                        e.currentTarget.select()
+                        selectOnFocus.current = true
+                      }}
+                      onMouseUp={(e) => {
+                        if (selectOnFocus.current) e.preventDefault()
+                        selectOnFocus.current = false
+                      }}
+                    />
                     <ComboboxContent>
                       <ComboboxEmpty>No platforms found.</ComboboxEmpty>
                       <ComboboxList>
