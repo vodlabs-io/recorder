@@ -538,6 +538,31 @@ func TestScanCarriesStreamTitles(t *testing.T) {
 	}
 }
 
+// The sidecar's latest display name names the streamer in the listing, for
+// platforms that key streamers by a numeric id.
+func TestScanCarriesDisplayName(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "kwai", "150000024312774", "2026-10-16_12-00-00-0000")
+	writeFile(t, filepath.Join(dir, "vod.mp4"), 4096)
+	at := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
+	err := vodmeta.Write(dir, vodmeta.Document{
+		Platform: "kwai",
+		Username: "150000024312774",
+		Observations: []vodmeta.Observation{
+			{At: at, LiveMetadata: streamer.LiveMetadata{DisplayName: "Old Name", Viewers: 1}},
+			{At: at.Add(time.Minute), LiveMetadata: streamer.LiveMetadata{Viewers: 2, Title: "t"}},
+			{At: at.Add(2 * time.Minute), LiveMetadata: streamer.LiveMetadata{DisplayName: "New Name"}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := sessionByDir(t, Scan(context.Background(), []string{root}, nil), dir)
+	if s.DisplayName != "New Name" {
+		t.Errorf("DisplayName = %q, want New Name", s.DisplayName)
+	}
+}
+
 // A session folder with no sidecar (e.g. a platform that reports no title)
 // still lists normally.
 func TestScanWithoutMetadataSidecar(t *testing.T) {

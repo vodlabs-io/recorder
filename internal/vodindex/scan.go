@@ -83,6 +83,9 @@ type VOD struct {
 	// whoever wants them. Only the titles are carried in the listing, which is
 	// paged by byte size.
 	Titles []Title `json:"titles,omitempty"`
+	// DisplayName is the last name the platform showed for the streamer while
+	// the session was recording. Empty when the sidecar has none.
+	DisplayName string `json:"display_name,omitempty"`
 }
 
 // Title is one stream title a session ran under, with when the recorder first
@@ -438,7 +441,7 @@ func buildSession(root, dir string, c dirContents) VOD {
 	hasManifest, vodFiles, thumbs := c.hasManifest, c.vodFiles, c.thumbs
 	s := VOD{Dir: dir, Root: root}
 	if c.hasMetadata {
-		s.Titles = readTitles(dir)
+		s.Titles, s.DisplayName = readSidecar(dir)
 	}
 	// Stamp the folder so a later walk can decide to reuse this entry. Left
 	// zero on error, which simply means it will be read again.
@@ -573,24 +576,29 @@ func trimExt(name string) string {
 	return strings.TrimSuffix(name, filepath.Ext(name))
 }
 
-// readTitles lifts the title timeline out of a session's metadata sidecar. A
-// missing or unreadable sidecar yields nothing: the titles decorate a listing
-// that stands on its own without them.
-func readTitles(dir string) []Title {
+// readSidecar lifts the title timeline and the streamer's latest display name
+// out of a session's metadata sidecar. A missing or unreadable sidecar yields
+// nothing: both decorate a listing that stands on its own without them.
+func readSidecar(dir string) (titles []Title, displayName string) {
 	doc, err := vodmeta.Read(dir)
 	if err != nil {
-		return nil
+		return nil, ""
+	}
+	for _, o := range doc.Observations {
+		if n := strings.TrimSpace(o.DisplayName); n != "" {
+			displayName = n
+		}
 	}
 	seen := doc.Titles()
 	if len(seen) == 0 {
-		return nil
+		return nil, displayName
 	}
 	if len(seen) > maxListedTitles {
 		seen = seen[:maxListedTitles]
 	}
-	titles := make([]Title, 0, len(seen))
+	titles = make([]Title, 0, len(seen))
 	for _, t := range seen {
 		titles = append(titles, Title{Text: t.Text, At: t.At})
 	}
-	return titles
+	return titles, displayName
 }

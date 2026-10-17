@@ -202,7 +202,9 @@ function InfoBody({
     <>
       {/* pr-10 keeps the title clear of the sheet's own close button. */}
       <SheetHeader className="gap-1 pr-10 pb-0">
-        <SheetTitle className="truncate">{s.username || "Unknown streamer"}</SheetTitle>
+        <SheetTitle className="truncate">
+          {s.display_name || s.username || "Unknown streamer"}
+        </SheetTitle>
         <SheetDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
           {s.platform && <span>{platformDisplayName(s.platform)}</span>}
           {s.platform && <span aria-hidden>·</span>}

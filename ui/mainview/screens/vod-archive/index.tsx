@@ -248,7 +248,7 @@ export default function VODArchive() {
     const to = toD ? toD.getTime() + 24 * 3600 * 1000 : null
 
     const out = sessions.filter((s) => {
-      if (q && !`${s.username} ${s.platform} ${s.session_id}`.toLowerCase().includes(q)) {
+      if (q && !`${s.username} ${s.display_name ?? ""} ${s.platform} ${s.session_id}`.toLowerCase().includes(q)) {
         return false
       }
       if (platform !== "all" && s.platform !== platform) return false

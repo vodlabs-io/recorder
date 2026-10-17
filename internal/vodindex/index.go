@@ -31,7 +31,7 @@ const snapshotSaveDelay = time.Second
 // snapshotVersion tags the snapshot file format; a mismatch (older daemon's
 // file, future format change) makes the snapshot load a no-op and the first
 // scan rebuilds from the filesystem.
-const snapshotVersion = 2
+const snapshotVersion = 3
 
 // indexSnapshot is the on-disk form of the cached listing. Rev rides inside
 // the Result, so a restarted daemon resumes the same content generation and

@@ -537,6 +537,9 @@ export type VOD = {
   // timeline rather than one value. Absent for sessions recorded without a
   // metadata sidecar, and for platforms that report no title.
   titles?: VODTitle[];
+  // The last name the platform showed for the streamer during the session.
+  // Absent when the sidecar has none.
+  display_name?: string;
 };
 
 // VODTitle mirrors vodindex.Title: one title a session ran under, and when the

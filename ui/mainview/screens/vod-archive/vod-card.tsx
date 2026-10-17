@@ -177,7 +177,7 @@ export const VodCard = React.memo(function VodCard({
         >
           <Checkbox
             checked={selected}
-            aria-label={`Select ${s.username || "recording"}`}
+            aria-label={`Select ${s.display_name || s.username || "recording"}`}
             onClick={(e) => {
               e.stopPropagation()
               onSelectChange(s, (e as React.MouseEvent).shiftKey)
@@ -191,13 +191,17 @@ export const VodCard = React.memo(function VodCard({
             <button
               type="button"
               className="truncate text-sm font-medium underline decoration-dotted decoration-muted-foreground underline-offset-4 hover:decoration-foreground"
-              title={`Show only ${s.username}`}
+              title={
+                s.display_name && s.display_name !== s.username
+                  ? `${s.display_name} (${s.username}). Show only this streamer`
+                  : `Show only ${s.username}`
+              }
               onClick={(e) => {
                 e.stopPropagation()
                 onFilterStreamer(s)
               }}
             >
-              {s.username}
+              {s.display_name || s.username}
             </button>
           ) : (
             <span className="truncate text-sm font-medium">unknown</span>
