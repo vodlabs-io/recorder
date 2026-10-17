@@ -90,11 +90,9 @@ func FilePath(cfg vlconfig.LoggerConfig) string {
 	return filepath.Join(cfg.Directory, cfg.FileName)
 }
 
+// directory is the logs folder in the cache dir, VLREC_CACHE_DIR when set.
 func directory() string {
-	if userCacheDir, err := os.UserCacheDir(); err == nil && userCacheDir != "" {
-		return filepath.Join(userCacheDir, "vodlabs", "recorder", "logs")
-	}
-	return "logs" // Fallback to current working directory
+	return vlconfig.DefaultCacheFilePath("logs")
 }
 
 func parseLevel(s string) (slog.Level, error) {
