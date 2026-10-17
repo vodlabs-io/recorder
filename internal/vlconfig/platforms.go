@@ -285,6 +285,20 @@ var embeddedDisplayNames = func() map[string]string {
 	return m
 }()
 
+// DisplayNameFor is a platform's human-facing label, or its key when none is
+// known. It also names platforms the current list does not offer.
+func DisplayNameFor(name string) string {
+	for _, p := range Platforms() {
+		if p.Name == name && p.DisplayName != "" {
+			return p.DisplayName
+		}
+	}
+	if n := embeddedDisplayNames[name]; n != "" {
+		return n
+	}
+	return name
+}
+
 // embeddedChannelURLs maps platform name → its embedded live-page template, the
 // fallback when the incoming list omits one.
 var embeddedChannelURLs = func() map[string]string {

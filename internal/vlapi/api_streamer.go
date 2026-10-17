@@ -125,6 +125,14 @@ func (s *Service) preflight(req micro.Request, id streamer.StreamerRef, once boo
 
 	resolved, err := s.streamerFuncs.Resolve(ctx, id)
 	if err == nil {
+		// A platform this version is not offered would be stored but never
+		// subscribed, leaving an entry the app cannot show.
+		if p := resolved.StreamerKey.Platform; p != "" && !slices.Contains(vlconfig.PlatformNames(), p) {
+			respond(req, fail(errInvalidArg, fmt.Sprintf(
+				"%s isn't available in this version of VodLabs Recorder. Update the app and try again.",
+				vlconfig.DisplayNameFor(p))))
+			return streamer.StreamerRef{}, false
+		}
 		return resolved, true
 	}
 	if id.URL != "" && unsupportedSite(err) && s.streamerFuncs.ResolvePage != nil {

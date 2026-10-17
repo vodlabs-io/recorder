@@ -518,3 +518,34 @@ func TestSetOptions_RefusesToMonitorANoMonitorPlatform(t *testing.T) {
 		t.Fatalf("reply = %+v, want %s", env, ErrMonitorUnsupported)
 	}
 }
+
+// A URL the cloud resolves to a platform this version is not offered is
+// refused, not stored: it would never be subscribed, so its row never appears.
+func TestAddStreamer_RefusesAPlatformThisVersionIsNotOffered(t *testing.T) {
+	prev := vlconfig.Platforms()
+	t.Cleanup(func() { vlconfig.SetPlatforms(prev) })
+	var offered []vlconfig.Platform
+	for _, p := range prev {
+		if p.Name != "younow" {
+			offered = append(offered, p)
+		}
+	}
+	vlconfig.SetPlatforms(offered)
+
+	s, sf, _ := newAddService(t, func(context.Context, streamer.StreamerRef) (streamer.StreamerRef, error) {
+		return streamer.StreamerRef{StreamerKey: streamer.StreamerKey{Platform: "younow", Username: "queen3232"}}, nil
+	})
+	req := addRequest(t, streamer.StreamerRef{URL: "https://www.younow.com/queen3232"})
+	s.handleAddStreamer(req)
+
+	env := req.envelope(t)
+	if env.OK || env.Error == nil || !strings.Contains(env.Error.Message, "YouNow") {
+		t.Fatalf("reply = %+v, want a refusal naming YouNow", env)
+	}
+	if err := sf.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if ids := sf.AllIDs(); len(ids) != 0 {
+		t.Fatalf("streamers.toml lists %v, want nothing", ids.Strings())
+	}
+}
