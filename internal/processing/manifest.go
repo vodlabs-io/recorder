@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -151,4 +152,35 @@ func (s *Service) completedGroupsForSession(ctx context.Context, sessionID strin
 		}
 	}
 	return groups, rows.Err()
+}
+
+// failedGroupsErr returns an error naming the session's failed group outputs,
+// nil when none failed.
+func (s *Service) failedGroupsErr(ctx context.Context, sessionID string) error {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT group_output
+		FROM postprocess_jobs
+		WHERE session_id = ? AND job_stage = 'group' AND status = 'failed'
+		ORDER BY id ASC`, sessionID)
+	if err != nil {
+		return fmt.Errorf("list failed groups: %w", err)
+	}
+	defer rows.Close()
+
+	var failed []string
+	for rows.Next() {
+		var output sql.NullString
+		if err := rows.Scan(&output); err != nil {
+			return err
+		}
+		failed = append(failed, output.String)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%d group(s) failed (%s); raw parts are kept",
+		len(failed), strings.Join(failed, ", "))
 }

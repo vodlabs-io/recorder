@@ -110,22 +110,63 @@ func (j *job) concatGroup(ctx context.Context, logger *slog.Logger, inputs []str
 	concatFilePath := filepath.Join(j.vod.BaseOutDir, "concat_list.txt")
 	defer os.Remove(concatFilePath)
 
-	var sb strings.Builder
+	var listed []string
+	var runs []initRun
+	var inBytes int64
+	var wantSec float64
 	for _, in := range inputs {
-		// HLS parts are directories; concat their playlists. FLV and WebM
-		// parts are files.
-		listed := in
-		if recording.PartFileExt(j.vod.WriterName) == "" {
-			listed = filepath.Join(in, "index.m3u8")
-			if _, err := os.Stat(listed); err != nil {
-				logger.Warn("Skipping part with missing playlist", "part", filepath.Base(in), "error", err)
-				continue
-			}
-			if err := endPlaylist(listed); err != nil {
-				logger.Warn("Failed to terminate part playlist", "part", filepath.Base(in), "error", err)
+		// HLS parts are directories; concat their playlists, split at each
+		// init-segment change. FLV and WebM parts are files.
+		if recording.PartFileExt(j.vod.WriterName) != "" {
+			listed = append(listed, in)
+			inBytes += pathSize(in)
+			continue
+		}
+		playlist := filepath.Join(in, "index.m3u8")
+		if _, err := os.Stat(playlist); err != nil {
+			logger.Warn("Skipping part with missing playlist", "part", filepath.Base(in), "error", err)
+			continue
+		}
+		if err := endPlaylist(playlist); err != nil {
+			logger.Warn("Failed to terminate part playlist", "part", filepath.Base(in), "error", err)
+		}
+		inBytes += pathSize(in)
+		wantSec += playlistDuration(playlist)
+		partRuns, err := initRuns(playlist)
+		if err != nil {
+			return fmt.Errorf("split part %s at init segments: %w", filepath.Base(in), err)
+		}
+		for _, r := range partRuns {
+			if r.playlist != playlist {
+				defer os.Remove(r.playlist)
 			}
 		}
-		fmt.Fprintf(&sb, "file '%s'\n", listed)
+		runs = append(runs, partRuns...)
+	}
+
+	// Runs under differing inits are remuxed one by one and the results
+	// joined; the HLS demuxer applies only the first init it reads.
+	remux := mixedInits(runs)
+	if remux {
+		logger.Info("Init segment changes within the group; remuxing each run",
+			"output", filepath.Base(outPath), "runs", len(runs))
+	}
+	for _, r := range runs {
+		if !remux || r.init == nil {
+			listed = append(listed, r.playlist)
+			continue
+		}
+		mp4, err := j.remuxRun(ctx, logger, r)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(mp4)
+		listed = append(listed, mp4)
+	}
+
+	var sb strings.Builder
+	for _, l := range listed {
+		fmt.Fprintf(&sb, "file '%s'\n", l)
 	}
 	if err := os.WriteFile(concatFilePath, []byte(sb.String()), 0o644); err != nil {
 		return fmt.Errorf("failed to write concat_list.txt: %w", err)
@@ -135,7 +176,69 @@ func (j *job) concatGroup(ctx context.Context, logger *slog.Logger, inputs []str
 	if err := j.runFFmpeg(ctx, j.concatArgs(concatFilePath, outPath), outPath, logger); err != nil {
 		return err
 	}
+	if err := j.verifyGroupLength(ctx, logger, inBytes, wantSec, outPath); err != nil {
+		return err
+	}
 	return j.verifyGroupVideo(ctx, logger, outPath)
+}
+
+// verifyGroupLength fails a group whose output kept far less than its inputs
+// held. ffmpeg stops at a demux error it cannot get past, writes what it had and
+// exits 0. The short output is removed and the error returns before
+// deleteGroupInputs, so the parts are kept. inBytes is the inputs' size on disk,
+// wantSec their playlist duration (0 when unknown).
+func (j *job) verifyGroupLength(ctx context.Context, logger *slog.Logger, inBytes int64, wantSec float64, outPath string) error {
+	var outBytes int64
+	if fi, err := os.Stat(outPath); err == nil {
+		outBytes = fi.Size()
+	}
+	var gotSec float64
+	if wantSec > 0 {
+		if probe, err := ffmpeg.Probe(ctx, logger, outPath); err == nil {
+			gotSec = probe.Duration
+		} else {
+			wantSec = 0 // no ffprobe in this build: judge by bytes alone
+		}
+	}
+	if !groupTooShort(inBytes, outBytes, wantSec, gotSec) {
+		return nil
+	}
+
+	logger.Error("Group output is much shorter than its parts",
+		"output", filepath.Base(outPath),
+		"input_bytes", inBytes, "output_bytes", outBytes,
+		"input_sec", wantSec, "output_sec", gotSec)
+	if err := os.Remove(outPath); err != nil && !os.IsNotExist(err) {
+		logger.Warn("Failed to remove short output", "error", err)
+	}
+	return fmt.Errorf("group %s came out short (%d of %d bytes, %.0f of %.0fs); its parts are kept",
+		filepath.Base(outPath), outBytes, inBytes, gotSec, wantSec)
+}
+
+// groupTooShort reports whether a stream-copied output lost most of its input.
+// A copy changes only container overhead, so keeping under a quarter of the
+// bytes, or under three quarters of a known duration (beyond a few seconds of
+// slack), means the merge stopped early.
+func groupTooShort(inBytes, outBytes int64, wantSec, gotSec float64) bool {
+	if inBytes > 0 && outBytes*4 < inBytes {
+		return true
+	}
+	return wantSec > 0 && gotSec < wantSec*0.75 && wantSec-gotSec > 10
+}
+
+// pathSize is a file's size, or the total size of the files under a directory.
+func pathSize(path string) int64 {
+	var n int64
+	_ = filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if fi, err := d.Info(); err == nil {
+			n += fi.Size()
+		}
+		return nil
+	})
+	return n
 }
 
 // verifyGroupVideo fails a group that came out with no video track. ffmpeg
