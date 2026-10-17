@@ -3,6 +3,8 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net/http"
 	"time"
 )
 
@@ -23,6 +25,13 @@ type serviceState struct {
 	// Since is when the current state began.
 	Since     time.Time `json:"since"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// SubscribeError is set while the last subscribe failed: the service may
+	// still be reachable, but streamers added since the last good subscribe
+	// are not being checked. SubscribeRetryAt is when the daemon retries on
+	// its own; RateLimited marks a refusal for subscribing too often.
+	SubscribeError   string    `json:"subscribe_error,omitempty"`
+	SubscribeRetryAt time.Time `json:"subscribe_retry_at,omitzero"`
+	RateLimited      bool      `json:"rate_limited,omitempty"`
 }
 
 // publishServiceState records whether the service can be reached.
@@ -44,6 +53,36 @@ func (c *Client) publishServiceState(ctx context.Context, reachable bool, cause 
 	}
 
 	st := serviceState{Reachable: reachable, Error: cause, Since: since, UpdatedAt: now}
+	if prev := c.serviceState.Load(); prev != nil {
+		st.SubscribeError, st.SubscribeRetryAt, st.RateLimited = prev.SubscribeError, prev.SubscribeRetryAt, prev.RateLimited
+	}
+	c.storeServiceState(ctx, st)
+}
+
+// publishSubscribeState records the outcome of a subscribe: err nil clears a
+// previous failure, otherwise retryAt is when the daemon tries again.
+func (c *Client) publishSubscribeState(ctx context.Context, err error, retryAt time.Time) {
+	st := serviceState{Reachable: true, Since: time.Now().UTC()}
+	if prev := c.serviceState.Load(); prev != nil {
+		st = *prev
+	}
+	if err == nil {
+		if st.SubscribeError == "" {
+			return
+		}
+		st.SubscribeError, st.SubscribeRetryAt, st.RateLimited = "", time.Time{}, false
+	} else {
+		var refused *subscribeRefused
+		st.SubscribeError = err.Error()
+		st.SubscribeRetryAt = retryAt.UTC()
+		st.RateLimited = errors.As(err, &refused) && refused.status == http.StatusTooManyRequests
+	}
+	st.UpdatedAt = time.Now().UTC()
+	c.storeServiceState(ctx, st)
+}
+
+// storeServiceState keeps st as the current state and publishes it.
+func (c *Client) storeServiceState(ctx context.Context, st serviceState) {
 	c.serviceState.Store(&st)
 
 	// The verdict is kept either way; only its publication needs the store.

@@ -101,3 +101,34 @@ func TestDisconnectReportsOutageOnlyForLostConnection(t *testing.T) {
 		t.Fatalf("a dropped connection published %+v, want unreachable", st)
 	}
 }
+
+// A refused subscribe is published beside reachability, survives a later
+// reachability verdict, and clears once a subscribe succeeds.
+func TestSubscribeStatePublished(t *testing.T) {
+	log, err := vllog.NewFileLogger(vlconfig.LoggerConfig{Mode: "off", Level: "error"}, "test")
+	if err != nil {
+		t.Fatalf("NewFileLogger: %v", err)
+	}
+	c := &Client{logger: log}
+	ctx := context.Background()
+
+	retry := time.Now().Add(10 * time.Minute)
+	c.publishSubscribeState(ctx, &subscribeRefused{status: 429, reason: "429 Too Many Requests"}, retry)
+	st := c.serviceState.Load()
+	if st == nil || st.SubscribeError == "" || !st.RateLimited || !st.SubscribeRetryAt.Equal(retry.UTC()) {
+		t.Fatalf("after a 429: %+v", st)
+	}
+	if !st.Reachable {
+		t.Fatal("a refused subscribe marked the service unreachable")
+	}
+
+	c.publishServiceState(ctx, true, "")
+	if st := c.serviceState.Load(); st.SubscribeError == "" {
+		t.Fatal("a reachability verdict dropped the subscribe failure")
+	}
+
+	c.publishSubscribeState(ctx, nil, time.Time{})
+	if st := c.serviceState.Load(); st.SubscribeError != "" || st.RateLimited || !st.SubscribeRetryAt.IsZero() {
+		t.Fatalf("after a good subscribe: %+v", st)
+	}
+}

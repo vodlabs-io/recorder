@@ -247,8 +247,10 @@ func (c *Client) handleSubscription(ctx context.Context) {
 				holdUntil = time.Now().Add(hold)
 				log.Info("Subscribe failed", "error", err,
 					"consecutive_failures", failures, "retrying_in", hold)
+				c.publishSubscribeState(ctx, err, holdUntil)
 			} else {
 				failures, holdUntil = 0, time.Time{}
+				c.publishSubscribeState(ctx, nil, time.Time{})
 			}
 			c.markInitialSubDone()
 		case <-c.ReloadCh:
