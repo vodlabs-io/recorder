@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
+
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vllog"
 )
@@ -42,5 +45,59 @@ func TestServiceStateKeepsSinceAcrossRepeats(t *testing.T) {
 	}
 	if back.Error != "" {
 		t.Fatalf("Error = %q, want it cleared once the service is back", back.Error)
+	}
+}
+
+// With no streamers left to subscribe to the daemon closes its own connection;
+// that is not an outage, but a dropped connection still is.
+func TestDisconnectReportsOutageOnlyForLostConnection(t *testing.T) {
+	log, err := vllog.NewFileLogger(vlconfig.LoggerConfig{Mode: "off", Level: "error"}, "test")
+	if err != nil {
+		t.Fatalf("NewFileLogger: %v", err)
+	}
+	c := &Client{logger: log}
+
+	srv, err := server.NewServer(&server.Options{Host: "127.0.0.1", Port: -1, NoLog: true, NoSigs: true})
+	if err != nil {
+		t.Fatalf("nats server: %v", err)
+	}
+	go srv.Start()
+	if !srv.ReadyForConnections(5 * time.Second) {
+		t.Fatal("nats server not ready")
+	}
+	t.Cleanup(srv.Shutdown)
+
+	dial := func() (*nats.Conn, <-chan struct{}) {
+		done := make(chan struct{})
+		nc, err := nats.Connect(srv.ClientURL(),
+			nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
+				c.onDisconnect(nc, err)
+				close(done)
+			}))
+		if err != nil {
+			t.Fatalf("nats connect: %v", err)
+		}
+		return nc, done
+	}
+	wait := func(done <-chan struct{}) {
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("disconnect handler never ran")
+		}
+	}
+
+	nc, done := dial()
+	nc.Close()
+	wait(done)
+	if st := c.serviceState.Load(); st != nil {
+		t.Fatalf("closing the connection ourselves published %+v", st)
+	}
+
+	_, done = dial()
+	srv.Shutdown()
+	wait(done)
+	if st := c.serviceState.Load(); st == nil || st.Reachable {
+		t.Fatalf("a dropped connection published %+v, want unreachable", st)
 	}
 }

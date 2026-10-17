@@ -35,15 +35,8 @@ func (c *Client) connect() error {
 		nats.WebSocketConnectionHeaders(headers),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(5 * time.Second),
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			cause := ""
-			if err != nil {
-				log.Error("NATS disconnected", "error", err)
-				cause = err.Error()
-			}
-			// Nothing is checked while this is down, so say so: an outage is
-			// otherwise indistinguishable from every streamer being offline.
-			c.publishServiceState(context.Background(), false, cause)
+		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
+			c.onDisconnect(nc, err)
 		}),
 		nats.ReconnectHandler(func(_ *nats.Conn) {
 			log.Info("NATS reconnected")
@@ -75,6 +68,22 @@ func (c *Client) connect() error {
 		"subscription_id", c.subscriptionID)
 
 	return nil
+}
+
+// onDisconnect reports a lost connection as an outage. A connection this
+// daemon closed itself (nothing left to subscribe to) is not one.
+func (c *Client) onDisconnect(nc *nats.Conn, err error) {
+	if err == nil && nc.IsClosed() {
+		return
+	}
+	cause := ""
+	if err != nil {
+		c.logger.With("func", "connect").Error("NATS disconnected", "error", err)
+		cause = err.Error()
+	}
+	// Nothing is checked while this is down, so say so: an outage is
+	// otherwise indistinguishable from every streamer being offline.
+	c.publishServiceState(context.Background(), false, cause)
 }
 
 // closeConnection closes the NATS connection

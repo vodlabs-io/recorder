@@ -342,8 +342,10 @@ func (c *Client) newSubscription(ctx context.Context) (err error) {
 		}
 	} else {
 		log.Info("No cloud streamers to subscribe to, skipping subscription")
-		// Nothing needs the cloud connection anymore.
+		// Nothing needs the cloud connection anymore, so there is nothing to be
+		// unreachable.
 		c.closeConnection()
+		c.publishServiceState(ctx, true, "")
 	}
 	remoteSubscribed := len(subscribedIDs) > 0
 	subscribedIDs = append(subscribedIDs, localIDs...)
