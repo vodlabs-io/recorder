@@ -120,6 +120,9 @@ func (j *job) process(ctx context.Context, logger *slog.Logger, s *Service) erro
 		if merr := j.writeManifest(ctx, logger, s); merr != nil {
 			logger.Warn("Failed to write session manifest", "error", merr)
 		}
+		// A session with a failed group finishes failed, which keeps every raw
+		// part on disk for a retry.
+		err = s.failedGroupsErr(ctx, j.vod.SessionID)
 	default:
 		err = fmt.Errorf("unsupported job stage: %s", j.stage)
 	}
