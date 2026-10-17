@@ -95,6 +95,9 @@ func (s *Service) handlePlatformLoginSet(req micro.Request) {
 		CapturedAt: time.Now().Unix(),
 		Healthy:    true, // fresh login is assumed valid until a check says otherwise
 	}
+	if prev, ok := s.cookies.Get(payload.Platform); ok {
+		keepHealth(&sess, prev, login.SessionCookie)
+	}
 	if err := s.cookies.Set(sess); err != nil {
 		respond(req, fail(errInternal, fmt.Sprintf("failed to store login: %v", err)))
 		return
@@ -112,6 +115,16 @@ func (s *Service) handlePlatformLoginSet(req micro.Request) {
 	s.nudgeRestrictedStreamers(context.Background(), payload.Platform)
 
 	respond(req, OK(sess.Status()))
+}
+
+// keepHealth carries prev's health over to sess when both hold the same
+// session cookie: a refresh re-storing the jar is the same login, and keeps
+// the health a check last gave it.
+func keepHealth(sess *platformauth.Session, prev platformauth.Session, sessionCookie string) {
+	if sessionCookie == "" || cookieValue(prev.Cookies, sessionCookie) != cookieValue(sess.Cookies, sessionCookie) {
+		return
+	}
+	sess.Healthy, sess.LastCheckedAt = prev.Healthy, prev.LastCheckedAt
 }
 
 // hasCookie reports whether the jar contains a non-empty cookie by name.
