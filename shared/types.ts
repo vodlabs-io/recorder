@@ -104,6 +104,12 @@ export type ServiceState = {
   error?: string;
   since: string;
   updated_at: string;
+  // Set while the last subscribe failed: streamers added since the last good
+  // one are not checked. subscribe_retry_at is when the daemon retries;
+  // rate_limited marks a refusal for subscribing too often.
+  subscribe_error?: string;
+  subscribe_retry_at?: string;
+  rate_limited?: boolean;
 };
 
 export type DaemonMeta = {
