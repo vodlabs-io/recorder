@@ -16,6 +16,9 @@ type EncodeController interface {
 	// EnqueueMerge queues a merge of a VOD's numbered VOD files into a single
 	// vod.mp4, or vod.webm from WebM parts.
 	EnqueueMerge(ctx context.Context, dir string, deleteParts bool) (encoding.Job, error)
+	// EnqueueConvert queues a re-encode of a VOD's single vod.webm to an
+	// H.264 vod.mp4.
+	EnqueueConvert(ctx context.Context, dir string, deleteOriginal bool) (encoding.Job, error)
 	// ListEncodeQueue returns every retained job plus the paused flag.
 	ListEncodeQueue(ctx context.Context) (encoding.Queue, error)
 	// RemoveEncodeJob deletes a non-running job row.
@@ -41,8 +44,11 @@ type EncoderList struct {
 	Encoders []encoding.EncoderStatus `json:"encoders"`
 }
 
+// encodeEnqueueRequest's Type is "merge" (the default) or "convert";
+// DeleteParts applies to a convert's original vod.webm too.
 type encodeEnqueueRequest struct {
 	Dir         string `json:"dir"`
+	Type        string `json:"type,omitempty"`
 	DeleteParts bool   `json:"delete_parts"`
 }
 
@@ -69,7 +75,17 @@ func (s *Service) handleEncodeEnqueue(req micro.Request) {
 		respond(req, fail(errInvalidArg, "dir is required"))
 		return
 	}
-	job, err := s.encodeCtl.EnqueueMerge(context.Background(), r.Dir, r.DeleteParts)
+	var job encoding.Job
+	var err error
+	switch r.Type {
+	case "", "merge":
+		job, err = s.encodeCtl.EnqueueMerge(context.Background(), r.Dir, r.DeleteParts)
+	case "convert":
+		job, err = s.encodeCtl.EnqueueConvert(context.Background(), r.Dir, r.DeleteParts)
+	default:
+		respond(req, fail(errInvalidArg, "unknown job type: "+r.Type))
+		return
+	}
 	if err != nil {
 		respondEncodeError(req, err, "enqueue failed")
 		return

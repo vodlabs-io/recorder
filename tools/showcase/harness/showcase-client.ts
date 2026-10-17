@@ -169,6 +169,12 @@ export class ShowcaseDaemonClient implements DaemonClient {
       dir,
       delete_parts: deleteParts,
     })
+  enqueueConvert = (dir: string, deleteOriginal: boolean) =>
+    this.session.request<EncodeJob>(Subjects.encodeEnqueue, {
+      dir,
+      type: "convert",
+      delete_parts: deleteOriginal,
+    })
   listEncodeQueue = () =>
     this.session.request<EncodeQueue>(Subjects.encodeList)
   removeEncodeJob = async (id: number) => {

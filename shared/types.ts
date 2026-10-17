@@ -226,7 +226,7 @@ export type EncodeProgress = {
 // merge/re-encode queue.
 export type EncodeJob = {
   id: number;
-  type: string; // "merge" (future task types will add values)
+  type: string; // "merge" | "convert" (vod.webm → H.264 vod.mp4)
   source: string; // "manual" (future: "auto")
   dir: string;
   platform?: string;

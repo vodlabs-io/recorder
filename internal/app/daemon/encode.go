@@ -18,10 +18,28 @@ func (a *App) currentEncoderPref() string {
 	return a.appCfg.Processing.Encoder
 }
 
-// EnqueueMerge implements vlapi.EncodeController. Session-level validation
-// happens here (the encoding service validates the folder contents): the
-// session must be listed, ready, and not busy in either work queue.
+// EnqueueMerge implements vlapi.EncodeController.
 func (a *App) EnqueueMerge(ctx context.Context, dir string, deleteParts bool) (encoding.Job, error) {
+	session, meta, err := a.encodableSession(ctx, dir)
+	if err != nil {
+		return encoding.Job{}, err
+	}
+	return a.encSvc.EnqueueMerge(ctx, session.Dir, meta, deleteParts, a.currentEncoderPref())
+}
+
+// EnqueueConvert implements vlapi.EncodeController.
+func (a *App) EnqueueConvert(ctx context.Context, dir string, deleteOriginal bool) (encoding.Job, error) {
+	session, meta, err := a.encodableSession(ctx, dir)
+	if err != nil {
+		return encoding.Job{}, err
+	}
+	return a.encSvc.EnqueueConvert(ctx, session.Dir, meta, deleteOriginal, a.currentEncoderPref())
+}
+
+// encodableSession does the session-level validation of an encode enqueue
+// (the encoding service validates the folder contents): the session must be
+// listed, ready, writable, and not busy in either work queue.
+func (a *App) encodableSession(ctx context.Context, dir string) (vodindex.VOD, encoding.SessionMeta, error) {
 	session, ok := a.vodIndex.Find(ctx, dir)
 	if !ok {
 		// The index only carries finished sessions, so a folder that is still
@@ -29,27 +47,27 @@ func (a *App) EnqueueMerge(ctx context.Context, dir string, deleteParts bool) (e
 		// folder the user can see filling up describes the index, not their
 		// situation.
 		if isDir(dir) {
-			return encoding.Job{}, fmt.Errorf(
+			return vodindex.VOD{}, encoding.SessionMeta{}, fmt.Errorf(
 				"%w: %s is not a finished recording yet — wait for it to stop, or check the path names a session folder",
 				vlapi.ErrNotFound, dir)
 		}
-		return encoding.Job{}, fmt.Errorf("%w: no such session folder: %s", vlapi.ErrNotFound, dir)
+		return vodindex.VOD{}, encoding.SessionMeta{}, fmt.Errorf("%w: no such session folder: %s", vlapi.ErrNotFound, dir)
 	}
 	if session.State != vodindex.StateReady {
-		return encoding.Job{}, fmt.Errorf("%w: session is still %s", vlapi.ErrConflict, session.State)
+		return vodindex.VOD{}, encoding.SessionMeta{}, fmt.Errorf("%w: session is still %s", vlapi.ErrConflict, session.State)
 	}
-	// A merge rewrites the session folder in place, which a scan folder exists
-	// to be spared. Refused rather than redirected: the user picked that folder
+	// An encode job rewrites the session folder in place, which a scan folder
+	// exists to be spared. Refused rather than redirected: the user picked that folder
 	// as read-only, and silently writing the result somewhere else would leave
 	// the VOD they acted on unchanged.
 	if a.isReadOnlyVODRoot(session.Root) {
-		return encoding.Job{}, fmt.Errorf(
-			"%w: %s is in the read-only scan folder %s; copy the VOD into the download folder to merge it",
+		return vodindex.VOD{}, encoding.SessionMeta{}, fmt.Errorf(
+			"%w: %s is in the read-only scan folder %s; copy the VOD into the download folder to encode it",
 			vlapi.ErrConflict, session.Dir, session.Root)
 	}
 	if (a.procSvc != nil && a.procSvc.SessionBusy(ctx, session.Dir)) ||
 		(a.encSvc != nil && a.encSvc.SessionBusy(ctx, session.Dir)) {
-		return encoding.Job{}, fmt.Errorf("%w: session has work in flight", vlapi.ErrConflict)
+		return vodindex.VOD{}, encoding.SessionMeta{}, fmt.Errorf("%w: session has work in flight", vlapi.ErrConflict)
 	}
 
 	meta := encoding.SessionMeta{
@@ -57,7 +75,7 @@ func (a *App) EnqueueMerge(ctx context.Context, dir string, deleteParts bool) (e
 		Username:  session.Username,
 		SessionID: session.SessionID,
 	}
-	return a.encSvc.EnqueueMerge(ctx, session.Dir, meta, deleteParts, a.currentEncoderPref())
+	return session, meta, nil
 }
 
 // ListEncodeQueue implements vlapi.EncodeController.

@@ -1,5 +1,6 @@
 // Package encoding owns the daemon's re-encode job queue: user-triggered
-// merges of a VOD's numbered VOD files run serially through a persistent
+// merges of a VOD's numbered VOD files, and converts of a single vod.webm to
+// H.264, run serially through a persistent
 // SQLite-backed queue, invoking the embedded ffmpeg/ffprobe. The queue is
 // deliberately daemon-local: none of its API subjects or KV keys are bridged
 // to the Dashboard.

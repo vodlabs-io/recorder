@@ -225,9 +225,12 @@ export default function Encoding() {
                         {jobLabel(j)}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">
-                        {basename(j.dir)} • {j.inputs.length} parts →{" "}
-                        {j.output}
-                        {!j.delete_parts && " (keeping originals)"}
+                        {basename(j.dir)} •{" "}
+                        {j.type === "convert"
+                          ? `${j.inputs[0]} → ${j.output}`
+                          : `${j.inputs.length} parts → ${j.output}`}
+                        {!j.delete_parts &&
+                          (j.type === "convert" ? " (keeping original)" : " (keeping originals)")}
                       </span>
                       <span className="ml-auto flex shrink-0 items-center gap-1">
                         {j.warning && (

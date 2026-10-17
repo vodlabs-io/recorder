@@ -117,6 +117,8 @@ const electrobunClient: DaemonClient = {
   cancelMoves: (key) => req.cancelMoves(key ?? {}),
 
   enqueueMerge: (dir, deleteParts) => req.enqueueMerge({ dir, deleteParts }),
+  enqueueConvert: (dir, deleteOriginal) =>
+    req.enqueueConvert({ dir, deleteOriginal }),
   listEncodeQueue: () => req.listEncodeQueue({}),
   removeEncodeJob: async (id) => {
     await req.removeEncodeJob({ id })

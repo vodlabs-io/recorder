@@ -54,7 +54,7 @@ func (s *Service) runJob(workerCtx context.Context, job *Job) {
 	}()
 
 	logger := s.logger.With("job_id", job.ID, "dir", job.Dir)
-	logger.Info("Starting merge job",
+	logger.Info("Starting encode job", "type", job.Type,
 		"parts", len(job.Inputs), "delete_parts", job.DeleteParts, "encoder_pref", job.Encoder)
 
 	warning, err := s.runMergeJob(jobCtx, logger, job)

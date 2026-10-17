@@ -228,6 +228,9 @@ func (a *archive) ListEncoders(context.Context, bool) (vlapi.EncoderList, error)
 func (a *archive) EnqueueMerge(context.Context, string, bool) (encoding.Job, error) {
 	return encoding.Job{}, errDemo
 }
+func (a *archive) EnqueueConvert(context.Context, string, bool) (encoding.Job, error) {
+	return encoding.Job{}, errDemo
+}
 func (a *archive) RemoveEncodeJob(context.Context, int64) error          { return errDemo }
 func (a *archive) ReorderEncodeJob(context.Context, int64, string) error { return errDemo }
 func (a *archive) CancelEncodeJob(context.Context, int64) error          { return errDemo }

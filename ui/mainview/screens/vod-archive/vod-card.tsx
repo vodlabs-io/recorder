@@ -24,6 +24,7 @@ import {
   FolderOpen,
   Info,
   Loader2,
+  RefreshCw,
   Trash2,
   TriangleAlert,
 } from "lucide-react"
@@ -53,6 +54,7 @@ type Props = {
   onExpandedChange: (key: string | null) => void
   onDelete: (session: VOD) => void
   onMerge: (session: VOD) => void
+  onConvert: (session: VOD) => void
   onInfo: (session: VOD) => void
   // Filters the archive grid down to this session's streamer.
   onFilterStreamer: (session: VOD) => void
@@ -71,7 +73,7 @@ function openFile(s: VOD, file: string): void {
 // A session is mergeable when it has ≥2 numbered parts (vodN.mp4 or
 // vodN.webm) — the only shape the daemon's merge job accepts. A session that
 // already holds a single merged vod.mp4 or vod.webm has no numbered parts, so
-// no menu item appears.
+// no Merge item appears.
 const partNameRe = /^vod\d+\.(mp4|webm)$/
 
 // mergeOutputName is the file a merge of s starts out writing: vod.webm when
@@ -83,6 +85,13 @@ export function mergeOutputName(s: VOD): string {
 function isMergeable(s: VOD): boolean {
   const files = s.files ?? []
   return files.length > 1 && files.every((f) => partNameRe.test(f.name))
+}
+
+// isConvertible: the session's only file is vod.webm (VP8, e.g. ManyVids),
+// which the daemon's convert job re-encodes to an H.264 vod.mp4.
+export function isConvertible(s: VOD): boolean {
+  const files = s.files ?? []
+  return files.length === 1 && files[0].name === "vod.webm"
 }
 
 // VodCard renders one session. Memoized: with per-card thumbnail state inside
@@ -97,6 +106,7 @@ export const VodCard = React.memo(function VodCard({
   onExpandedChange,
   onDelete,
   onMerge,
+  onConvert,
   onInfo,
   onFilterStreamer,
   selectable,
@@ -278,6 +288,14 @@ export const VodCard = React.memo(function VodCard({
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => onMerge(s)}>
                       <Combine className="h-4 w-4" /> Merge parts…
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {isConvertible(s) && !busy && !readOnly && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onConvert(s)}>
+                      <RefreshCw className="h-4 w-4" /> Convert to MP4…
                     </DropdownMenuItem>
                   </>
                 )}

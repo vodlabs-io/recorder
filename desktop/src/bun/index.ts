@@ -342,6 +342,12 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
           dir,
           delete_parts: deleteParts,
         }),
+      enqueueConvert: ({ dir, deleteOriginal }) =>
+        session.request(Subjects.encodeEnqueue, {
+          dir,
+          type: "convert",
+          delete_parts: deleteOriginal,
+        }),
       listEncodeQueue: () => session.request(Subjects.encodeList),
       removeEncodeJob: async ({ id }) => {
         await session.request(Subjects.encodeRemove, { id });

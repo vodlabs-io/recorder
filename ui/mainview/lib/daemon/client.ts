@@ -173,6 +173,9 @@ export interface DaemonClient {
   // the list) and the running job's progress via snapshot.encode.progress.
   // LOCAL-ONLY: these subjects are never bridged to the Dashboard.
   enqueueMerge(dir: string, deleteParts: boolean): Promise<EncodeJob>;
+  // enqueueConvert queues a re-encode of a VOD's single vod.webm to an H.264
+  // vod.mp4; deleteOriginal=false keeps vod.webm as .bak.
+  enqueueConvert(dir: string, deleteOriginal: boolean): Promise<EncodeJob>;
   listEncodeQueue(): Promise<EncodeQueue>;
   removeEncodeJob(id: number): Promise<void>;
   reorderEncodeJob(id: number, direction: "up" | "down" | "top"): Promise<void>;

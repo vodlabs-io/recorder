@@ -18,7 +18,14 @@ import (
 var (
 	ErrNotFound = errors.New("encode job not found")
 	ErrConflict = errors.New("conflicting encode job state")
-	ErrInvalid  = errors.New("invalid merge request")
+	ErrInvalid  = errors.New("invalid encode request")
+)
+
+// Job types. A convert job runs the merge pipeline on one input, always
+// re-encoding to H.264.
+const (
+	jobTypeMerge   = "merge"
+	jobTypeConvert = "convert"
 )
 
 // Job statuses. A job is exactly one of these; stage further qualifies a
@@ -108,9 +115,37 @@ func (s *Service) EnqueueMerge(ctx context.Context, dir string, meta SessionMeta
 			return Job{}, fmt.Errorf("%w: %s already exists in the session folder", ErrInvalid, name)
 		}
 	}
-	output := mergeOutputName(inputs)
+	return s.insertJob(ctx, jobTypeMerge, dir, meta, inputs, mergeOutputName(inputs), deleteParts, encoderPref)
+}
 
-	// One active job per session folder.
+// vodFileRe matches every VOD file the archive lists.
+var vodFileRe = regexp.MustCompile(`^vod(\d*)\.(mp4|webm)$`)
+
+// EnqueueConvert appends a job that re-encodes a session's single vod.webm to
+// an H.264 vod.mp4. deleteOriginal=false keeps vod.webm as .bak.
+func (s *Service) EnqueueConvert(ctx context.Context, dir string, meta SessionMeta, deleteOriginal bool, encoderPref string) (Job, error) {
+	dir = filepath.Clean(dir)
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return Job{}, fmt.Errorf("%w: %v", ErrInvalid, err)
+	}
+	var vods []string
+	for _, e := range entries {
+		if !e.IsDir() && vodFileRe.MatchString(e.Name()) {
+			vods = append(vods, e.Name())
+		}
+	}
+	if len(vods) != 1 || vods[0] != mergedWebMName {
+		return Job{}, fmt.Errorf("%w: only a session whose single file is %s can be converted, found %v",
+			ErrInvalid, mergedWebMName, vods)
+	}
+	return s.insertJob(ctx, jobTypeConvert, dir, meta, vods, mergedOutputName, deleteOriginal, encoderPref)
+}
+
+// insertJob appends a queued job, refusing a second active job for the same
+// session folder.
+func (s *Service) insertJob(ctx context.Context, jobType, dir string, meta SessionMeta, inputs []string, output string, deleteParts bool, encoderPref string) (Job, error) {
 	var active int
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM encode_jobs WHERE session_dir = ? AND status IN ('queued', 'running')`,
@@ -118,7 +153,7 @@ func (s *Service) EnqueueMerge(ctx context.Context, dir string, meta SessionMeta
 		return Job{}, err
 	}
 	if active > 0 {
-		return Job{}, fmt.Errorf("%w: a merge for this session is already queued or running", ErrConflict)
+		return Job{}, fmt.Errorf("%w: an encode job for this session is already queued or running", ErrConflict)
 	}
 
 	inputsJSON, err := json.Marshal(inputs)
@@ -132,9 +167,9 @@ func (s *Service) EnqueueMerge(ctx context.Context, dir string, meta SessionMeta
 			job_type, source, session_dir, platform, username, session_id,
 			inputs, output, delete_parts, encoder, position, status, created_at
 		)
-		VALUES ('merge', 'manual', ?, ?, ?, ?, ?, ?, ?, ?,
+		VALUES (?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?,
 			(SELECT COALESCE(MAX(position), 0) + 1 FROM encode_jobs), 'queued', ?)`,
-		dir, meta.Platform, meta.Username, meta.SessionID,
+		jobType, dir, meta.Platform, meta.Username, meta.SessionID,
 		string(inputsJSON), output, boolToInt(deleteParts), normalizeEncoderPref(encoderPref), now)
 	if err != nil {
 		return Job{}, err

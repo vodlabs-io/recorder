@@ -114,6 +114,10 @@ export type AppRPCType = {
         params: { dir: string; deleteParts: boolean };
         response: EncodeJob;
       };
+      enqueueConvert: {
+        params: { dir: string; deleteOriginal: boolean };
+        response: EncodeJob;
+      };
       listEncodeQueue: { params: {}; response: EncodeQueue };
       removeEncodeJob: { params: { id: number }; response: boolean };
       reorderEncodeJob: {

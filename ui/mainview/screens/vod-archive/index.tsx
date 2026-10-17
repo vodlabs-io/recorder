@@ -199,11 +199,19 @@ export default function VODArchive() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const onDelete = useCallback((s: VOD) => setDeleteTarget(s), [])
 
+  // The merge dialog also confirms a convert (single vod.webm → vod.mp4).
   const [mergeTarget, setMergeTarget] = useState<VOD | null>(null)
+  const [mergeKind, setMergeKind] = useState<"merge" | "convert">("merge")
   const [mergeDeleteParts, setMergeDeleteParts] = useState(true)
   const [merging, setMerging] = useState(false)
   const [mergeError, setMergeError] = useState<string | null>(null)
   const onMerge = useCallback((s: VOD) => {
+    setMergeKind("merge")
+    setMergeDeleteParts(true)
+    setMergeTarget(s)
+  }, [])
+  const onConvert = useCallback((s: VOD) => {
+    setMergeKind("convert")
     setMergeDeleteParts(true)
     setMergeTarget(s)
   }, [])
@@ -483,7 +491,11 @@ export default function VODArchive() {
     if (!mergeTarget) return
     setMerging(true)
     try {
-      await getDaemonClient().enqueueMerge(mergeTarget.dir, mergeDeleteParts)
+      if (mergeKind === "convert") {
+        await getDaemonClient().enqueueConvert(mergeTarget.dir, mergeDeleteParts)
+      } else {
+        await getDaemonClient().enqueueMerge(mergeTarget.dir, mergeDeleteParts)
+      }
       setMergeTarget(null)
       setMergeError(null)
       // The daemon flips the session to "encoding" and pushes a new snapshot;
@@ -495,7 +507,7 @@ export default function VODArchive() {
     } finally {
       setMerging(false)
     }
-  }, [mergeTarget, mergeDeleteParts, refresh])
+  }, [mergeTarget, mergeKind, mergeDeleteParts, refresh])
 
   const error = mergeError ?? deleteError ?? loadError
 
@@ -710,6 +722,7 @@ export default function VODArchive() {
                 onExpandedChange={onExpandedChange}
                 onDelete={onDelete}
                 onMerge={onMerge}
+                onConvert={onConvert}
                 onInfo={onInfo}
                 onFilterStreamer={onFilterStreamer}
                 selectable
@@ -873,7 +886,9 @@ export default function VODArchive() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Merge parts into a single {mergeTarget ? mergeOutputName(mergeTarget) : "file"}?
+              {mergeKind === "convert"
+                ? "Convert vod.webm to an H.264 vod.mp4?"
+                : `Merge parts into a single ${mergeTarget ? mergeOutputName(mergeTarget) : "file"}?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {mergeTarget && (
@@ -881,7 +896,8 @@ export default function VODArchive() {
                   <span className="font-medium text-foreground">
                     {mergeTarget.username || "Unknown streamer"}
                   </span>{" "}
-                  · {formatDate(sessionTime(mergeTarget))} · {mergeParts} parts
+                  · {formatDate(sessionTime(mergeTarget))}
+                  {mergeKind === "merge" && ` · ${mergeParts} parts`}
                 </>
               )}
             </AlertDialogDescription>
@@ -896,12 +912,16 @@ export default function VODArchive() {
             />
             <div className="grid gap-1">
               <Label htmlFor="merge-delete-parts" className="text-sm font-normal">
-                Delete original parts after merge
+                {mergeKind === "convert"
+                  ? "Delete the original vod.webm after conversion"
+                  : "Delete original parts after merge"}
               </Label>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            {mergeTarget && mergeOutputName(mergeTarget) === "vod.webm" &&
+            {mergeKind === "convert" &&
+              "The video is re-encoded with the encoder set in Settings. "}
+            {mergeKind === "merge" && mergeTarget && mergeOutputName(mergeTarget) === "vod.webm" &&
               "WebM parts that can't be joined as recorded are re-encoded to vod.mp4. "}
             Monitor progress on the Encoding screen.
           </p>

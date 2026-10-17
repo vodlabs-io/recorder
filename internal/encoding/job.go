@@ -130,7 +130,7 @@ func (s *Service) runMergeJob(ctx context.Context, logger *slog.Logger, job *Job
 		return "", fmt.Errorf("open ffmpeg log: %w", err)
 	}
 	defer logF.Close()
-	fmt.Fprintf(logF, "=== Merge job %d started ===\n", job.ID)
+	fmt.Fprintf(logF, "=== %s job %d started ===\n", jobTitle(job), job.ID)
 
 	staging, err := stagingDir(job.ID)
 	if err != nil {
@@ -144,7 +144,9 @@ func (s *Service) runMergeJob(ctx context.Context, logger *slog.Logger, job *Job
 	if err != nil {
 		return "", err
 	}
-	if plan.hasVP8 && !isWebM(job.Output) && plan.uniform {
+	if job.Type == jobTypeConvert {
+		plan.uniform = false
+	} else if plan.hasVP8 && !isWebM(job.Output) && plan.uniform {
 		logger.Info("Parts are VP8, which MP4 cannot carry; merge will re-encode")
 		plan.uniform = false
 	}
@@ -190,8 +192,24 @@ func (s *Service) runMergeJob(ctx context.Context, logger *slog.Logger, job *Job
 	s.finalizeMerge(ctx, logger, job, plan, outFinal)
 	s.cleanupStaging(job.ID)
 
-	fmt.Fprintf(logF, "=== Merge job %d finished ===\n", job.ID)
+	fmt.Fprintf(logF, "=== %s job %d finished ===\n", jobTitle(job), job.ID)
 	return warning, nil
+}
+
+// jobTitle names the job type in the session's ffmpeg.log.
+func jobTitle(job *Job) string {
+	if job.Type == jobTypeConvert {
+		return "Convert"
+	}
+	return "Merge"
+}
+
+// reencodeWriter is the provenance writer name of a re-encoded output.
+func reencodeWriter(job *Job) string {
+	if job.Type == jobTypeConvert {
+		return "convert+reencode"
+	}
+	return "merge+reencode"
 }
 
 // checkOutputFree fails a job whose output is already in the session folder.
@@ -512,7 +530,7 @@ func reencodeArgs(job *Job, plan *mergePlan, encArgs []string, ditherFilter, sta
 	}
 	args = append(args, "-movflags", provenance.MovFlags("+faststart"))
 	args = append(args, provenance.MetadataArgs(
-		provenance.Record("merge+reencode", job.SessionID, filepath.Base(job.Output)))...)
+		provenance.Record(reencodeWriter(job), job.SessionID, filepath.Base(job.Output)))...)
 	return append(args, "-progress", "pipe:1", "-y", stagedOut)
 }
 
