@@ -13,6 +13,7 @@ import type { DaemonSession } from "../../../shared/daemon/session";
 import { Subjects } from "../../../shared/daemon/subjects";
 import type { PlatformInfo, LoginFlow } from "../../../shared/types";
 import { COOKIE_PREFIX, withLoginView } from "./browser-context";
+import { enableLoginPopups } from "./login-popups";
 import { createPartitionedWindow } from "./partitioned-window";
 
 // DaemonCookie is the cookie shape the daemon's platformlogin.set endpoint
@@ -34,6 +35,11 @@ const LOGIN_WINDOW = { width: 480, height: 760 };
 // page JS shortly after load, so capturing on the first navigation would
 // re-store the previous, stale jar.
 const CAPTURE_SETTLE_MS = 3000;
+
+// How often an open login window checks for the session cookie. A sign-in that
+// finishes without a navigation (a popup sign-in, an XHR login on a single-page
+// app) fires no navigation event to capture on.
+const CAPTURE_POLL_MS = 2000;
 
 // Background-refresh tuning. The settle is longer than the interactive one
 // because the hidden page loads cold (no user interaction warmed it up) and the
@@ -236,6 +242,7 @@ export async function runPlatformLogin(
       },
       partition,
     );
+    enableLoginPopups(view);
 
     // Set when the window is already gone because the user closed it. Tearing
     // it down again from here is a no-op at best: the native side reports the
@@ -247,6 +254,7 @@ export async function runPlatformLogin(
       if (settled) return;
       settled = true;
       interactiveLogins.delete(platform);
+      clearInterval(poll);
       if (!windowGone) {
         try {
           view.remove();
@@ -300,6 +308,7 @@ export async function runPlatformLogin(
     view.on("did-navigate", (e) => tryCapture(eventUrl(e)));
     view.on("did-navigate-in-page", (e) => tryCapture(eventUrl(e)));
     view.on("did-commit-navigation", (e) => tryCapture(eventUrl(e)));
+    const poll = setInterval(() => tryCapture(""), CAPTURE_POLL_MS);
     // User closed the window before signing in.
     win.on("close", () => {
       windowGone = true;
