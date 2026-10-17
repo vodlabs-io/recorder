@@ -157,6 +157,19 @@ function sortableHeader(label: string) {
   }
 }
 
+// RelativeTime is an age ("4m") that keeps counting: a row re-renders only when
+// its doc changes, which for a quiet streamer can be never.
+function RelativeTime({ unixSec }: { unixSec: number | null | undefined }) {
+  const [, setTick] = React.useState(0)
+  React.useEffect(() => {
+    if (!unixSec) return
+    const ageSec = Date.now() / 1000 - unixSec
+    const id = setInterval(() => setTick((n) => n + 1), ageSec < 3600 ? 5_000 : 60_000)
+    return () => clearInterval(id)
+  }, [unixSec])
+  return <>{relativeTimeFromUnix(unixSec)}</>
+}
+
 function StatusCell({ s }: { s: StreamerView }) {
   const { state } = streamerIndicator(s)
   return (
@@ -342,7 +355,7 @@ export function buildColumns({
       header: sortableHeader("Last Live"),
       // Blank only when the time is genuinely unknown — a live streamer's
       // current run is the last time it went live, recording or not.
-      cell: ({ row }) => relativeTimeFromUnix(row.original.lastLiveStart),
+      cell: ({ row }) => <RelativeTime unixSec={row.original.lastLiveStart} />,
     },
     {
       id: "vods",
@@ -378,7 +391,7 @@ export function buildColumns({
       id: "added",
       accessorFn: (row) => row.addedAt ?? 0,
       header: sortableHeader("Added"),
-      cell: ({ row }) => relativeTimeFromUnix(row.original.addedAt),
+      cell: ({ row }) => <RelativeTime unixSec={row.original.addedAt} />,
     },
     {
       id: "monitor",
