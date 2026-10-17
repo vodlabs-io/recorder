@@ -178,6 +178,8 @@ function RemoveStreamerButton({
   disabled: boolean
 }) {
   const [open, setOpen] = React.useState(false)
+  // Focused on open, so Return confirms.
+  const confirmRef = React.useRef<HTMLButtonElement>(null)
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <Tooltip>
@@ -199,7 +201,7 @@ function RemoveStreamerButton({
         />
         <TooltipContent>Remove</TooltipContent>
       </Tooltip>
-      <AlertDialogContent>
+      <AlertDialogContent initialFocus={confirmRef}>
         <AlertDialogHeader>
           <AlertDialogTitle>Remove streamer?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -210,6 +212,7 @@ function RemoveStreamerButton({
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
+            ref={confirmRef}
             className="bg-destructive"
             onClick={() => {
               client.removeStreamer(streamerRef(s))
