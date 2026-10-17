@@ -99,5 +99,3 @@ stream or an account.
 - **Dependencies:** after adding or updating one, run
   `bun scripts/third-party-notices.ts` and commit the updated
   `THIRD_PARTY_NOTICES.md`.
-
-By contributing, you agree to follow the [code of conduct](CODE_OF_CONDUCT.md).
