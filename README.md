@@ -47,7 +47,7 @@ Then see [Getting started](docs/getting-started.md).
   streamers, your IP address and your app version, to run the service fairly
   and to stop abuse.
 
-[What the recorder sends to VodLabs](docs/privacy.md) has the details, and
+The [privacy policy](docs/privacy.md) has the details, and
 links the code that does each part.
 
 ## Build from source
