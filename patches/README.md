@@ -272,6 +272,29 @@ The patch also JSON-escapes cookie values on the way out — the same defect the
 Windows patch fixed, and the same consequence: one quote or backslash produces
 JSON the JS side silently reads as `[]`.
 
+### Popups in login windows
+
+Carried in the same patch file.
+
+WebKitGTK opens a `window.open` popup only when the view's `create` signal
+returns a new view, and the wrapper connects no handler, so every popup is
+dropped. Popup sign-ins ("Sign in with Google" through Google Identity
+Services, on YouNow and TiLive) then do nothing. The patch adds an opt-in
+handler: `enableWebviewPopups(view)` turns it on for one view, and
+`desktop/src/bun/login-popups.ts` calls it for platform sign-in views only. A
+popup is a new top-level window holding a view created related to its opener,
+so it shares the opener's web context (the login partition) and keeps
+`window.opener`, which the sign-in reports back through. It sizes itself from
+the page's window features, and it closes when the page calls `window.close()`
+or when its opener is destroyed. Every other view still drops popups, so the
+stream sniffer's arbitrary pages cannot open windows.
+
+Verified against WebKitGTK 2.52 on Ubuntu 24.04 (arm64) under Xvfb, using a harness
+that runs the patched handler. A page opened a 420x300 popup on another origin.
+The popup's `postMessage` reached `window.opener`, its cookie landed in the
+opener's partition, and `window.close()` destroyed the window. With popups
+left disabled, `window.open` returned null.
+
 ### The built artefact
 
 `desktop/native/linux-x64/libNativeWrapper.so` is the patched build, committed

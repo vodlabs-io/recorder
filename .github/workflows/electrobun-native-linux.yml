@@ -3,7 +3,8 @@
 # Upstream's Session cookie API reads a partition through a data manager of its
 # own rather than the one the partition's webviews use, so cookie reads answer
 # from a snapshot frozen at first use and desktop platform login can never
-# finish; patches/electrobun-<version>-linux-cookie-api.patch fixes it. This mirrors
+# finish; patches/electrobun-<version>-linux-cookie-api.patch fixes it, and also
+# lets sign-in views open popup windows. This mirrors
 # the Linux leg of electrobun's own release workflow closely enough to produce
 # the one artefact we need: libNativeWrapper.so.
 #
