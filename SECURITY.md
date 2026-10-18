@@ -19,7 +19,7 @@ platform logins, so these matter most:
 
 - **Requests relayed from the service.** Anything that gets your recorder to
   reach a host outside a platform's list, to reach your own machine or local
-  network, to send more than [docs/privacy.md](docs/privacy.md) describes, or
+  network, to send more than [docs/data.md](docs/data.md) describes, or
   to use your login on the wrong site.
 - **Platform logins.** Reading them from disk or memory in a way the
   encryption should prevent, or sending them anywhere.

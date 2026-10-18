@@ -11,4 +11,4 @@
 - [ ] `go vet ./... && go test ./...`, `bun test` and `bunx tsc --noEmit` pass
 - [ ] The title follows Conventional Commits, e.g. `fix(session): …`
 - [ ] If dependencies changed, `THIRD_PARTY_NOTICES.md` is regenerated
-- [ ] Nothing here sends more data to VodLabs than [docs/privacy.md](../docs/privacy.md) describes
+- [ ] Nothing here sends more data to VodLabs than [docs/data.md](../docs/data.md) describes

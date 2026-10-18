@@ -60,7 +60,7 @@ func printSharedChecks() {
 	fmt.Println("  This recorder also checks streamers other people follow, from")
 	fmt.Println("  this machine's IP address. Your platform logins are never used")
 	fmt.Println("  for those checks and never leave this device.")
-	fmt.Println("  See https://vodlabs.io/docs/privacy")
+	fmt.Println("  See https://vodlabs.io/docs/data")
 }
 
 // printStorageRoots reports free space per Storage root — the distinct

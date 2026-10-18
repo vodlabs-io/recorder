@@ -96,7 +96,7 @@ export function WelcomeDialog() {
                   variant="link"
                   className="h-auto p-0 text-sm"
                   onClick={() =>
-                    getDaemonClient().openExternal("https://vodlabs.io/docs/privacy")
+                    getDaemonClient().openExternal("https://vodlabs.io/privacy")
                   }
                 >
                   Privacy Policy

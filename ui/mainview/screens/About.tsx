@@ -226,7 +226,7 @@ export function About() {
               <LinkOut href="https://vodlabs.io">Website</LinkOut>
               <LinkOut href="https://vodlabs.io/docs">Documentation</LinkOut>
               <LinkOut href="https://github.com/vodlabs-io/recorder">Source code</LinkOut>
-              <LinkOut href="https://vodlabs.io/docs/privacy">Privacy</LinkOut>
+              <LinkOut href="https://vodlabs.io/privacy">Privacy</LinkOut>
               <LinkOut href="https://github.com/vodlabs-io/recorder/blob/main/LICENSE">
                 License
               </LinkOut>

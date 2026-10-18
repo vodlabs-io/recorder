@@ -28,7 +28,7 @@ asks you to sign it on the pull request; it takes a minute, once.
   VodLabs service, which is not open source, so a platform can't be added from
   this repository alone. Open an issue to ask for one.
 - **Anything that sends more data to VodLabs**, or that weakens the rules in
-  [docs/privacy.md](docs/privacy.md).
+  [docs/data.md](docs/data.md).
 
 ## Setting up
 
