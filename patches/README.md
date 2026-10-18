@@ -305,8 +305,9 @@ Electrobun's `postBuild` hook, which runs for dev builds too, and fails the
 build rather than falling back, or when
 `desktop/native/linux-x64/ELECTROBUN_VERSION` is not the release being built.
 The committed copy is the `v2.0.2` build (SHA-256
-`5519992600da4ef231a61f01110e7f57835de7e743300d61e5c7bb6a4d1d3b8f`, from
-`e424efbc8af0315e565811fcef0920d3b757e3fc`).
+`03e1f3bfa7a804f75f2c75cf9abc5197ff68a8090eec19a371b776e9e6520036`, from
+`e424efbc8af0315e565811fcef0920d3b757e3fc`), built by workflow run 39085029252
+with the popup handler included.
 
 ### Rebuilding
 
