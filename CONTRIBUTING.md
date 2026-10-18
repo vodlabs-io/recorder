@@ -17,8 +17,8 @@ the approach before you spend time on it.
 
 ## The contributor license agreement
 
-Before your first pull request is merged, you sign a contributor license
-agreement. It lets VodLabs offer the recorder both under its
+Before your first pull request is merged, you sign the
+[contributor license agreement](CLA.md). It lets VodLabs offer the recorder both under its
 [noncommercial license](LICENSING.md) and under commercial licenses. A bot
 asks you to sign it on the pull request; it takes a minute, once.
 
