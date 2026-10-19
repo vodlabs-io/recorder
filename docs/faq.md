@@ -2,7 +2,7 @@
 
 **Is it free?**
 Yes. In return, your recorder also runs some live checks for other users, from
-your IP address. [What the recorder sends to VodLabs](privacy.md#shared-checks-what-the-free-plan-asks-in-return)
+your IP address. [What the recorder sends to VodLabs](data.md#shared-checks-what-the-free-plan-asks-in-return)
 explains what that means.
 
 **Why does it need the VodLabs service?**

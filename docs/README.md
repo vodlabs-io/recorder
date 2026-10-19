@@ -15,5 +15,5 @@
 
 How the recorder works with the VodLabs service:
 
-- [What the recorder sends to VodLabs](privacy.md)
+- [What the recorder sends to VodLabs](data.md)
 - [Architecture](architecture.md)

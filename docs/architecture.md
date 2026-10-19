@@ -47,7 +47,7 @@ often tied to the IP address that requested them. The service sends those
 requests over the same WebSocket, and your recorder makes them within fixed
 rules and replies with only what the check needs. Your recorder also runs
 some checks for other users, which is what the free plan asks in return.
-[What the recorder sends to VodLabs](privacy.md) covers the rules and the
+[What the recorder sends to VodLabs](data.md) covers the rules and the
 data.
 
 ## Where the code is

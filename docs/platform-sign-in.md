@@ -13,7 +13,7 @@ Your login stays on this device. The recorder stores it encrypted, in your
 system keychain where one is available, and never sends it to VodLabs. It is
 used only for requests your own recorder makes to that platform, and only for
 the streamers you follow: the checks your recorder runs for other users never
-use it. [What the recorder sends to VodLabs](privacy.md) explains how this is
+use it. [What the recorder sends to VodLabs](data.md) explains how this is
 enforced.
 
 ## In the desktop app
