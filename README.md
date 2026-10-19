@@ -10,7 +10,7 @@ Add the streamers you follow, and VodLabs Recorder records each broadcast the
 moment it goes live, straight from the platform to your disk. It is a desktop
 app for macOS, Windows and Linux, plus a command-line tool, `vod`.
 
-It records from [dozens of platforms](docs/platforms.md), including TikTok,
+It records from [40+ platforms](docs/platforms.md), including TikTok,
 YouTube, Twitch and Kick.
 
 ## Download
