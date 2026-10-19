@@ -1,6 +1,12 @@
+<p align="center">
+  <img src="desktop/icon.png" alt="VodLabs Recorder" width="128" height="128">
+</p>
+
 # VodLabs Recorder
 
 **Record livestreams automatically, on your own computer.**
+
+![The VodLabs Recorder dashboard, recording four streamers](docs/images/dashboard-dark.png)
 
 Add the streamers you follow, and VodLabs Recorder records each broadcast the
 moment it goes live, straight from the platform to your disk. It is a desktop
