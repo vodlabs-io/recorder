@@ -42,14 +42,13 @@ Then see [Getting started](docs/getting-started.md).
 
 - **Recording happens on your machine.** Video goes straight from the
   platform to your disk. It never passes through VodLabs.
-- **Live checks come from the VodLabs service.** It tells your recorder when a
+- **Live status updates come from the VodLabs service.** It tells your recorder when a
   streamer goes live, so the app needs it to start recordings.
 - **Your platform logins never leave your device.** They are stored encrypted
   and used only on this machine.
-- **The free plan is an exchange.** Your recorder also runs some live checks
-  for other users, from your IP address. The service keeps your list of
-  streamers, your IP address and your app version, to run the service fairly
-  and to stop abuse.
+- **The free plan is an exchange.** Your recorder also runs some live checks for 
+other users, and they do the same for you. The service keeps your list of streamers, 
+your IP address and your app version, to run the service fairly and to stop abuse.
 
 [What the recorder sends to VodLabs](docs/data.md) has the details, and
 links the code that does each part. The
