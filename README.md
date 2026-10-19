@@ -2,9 +2,7 @@
   <img src="desktop/icon.png" alt="VodLabs Recorder" width="128" height="128">
 </p>
 
-# VodLabs Recorder
-
-**Record livestreams automatically, on your own computer.**
+<h1 align="center">VodLabs Recorder</h1>
 
 ![The VodLabs Recorder dashboard, recording four streamers](docs/images/dashboard-dark.png)
 
