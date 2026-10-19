@@ -24,18 +24,21 @@ jobs:
           go-version-file: go.mod
 
       # vod and vlrecd embed FFmpeg, so each platform's build needs its binary
-      # in place. download.sh fetches the pinned release and checks its hash.
+      # in place, including the runner's own for the tests. download.sh fetches
+      # the pinned release and checks its hash.
       - name: Download FFmpeg
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          for target in linux/amd64 darwin/arm64 darwin/amd64 windows/amd64; do
+          for target in $(printf '%s\n' "linux/$(go env GOARCH)" linux/amd64 \
+              darwin/arm64 darwin/amd64 windows/amd64 | sort -u); do
             GOOS=${target%/*} GOARCH=${target#*/} bash internal/ffmpeg/download.sh
           done
 
       - name: Vet
         run: |
           go vet ./...
+          GOOS=linux GOARCH=amd64 go vet ./...
           GOOS=darwin GOARCH=arm64 go vet ./...
           GOOS=darwin GOARCH=amd64 go vet ./...
           GOOS=windows GOARCH=amd64 go vet ./...
