@@ -1,0 +1,19 @@
+# Dashboard with 8 monitored Streamers, 4 recording. Render with:
+#   bun tools/showcase/harness/render.ts tools/showcase/shots/dashboard-8.yaml
+dataset: dashboard-8
+now: 2026-09-24T20:30:00-07:00
+timezone: America/Los_Angeles
+app_version: 1.0.0
+
+defaults:
+  size: [1280, 860]
+  scale: 2
+  themes: [light, dark]
+  prefs:
+    dashboard_page_size: 20
+
+scenes:
+  - name: dashboard
+    route: /dashboard
+    steps:
+      - wait: text=lanternfox_tv

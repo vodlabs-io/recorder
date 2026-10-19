@@ -1,0 +1,356 @@
+# The default Demo dataset: 8 fictional Streamers on 8 Platforms and their
+# VODs. Every time below is an offset back from "now" — the demo daemon's
+# --now, or the real time — so the dataset always looks current. Field
+# reference: tools/showcase/README.md.
+#
+# Usernames are invented and confirmed absent from their Platform (see each
+# `verified`). Avatars are generated from their prompts; thumbnails are real
+# stream frames (see the VODs section).
+
+version = "1.0.0"
+uptime = "3d4h12m"
+download_dir = "/Users/demo/Movies/VodLabs Recorder"
+archive_dir = "/Volumes/Vault/VodLabs"
+
+[[root]]
+paths = ["/Users/demo/Movies/VodLabs Recorder"]
+download = true
+total = "1TB"
+free = "412GB"
+
+[[root]]
+paths = ["/Volumes/Vault/VodLabs"]
+total = "8TB"
+free = "5.3TB"
+
+# --- Live and recording ------------------------------------------------------
+
+[[streamer]]
+platform = "twitch"
+username = "lanternfox_tv"
+verified = "2026-09-24"
+status = "live"
+live_for = "2h14m"
+bitrate = "6Mbps"
+title = "Silksong any% — new route tonight"
+category = "Hollow Knight: Silksong"
+added = "88d"
+avatar_prompt = "a friendly orange fox holding a glowing lantern, flat vector illustration avatar, bold simple shapes, centered, solid deep navy background, no text"
+
+[[streamer]]
+platform = "tiktok"
+username = "juniper.bakes"
+verified = "2026-09-24"
+display_name = "Juniper 🍞"
+status = "live"
+live_for = "36m"
+bitrate = "4Mbps"
+title = "sourdough Q&A — ask me anything 🍞"
+category = "Food & Drink"
+added = "34d"
+avatar_prompt = "a cute smiling loaf of sourdough bread with a sprig of juniper, flat vector illustration avatar, bold simple shapes, centered, solid warm peach background, no text"
+
+[[streamer]]
+platform = "kick"
+username = "gritwave_es"
+verified = "2026-09-24"
+status = "live"
+live_for = "1h27m"
+bitrate = "8Mbps"
+title = "FC 26 Rivals con subs — ¡vamos por División 1!"
+category = "EA Sports FC 26"
+added = "119d"
+avatar_prompt = "a stylized ocean wave shaped like a helmet visor, flat vector illustration avatar, bold simple shapes, centered, solid emerald green background, no text"
+
+[[streamer]]
+platform = "youtube"
+username = "tidepoolradio"
+verified = "2026-09-24"
+status = "live"
+live_for = "11h20m"
+bitrate = "5Mbps"
+title = "tidepool radio 🌊 lofi beats to record to"
+category = "Music"
+added = "165d"
+avatar_prompt = "a small jellyfish wearing headphones floating above a vintage radio, flat vector illustration avatar, bold simple shapes, centered, solid teal background, no text"
+
+# --- Live, Record switched off -----------------------------------------------
+
+[[streamer]]
+platform = "twitch"
+username = "mossbyte_beats"
+verified = "2026-09-24"
+status = "live"
+record = false
+live_for = "48m"
+bitrate = "6Mbps"
+title = "otter cam + beats from field recordings"
+category = "Animals, Aquariums, and Zoos"
+added = "142d"
+avatar_prompt = "a tiny round robot covered in green moss with a single glowing eye, flat vector illustration avatar, bold simple shapes, centered, solid charcoal background, no text"
+
+# --- Offline -------------------------------------------------------------------
+
+[[streamer]]
+platform = "soop"
+username = "dalbit2cat"
+verified = "2026-09-24"
+display_name = "달빛고양이"
+last_live = "3h20m"
+last_live_duration = "2h55m"
+bitrate = "8Mbps"
+added = "51d"
+avatar_prompt = "a sleepy white cat curled on a crescent moon, flat vector illustration avatar, bold simple shapes, centered, solid midnight purple background, no text"
+
+[[streamer]]
+platform = "twitch"
+username = "kestrelsketchbook"
+verified = "2026-09-24"
+last_live = "5h"
+last_live_duration = "3h12m"
+bitrate = "6Mbps"
+added = "77d"
+avatar_prompt = "a small kestrel bird holding a paintbrush in its beak, flat vector illustration avatar, bold simple shapes, centered, solid soft coral background, no text"
+
+[[streamer]]
+platform = "soop"
+username = "haneulbyeol77"
+verified = "2026-09-24"
+display_name = "하늘별"
+last_live = "9h"
+last_live_duration = "4h40m"
+bitrate = "8Mbps"
+added = "203d"
+avatar_prompt = "a shooting star over a stylized mountain ridge, flat vector illustration avatar, bold simple shapes, centered, solid sky blue background, no text"
+
+# --- VODs ----------------------------------------------------------------------
+# Thumbnails are live-stream frames that show no identifiable face.
+
+[[vod]]
+id = "lanternfox-1"
+streamer = "twitch/lanternfox_tv"
+ago = "1d2h"
+duration = "3h41m"
+titles = ["Hollow Knight any% — practicing the new route", "Hollow Knight any% — PB attempts"]
+
+[[vod]]
+id = "lanternfox-2"
+streamer = "twitch/lanternfox_tv"
+ago = "3d1h"
+duration = "4h5m"
+titles = ["Silksong blind — first boss attempts"]
+
+[[vod]]
+id = "lanternfox-3"
+streamer = "twitch/lanternfox_tv"
+ago = "6d2h"
+duration = "2h58m"
+titles = ["chill Hollow Knight + viewer routes"]
+
+[[vod]]
+id = "lanternfox-4"
+streamer = "twitch/lanternfox_tv"
+ago = "9d1h"
+duration = "5h12m"
+files = 2
+titles = ["Hollow Knight 100% marathon", "Silksong after the marathon (part 2)"]
+
+[[vod]]
+id = "lanternfox-5"
+streamer = "twitch/lanternfox_tv"
+ago = "13d"
+duration = "3h20m"
+titles = ["Hollow Knight: Godhome practice"]
+
+[[vod]]
+id = "kestrel-1"
+streamer = "twitch/kestrelsketchbook"
+ago = "5h"
+duration = "3h12m"
+titles = ["【野鳥カメラ】カーディナル祭り 餌台ライブ", "【野鳥カメラ】夕方の餌台"]
+
+[[vod]]
+id = "kestrel-2"
+streamer = "twitch/kestrelsketchbook"
+ago = "2d6h"
+duration = "2h40m"
+titles = ["【野鳥カメラ】森の餌台 まったり観察"]
+
+[[vod]]
+id = "kestrel-3"
+streamer = "twitch/kestrelsketchbook"
+ago = "4d5h"
+duration = "3h5m"
+titles = ["【野鳥カメラ】庭の餌台に来る鳥たち"]
+
+[[vod]]
+id = "kestrel-4"
+streamer = "twitch/kestrelsketchbook"
+ago = "8d6h"
+duration = "2h22m"
+files = 3
+state = "encoding"
+percent = 42
+titles = ["【野鳥カメラ】フクロウ観察 夜まで"]
+
+[[vod]]
+id = "kestrel-5"
+streamer = "twitch/kestrelsketchbook"
+ago = "15d"
+duration = "4h10m"
+titles = ["【野鳥カメラ】リスと鳥の噴水", "【野鳥カメラ】噴水 続き"]
+
+[[vod]]
+id = "mossbyte-1"
+streamer = "twitch/mossbyte_beats"
+ago = "3d3h"
+duration = "2h5m"
+titles = ["reef tank cam + chill beats"]
+
+[[vod]]
+id = "mossbyte-2"
+streamer = "twitch/mossbyte_beats"
+ago = "10d"
+duration = "1h48m"
+titles = ["otter cam, beats in the background"]
+
+[[vod]]
+id = "mossbyte-3"
+streamer = "twitch/mossbyte_beats"
+ago = "17d"
+duration = "2h30m"
+titles = ["jellyfish cam, one beat per tank"]
+
+[[vod]]
+id = "juniper-1"
+streamer = "tiktok/juniper.bakes"
+ago = "1d5h"
+duration = "1h10m"
+titles = ["filling pastry molds live 🧁"]
+
+[[vod]]
+id = "juniper-2"
+streamer = "tiktok/juniper.bakes"
+ago = "2d5h"
+duration = "52m"
+titles = ["sifting flour + sourdough Q&A ✨"]
+
+[[vod]]
+id = "juniper-3"
+streamer = "tiktok/juniper.bakes"
+ago = "4d4h"
+duration = "1h25m"
+titles = ["crêpes for the fam 🍓"]
+
+[[vod]]
+id = "juniper-4"
+streamer = "tiktok/juniper.bakes"
+ago = "7d5h"
+duration = "1h2m"
+titles = ["tempura batter + chat 🍤"]
+
+[[vod]]
+id = "gritwave-1"
+streamer = "kick/gritwave_es"
+ago = "22h"
+duration = "6h10m"
+files = 2
+titles = ["FC 26 Rivals — subiendo a División 3", "FC 26 Rivals — casi División 2"]
+
+[[vod]]
+id = "gritwave-2"
+streamer = "kick/gritwave_es"
+ago = "2d"
+duration = "5h40m"
+titles = ["torneo comunitario de FC 26"]
+
+[[vod]]
+id = "gritwave-3"
+streamer = "kick/gritwave_es"
+ago = "3d22h"
+duration = "4h55m"
+titles = ["FC 26: modo carrera, temporada 2"]
+
+[[vod]]
+id = "gritwave-4"
+streamer = "kick/gritwave_es"
+ago = "6d"
+duration = "5h5m"
+titles = ["partidos con la comunidad"]
+
+[[vod]]
+id = "gritwave-5"
+streamer = "kick/gritwave_es"
+ago = "11d"
+duration = "6h30m"
+files = 2
+titles = ["maratón de FC 26 ⚽"]
+
+[[vod]]
+id = "tidepool-1"
+streamer = "youtube/tidepoolradio"
+ago = "1d12h"
+duration = "10h"
+files = 3
+titles = ["tidepool radio 🌊 lofi beats to record to"]
+
+[[vod]]
+id = "tidepool-2"
+streamer = "youtube/tidepoolradio"
+ago = "3d12h"
+duration = "9h30m"
+files = 3
+titles = ["tidepool radio 🌊 rainy night drive edition"]
+
+[[vod]]
+id = "haneul-1"
+streamer = "soop/haneulbyeol77"
+ago = "9h"
+duration = "4h40m"
+files = 2
+titles = ["신규 레이드 첫 트라이!", "레이드 2트 가보자고"]
+
+[[vod]]
+id = "haneul-2"
+streamer = "soop/haneulbyeol77"
+ago = "1d9h"
+duration = "5h10m"
+files = 2
+titles = ["길드전 준비", "길드전 본방"]
+
+[[vod]]
+id = "haneul-3"
+streamer = "soop/haneulbyeol77"
+ago = "3d9h"
+duration = "4h25m"
+titles = ["사막 마을 탐험하는 날"]
+
+[[vod]]
+id = "haneul-4"
+streamer = "soop/haneulbyeol77"
+ago = "8d10h"
+duration = "6h"
+files = 2
+titles = ["만렙 달성 기념 방송 🎉", "얼음 협곡 사냥"]
+
+[[vod]]
+id = "dalbit-1"
+streamer = "soop/dalbit2cat"
+ago = "3h20m"
+duration = "2h55m"
+titles = ["고양이 방 캠 🌙 퇴근 후 수다"]
+
+[[vod]]
+id = "dalbit-2"
+streamer = "soop/dalbit2cat"
+ago = "1d3h"
+duration = "3h5m"
+titles = ["아기 고양이들 낮잠 캠 🐾"]
+
+[[vod]]
+id = "dalbit-3"
+streamer = "soop/dalbit2cat"
+ago = "4d3h"
+duration = "2h40m"
+titles = ["고양이들 낮잠 방송 😴"]
+
