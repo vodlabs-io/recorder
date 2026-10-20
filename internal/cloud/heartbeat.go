@@ -16,6 +16,11 @@ import (
 const (
 	heartbeatEndpoint = "/api/v1/heartbeat"
 	heartbeatInterval = 6 * time.Hour
+	// A failed heartbeat is retried from heartbeatRetryMin, doubling up to
+	// heartbeatRetryMax, so the daemon isn't left without upstream version info
+	// until the next interval.
+	heartbeatRetryMin = 30 * time.Second
+	heartbeatRetryMax = 30 * time.Minute
 )
 
 // heartbeatResponse is the heartbeat endpoint payload: version info plus the
@@ -25,20 +30,29 @@ type heartbeatResponse struct {
 	SupportedPlatforms []vlconfig.Platform `json:"supported_platforms"`
 }
 
+// handleHeartbeat sends a heartbeat now and every heartbeatInterval after,
+// retrying failures with backoff.
 func (c *Client) handleHeartbeat(ctx context.Context) {
 	log := c.logger.With("func", "handleHeartbeat")
 	log.Info("Started heartbeat")
 	defer log.Info("Stopped Heartbeat")
 
-	ticker := time.NewTicker(heartbeatInterval)
-	defer ticker.Stop()
+	retry := heartbeatRetryMin
+	timer := time.NewTimer(0)
+	defer timer.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-timer.C:
+			next := heartbeatInterval
 			if err := c.sendHeartbeat(ctx); err != nil {
-				log.Error("Failed to send heartbeat", "error", err)
+				log.Error("Failed to send heartbeat", "error", err, "retry_in", retry)
+				next = retry
+				retry = min(retry*2, heartbeatRetryMax)
+			} else {
+				retry = heartbeatRetryMin
 			}
+			timer.Reset(next)
 		case <-ctx.Done():
 			return
 		}

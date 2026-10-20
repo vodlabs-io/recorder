@@ -199,14 +199,11 @@ func Init(
 // outgoing request pumps, and the first subscription cycle. Called from Init
 // once registered, or later by the registration retry.
 func (c *Client) startCloudWork(ctx context.Context) {
-	log := c.logger.With("func", "startCloudWork")
-
 	// The daemon-wide ceiling is built before the rate limiter, so every path
 	// that spends a token (including a retry that outlives its request) finds it.
 	c.ceiling = newTokenBucket(ctx, ceilingLimit)
 	go c.rateLimitStatusRequests(ctx)
 	go c.handleLagReports(ctx)
-	go c.handleHeartbeat(ctx)
 	go c.handleSubscription(ctx)
 	// A no-op until a login for a login-gated platform is stored.
 	go c.runLoginSweep(ctx)
@@ -215,9 +212,7 @@ func (c *Client) startCloudWork(ctx context.Context) {
 	// there are no streamers to subscribe to.
 	c.waitInitialSub()
 
-	if err := c.sendHeartbeat(ctx); err != nil {
-		log.Error("Failed to send heartbeat", "error", err)
-	}
+	go c.handleHeartbeat(ctx)
 }
 
 func (c *Client) Close() {
