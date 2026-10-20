@@ -29,7 +29,7 @@ func (a *App) connectDaemon(ctx context.Context, cmd *cli.Command) (context.Cont
 		return ctx, nil
 	}
 
-	if !errors.Is(err, nats.ErrNoServers) || !a.cfg.AutoStart || version.Version == "devel" {
+	if !daemonDown(err) || !a.cfg.AutoStart || version.Version == "devel" {
 		cancel()
 		return ctx, a.daemonUnreachableError(err)
 	}
@@ -83,7 +83,7 @@ func (a *App) notifyDaemonUpdate(ctx context.Context, cmd *cli.Command) {
 // daemon is not running and how to start it. The underlying error is still
 // wrapped, so errors.Is still works and the detail is one -v away.
 func (a *App) daemonUnreachableError(err error) error {
-	if !errors.Is(err, nats.ErrNoServers) {
+	if !daemonDown(err) {
 		return fmt.Errorf("could not reach the recorder at %s: %w", a.natsURL, err)
 	}
 	hint := fmt.Sprintf("start it with 'vlrecd', or set daemon.auto_start = true in %s",
@@ -92,6 +92,14 @@ func (a *App) daemonUnreachableError(err error) error {
 		hint = "it did not come up; check the log above or run 'vlrecd' directly to see why"
 	}
 	return fmt.Errorf("the recorder daemon isn't running at %s — %s: %w", a.natsURL, hint, err)
+}
+
+// daemonDown reports whether a failed connect means nothing is listening.
+// nats.go folds a refused dial into ErrNoServers only when the message reads
+// "connection refused", which Windows words differently, so the errno is
+// checked too.
+func daemonDown(err error) bool {
+	return errors.Is(err, nats.ErrNoServers) || isConnRefused(err)
 }
 
 const natsKVBucket = "streamers"
