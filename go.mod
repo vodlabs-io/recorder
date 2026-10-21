@@ -8,7 +8,7 @@ go 1.26.0
 toolchain go1.26.10
 
 require (
-	github.com/DeRuina/timberjack v1.4.8
+	github.com/DeRuina/timberjack v1.4.9
 	github.com/Eyevinn/hls-m3u8 v0.6.5
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/coder/websocket v1.8.15
@@ -18,17 +18,17 @@ require (
 	github.com/knadh/koanf/providers/confmap v1.0.1
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/posflag v1.0.2
-	github.com/knadh/koanf/v2 v2.3.8
+	github.com/knadh/koanf/v2 v2.4.1
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nats-io/nats-server/v2 v2.15.1
 	github.com/nats-io/nats.go v1.54.0
 	github.com/nats-io/nkeys v0.4.16
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/pion/dtls/v3 v3.1.10
+	github.com/pion/dtls/v3 v3.1.14
 	github.com/pion/interceptor v0.1.49
 	github.com/pion/rtcp v1.2.19
 	github.com/pion/rtp v1.10.5
-	github.com/pion/webrtc/v4 v4.2.23
+	github.com/pion/webrtc/v4 v4.2.24
 	github.com/sgtdi/fswatcher v1.3.0
 	github.com/spf13/pflag v1.0.10
 	github.com/tidwall/gjson v1.20.0
