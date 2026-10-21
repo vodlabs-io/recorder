@@ -51,7 +51,7 @@ Streamlink Team). It is not part of any build.
 
 Linked into `vod` and `vlrecd`.
 
-### Go standard library and runtime go1.26.9
+### Go standard library and runtime go1.26.10
 
 LICENSE:
 
