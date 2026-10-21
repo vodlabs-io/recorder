@@ -5,7 +5,7 @@ go 1.26.0
 // The toolchain every build uses, so released binaries, container images and
 // a developer's laptop are not each compiled by whatever Go they happen to
 // have. CI follows this file rather than naming a version of its own.
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/DeRuina/timberjack v1.4.8
