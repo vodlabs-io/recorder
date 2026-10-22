@@ -296,7 +296,7 @@ func (sf *StreamersFile) Write() error {
 		}
 	}
 
-	if err := os.WriteFile(sf.path, buf.Bytes(), 0644); err != nil {
+	if err := writeFileAtomic(sf.path, buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("failed to write streamers file %s: %w", sf.path, err)
 	}
 	sf.lastWrittenHash = sha256.Sum256(buf.Bytes())

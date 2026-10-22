@@ -47,6 +47,40 @@ func ensureFileExists(filePath string, content []byte) error {
 	return nil
 }
 
+// writeFileAtomic replaces path with data through a synced temp file in the
+// same directory, so a crash mid-write leaves either the old or the new
+// contents, never a truncated or zero-filled file.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return nil
+}
+
 // Environment variables that relocate the daemon's config and cache
 // directories. Each names the final directory ("vodlabs/recorder" is not
 // appended). Unlike the XDG variables, which os.UserConfigDir and

@@ -84,3 +84,24 @@ func TestEnsurePlatformsCacheExistsUnderOverride(t *testing.T) {
 		t.Fatalf("seed not written under the override: %v", err)
 	}
 }
+
+// TestWriteFileAtomicReplaces checks the file is replaced in full and no temp
+// file is left beside it.
+func TestWriteFileAtomicReplaces(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "streamers.toml")
+	if err := os.WriteFile(path, []byte("old contents that are longer"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileAtomic(path, []byte("new"), 0644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "new" {
+		t.Fatalf("contents = %q, %v; want \"new\"", got, err)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 {
+		t.Errorf("dir has %d entries, want only streamers.toml", len(entries))
+	}
+}
