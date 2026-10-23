@@ -205,8 +205,9 @@ func Run(
 		}
 	}()
 
-	// A Niconico program's or an FC2 Live channel's playlist is granted per
-	// seat: take one for this ingest and hold it while the playlist is read.
+	// A Niconico program's, an FC2 Live channel's or a Peeks broadcast's
+	// playlist is granted per seat: take one for this ingest and hold it while
+	// the playlist is read.
 	if isSeatURL(cfg.URL) {
 		seat, oerr := openSeat(ctx, cfg.URL, client, o.userAgent(), logger)
 		if seatEnded(oerr) {

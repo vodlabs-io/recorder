@@ -58,6 +58,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   vklive: "VK Video Live",
   xiaohongshu: "Xiaohongshu",
   younow: "YouNow",
+  peeks: "Peeks",
   eplay: "ePlay",
   myfreecams: "MyFreeCams",
   x: "X",

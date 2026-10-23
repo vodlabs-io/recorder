@@ -310,6 +310,11 @@
 		}
 	},
 	{
+		"name": "peeks",
+		"display_name": "Peeks",
+		"channel_url": "https://www.peeks.com/u/{username}"
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"
