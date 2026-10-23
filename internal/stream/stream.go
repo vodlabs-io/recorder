@@ -33,10 +33,10 @@ func (s Stream) IsHLS() bool {
 	case FormatFLV:
 		return false
 	}
-	// A Niconico program (nicolive://) or an FC2 Live channel (fc2live://) is
-	// recorded from the HLS its seat is granted.
+	// A Niconico program (nicolive://), an FC2 Live channel (fc2live://) or a
+	// Peeks broadcast (peeks://) is recorded from the HLS its seat is granted.
 	return strings.Contains(s.URL, ".m3u8") || strings.HasPrefix(s.URL, "nicolive://") ||
-		strings.HasPrefix(s.URL, "fc2live://")
+		strings.HasPrefix(s.URL, "fc2live://") || strings.HasPrefix(s.URL, "peeks://")
 }
 
 // IsVP8 reports whether the stream is known, before it is opened, to carry VP8
