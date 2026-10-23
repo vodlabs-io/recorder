@@ -333,6 +333,16 @@
 		}
 	},
 	{
+		"name": "cameraprive",
+		"display_name": "CameraPrive",
+		"channel_url": "https://cameraprive.com/us/{username}",
+		"login": {
+			"url": "https://cameraprive.com/us/",
+			"cookie_domains": ["cameraprive.com"],
+			"session_cookie": "remember-login-user"
+		}
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"

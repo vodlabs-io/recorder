@@ -384,3 +384,27 @@ func TestDefaultFanslyHasLogin(t *testing.T) {
 		t.Errorf("fansly session cookie %q should be the copied token", l.SessionCookie)
 	}
 }
+
+// TestDefaultCameraPriveHasLogin guards the descriptor behind CameraPrive's
+// member seats: the room page alone is read with the login's cookies, which
+// the media and chat servers on livecamcdn.com never see.
+func TestDefaultCameraPriveHasLogin(t *testing.T) {
+	l := LoginFlowFor("cameraprive")
+	if l == nil {
+		t.Fatal("cameraprive should have a login descriptor in the embedded default")
+	}
+	if !l.AllowsHost("cameraprive.com") || !l.AllowsHost("www.cameraprive.com") {
+		t.Errorf("cameraprive login should allow the site, domains=%v", l.CookieDomains)
+	}
+	for _, h := range []string{"livecamcdn.com", "tuna.livecamcdn.com", "chat2.livecamcdn.com", "cameraprive.com.evil.test"} {
+		if l.AllowsHost(h) {
+			t.Errorf("SECURITY: cameraprive login must not allow %q", h)
+		}
+	}
+	if l.Auth != nil {
+		t.Errorf("cameraprive needs no auth scheme: %+v", l.Auth)
+	}
+	if l.SessionCookie != "remember-login-user" {
+		t.Errorf("cameraprive session cookie %q", l.SessionCookie)
+	}
+}

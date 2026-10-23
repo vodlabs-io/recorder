@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vodlabs-io/recorder/internal/cameraprive"
 	"github.com/vodlabs-io/recorder/internal/fansly"
 )
 
@@ -36,19 +37,23 @@ func (s Stream) IsHLS() bool {
 		return false
 	}
 	// A Niconico program (nicolive://), an FC2 Live channel (fc2live://), a
-	// Peeks broadcast (peeks://) or a Fansly channel (fansly://) is recorded
-	// from the HLS its seat is granted.
+	// Peeks broadcast (peeks://), a Fansly channel (fansly://) or a CameraPrive
+	// room (cameraprive://) is recorded from the HLS its seat is granted.
 	return strings.Contains(s.URL, ".m3u8") || strings.HasPrefix(s.URL, "nicolive://") ||
 		strings.HasPrefix(s.URL, "fc2live://") || strings.HasPrefix(s.URL, "peeks://") ||
-		fansly.IsURL(s.URL)
+		fansly.IsURL(s.URL) || cameraprive.IsURL(s.URL)
 }
 
 // SeatLoginHost names the platform host a stream's seat reads it from as the
 // recorder's user, where a login for the platform may sign the seat in: a
-// Fansly channel's API. Empty for every other stream.
+// Fansly channel's API, a CameraPrive room's page. Empty for every other
+// stream.
 func (s Stream) SeatLoginHost() string {
-	if fansly.IsURL(s.URL) {
+	switch {
+	case fansly.IsURL(s.URL):
 		return fansly.APIHost
+	case cameraprive.IsURL(s.URL):
+		return cameraprive.SiteHost
 	}
 	return ""
 }
