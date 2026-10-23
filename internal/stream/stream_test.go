@@ -100,6 +100,7 @@ func TestIsHLS(t *testing.T) {
 		{Stream{URL: "fc2live://58117384"}, true},
 		{Stream{URL: "peeks://6265400"}, true},
 		{Stream{URL: "fansly://645676306893123584"}, true},
+		{Stream{URL: "cameraprive://srta-mornni"}, true},
 	} {
 		if got := tc.s.IsHLS(); got != tc.want {
 			t.Errorf("IsHLS(%+v) = %v, want %v", tc.s, got, tc.want)
@@ -118,6 +119,21 @@ func TestIsVP8(t *testing.T) {
 	} {
 		if got := (Stream{URL: tc.url}).IsVP8(); got != tc.want {
 			t.Errorf("IsVP8(%q) = %v, want %v", tc.url, got, tc.want)
+		}
+	}
+}
+
+func TestSeatLoginHost(t *testing.T) {
+	for _, tc := range []struct {
+		url, want string
+	}{
+		{"fansly://645676306893123584", "apiv3.fansly.com"},
+		{"cameraprive://srta-mornni", "cameraprive.com"},
+		{"peeks://6265400", ""},
+		{"https://cdn.example/live/index.m3u8", ""},
+	} {
+		if got := (Stream{URL: tc.url}).SeatLoginHost(); got != tc.want {
+			t.Errorf("SeatLoginHost(%q) = %q, want %q", tc.url, got, tc.want)
 		}
 	}
 }

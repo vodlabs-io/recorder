@@ -263,9 +263,10 @@ func (w *worker) downloadHeaders() map[string]string {
 }
 
 // seatLogin builds the headers that sign a seat's own requests in as the user
-// (a Fansly channel read), when we hold a login for the streamer's platform and
-// the seat's host belongs to it. They come from the login's auth scheme alone:
-// the seat needs no cookies, and the media hosts never see either.
+// (a Fansly channel read, a CameraPrive room page), when we hold a login for
+// the streamer's platform and the seat's host belongs to it. They come from the
+// login's auth scheme, or are its cookies where the platform has no scheme;
+// the media hosts never see either.
 //
 // PRIVACY: like downloadHeaders, read from the local encrypted store, never
 // logged, and only ever sent to the platform's own host.
@@ -276,12 +277,17 @@ func (w *worker) seatLogin() map[string]string {
 	host := w.selectedStream.SeatLoginHost()
 	str := w.str.Load()
 	login := vlconfig.LoginFlowFor(str.Platform)
-	if host == "" || login == nil || login.Auth == nil || !login.AllowsHost(host) {
+	if host == "" || login == nil || !login.AllowsHost(host) {
 		return nil
 	}
 	sess, ok := w.cookies.Get(str.Platform)
 	if !ok {
 		return nil
+	}
+	if login.Auth == nil {
+		w.logger.Info("Signing the stream's seat in with the platform login",
+			"platform", str.Platform, "host", host, "cookie_count", len(sess.Cookies))
+		return map[string]string{"Cookie": sess.Header()}
 	}
 	a := login.Auth
 	headers := sess.AuthHeaders(a.Scheme, a.Cookies, a.Origin, platformauth.SignedRequest{})
