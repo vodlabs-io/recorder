@@ -226,6 +226,11 @@ var scrapeDomains = map[string][]string{
 		"webxcams.cam",
 		"images-dnxlive.com",
 	},
+	"xiaohongshu": {
+		"xiaohongshu.com",
+		"rednote.com", // the international site
+		"xhslink.com", // the app's share links
+	},
 	"vklive": {
 		"vkvideo.ru",
 		"vkplay.live",
