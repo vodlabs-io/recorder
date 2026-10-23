@@ -254,6 +254,12 @@ var scrapeDomains = map[string][]string{
 		"myfreecams.com",
 		"mfcimg.com",
 	},
+	"popkontv": {
+		// The API (prod-api.rink.kr) the network's sites all read from.
+		"rink.kr",
+		// HS CDN is a shared CDN, so only the host PopkonTV's HLS is on.
+		"live-popkontv.hscdn.com",
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
