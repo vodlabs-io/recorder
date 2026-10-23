@@ -315,6 +315,24 @@
 		"channel_url": "https://www.peeks.com/u/{username}"
 	},
 	{
+		"name": "fansly",
+		"display_name": "Fansly",
+		"channel_url": "https://fansly.com/{username}",
+		"login": {
+			"url": "https://fansly.com/",
+			"refresh_url": "https://fansly.com/home",
+			"cookie_domains": ["fansly.com"],
+			"session_cookie": "vl_session_token",
+			"storage_cookies": [
+				{"key": "session_active_session", "field": "token", "cookie": "vl_session_token"}
+			],
+			"auth": {
+				"scheme": "authorization-cookie",
+				"cookies": ["vl_session_token"]
+			}
+		}
+	},
+	{
 		"name": "eplay",
 		"display_name": "ePlay",
 		"channel_url": "https://eplay.com/{username}"

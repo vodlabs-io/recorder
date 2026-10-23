@@ -170,6 +170,25 @@ type loginFlow struct {
 	// own name (Twitch's "login"), used to label the Accounts row. The label is
 	// shown in the UI, so never name a secret cookie here.
 	AccountCookie string `json:"account_cookie,omitempty"`
+	// StorageCookies are values the platform keeps in the login page's local
+	// storage rather than in a cookie (Fansly's session token). The desktop
+	// copies each into a first-party cookie of the given name in the login
+	// webview, so it is captured with the jar, and removes the cookie once the
+	// value is gone. Like the rest of loginFlow it is embedded, never taken
+	// from the cloud: it decides what is read out of a signed-in page.
+	StorageCookies []storageCookie `json:"storage_cookies,omitempty"`
+}
+
+// storageCookie names one local-storage value the login capture keeps as a
+// cookie.
+type storageCookie struct {
+	// Key is the local-storage key.
+	Key string `json:"key"`
+	// Field, when set, names a top-level field of the key's JSON value to take
+	// instead of the whole value.
+	Field string `json:"field,omitempty"`
+	// Cookie is the name of the cookie the value is kept in.
+	Cookie string `json:"cookie"`
 }
 
 // authScheme describes how to derive an Authorization header from the stored

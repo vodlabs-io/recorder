@@ -63,6 +63,8 @@ type Config struct {
 	// a Broadcast lasts; see hlsingest.Config.
 	URLTTL     time.Duration
 	RefreshURL func(context.Context) (string, error)
+	// SeatLogin signs a seat's own requests in; see hlsingest.Config.
+	SeatLogin map[string]string
 	// MouflonKeys decrypts encrypted segment names; see hlsingest.Config.
 	MouflonKeys map[string]string
 	// SegmentRename rewrites segment URLs; see hlsingest.Config.
@@ -100,6 +102,7 @@ func Record(
 		Variant:      cfg.Variant,
 		UserAgent:    cfg.UserAgent,
 		Headers:      cfg.Headers,
+		SeatLogin:    cfg.SeatLogin,
 		Retries:      cfg.Retries,
 		PollInterval: cfg.PollInterval,
 		// Some Origins stamp a local time with no offset, which the parser

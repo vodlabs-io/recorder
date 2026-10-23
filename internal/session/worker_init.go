@@ -11,6 +11,7 @@ import (
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
 	"github.com/vodlabs-io/recorder/internal/cookiemint"
+	"github.com/vodlabs-io/recorder/internal/platformauth"
 	"github.com/vodlabs-io/recorder/internal/provenance"
 	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/stream"
@@ -192,6 +193,7 @@ func (w *worker) initPart() error {
 		Carryover: w.carryover,
 		StreamURL: w.selectedStream.URL,
 		Headers:   w.downloadHeaders(),
+		SeatLogin: w.seatLogin(),
 		// The cloud-supplied UA (in downloadHeaders) wins in the writer; this is
 		// only the floor when a stream carries no UA header. See internal/useragent.
 		UserAgent: useragent.Fallback,
@@ -256,6 +258,36 @@ func (w *worker) downloadHeaders() map[string]string {
 		headers["Cookie"] = sess.Header()
 		w.logger.Info("Attached platform login to stream download",
 			"platform", str.Platform, "host", u.Host, "cookie_count", len(sess.Cookies))
+	}
+	return headers
+}
+
+// seatLogin builds the headers that sign a seat's own requests in as the user
+// (a Fansly channel read), when we hold a login for the streamer's platform and
+// the seat's host belongs to it. They come from the login's auth scheme alone:
+// the seat needs no cookies, and the media hosts never see either.
+//
+// PRIVACY: like downloadHeaders, read from the local encrypted store, never
+// logged, and only ever sent to the platform's own host.
+func (w *worker) seatLogin() map[string]string {
+	if w.cookies == nil || w.selectedStream == nil {
+		return nil
+	}
+	host := w.selectedStream.SeatLoginHost()
+	str := w.str.Load()
+	login := vlconfig.LoginFlowFor(str.Platform)
+	if host == "" || login == nil || login.Auth == nil || !login.AllowsHost(host) {
+		return nil
+	}
+	sess, ok := w.cookies.Get(str.Platform)
+	if !ok {
+		return nil
+	}
+	a := login.Auth
+	headers := sess.AuthHeaders(a.Scheme, a.Cookies, a.Origin, platformauth.SignedRequest{})
+	if len(headers) > 0 {
+		w.logger.Info("Signing the stream's seat in with the platform login",
+			"platform", str.Platform, "host", host, "scheme", a.Scheme)
 	}
 	return headers
 }

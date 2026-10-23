@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hostAllowed } from "./platform-login";
+import { hostAllowed, storageCookieScript } from "./platform-login";
 
 // hostAllowed is the capture-side half of the cookie guard: it decides which of
 // a login partition's cookies are stored at all. It matters most where a
@@ -56,5 +56,26 @@ describe("hostAllowed", () => {
   test("enforces nothing when the descriptor declares no domains", () => {
     expect(hostAllowed(undefined, "anything.example")).toBe(true);
     expect(hostAllowed([], "anything.example")).toBe(true);
+  });
+});
+
+// storageCookieScript copies a local-storage value (Fansly's session token)
+// into a first-party cookie, so the native capture stores it with the jar.
+describe("storageCookieScript", () => {
+  test("is empty without entries, and skips unsafe cookie names", () => {
+    expect(storageCookieScript(undefined)).toBe("");
+    expect(storageCookieScript([])).toBe("");
+    expect(storageCookieScript([{ key: "k", cookie: "bad name;" }])).toBe("");
+  });
+
+  test("names the key, field and cookie it copies", () => {
+    const js = storageCookieScript([
+      { key: "session_active_session", field: "token", cookie: "vl_session_token" },
+    ]);
+    expect(js).toContain('"key":"session_active_session"');
+    expect(js).toContain('"field":"token"');
+    expect(js).toContain('"cookie":"vl_session_token"');
+    // It must parse as a script the page can run.
+    expect(() => new Function(js)).not.toThrow();
   });
 });

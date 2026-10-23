@@ -335,6 +335,17 @@ export type LoginFlow = {
   cookie_domains?: string[];
   success_url_pattern?: string;
   session_cookie?: string; // cookie whose presence means "signed in" (e.g. sessionid)
+  // Local-storage values kept as cookies of the jar (Fansly's session token);
+  // see vlconfig.storageCookie.
+  storage_cookies?: StorageCookie[];
+};
+
+// StorageCookie mirrors vlconfig.storageCookie: the local-storage key (and,
+// optionally, a top-level field of its JSON value) copied into a cookie.
+export type StorageCookie = {
+  key: string;
+  field?: string;
+  cookie: string;
 };
 
 // PlatformInfo mirrors vlconfig.Platform. display_name is the stylized label

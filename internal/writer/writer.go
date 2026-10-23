@@ -21,6 +21,9 @@ import (
 type Config struct {
 	StreamURL string
 	Headers   map[string]string
+	// SeatLogin signs a seat's own requests to its platform in as the
+	// recorder's user (hlswriter only; see hlsingest.Config.SeatLogin).
+	SeatLogin map[string]string
 	UserAgent string
 	Retries   int
 	// Sanitize enables in-flight FLV stream cleanup (flvwriter and webmwriter).
@@ -156,6 +159,7 @@ func (h *hlsWriter) Record(
 		OutDir:        part.Dir,
 		UserAgent:     cfg.UserAgent,
 		Headers:       cfg.Headers,
+		SeatLogin:     cfg.SeatLogin,
 		PollInterval:  2 * time.Second,
 		Retries:       cfg.Retries,
 		FileName:      part.FileName,

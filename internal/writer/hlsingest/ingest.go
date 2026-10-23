@@ -73,6 +73,10 @@ type Config struct {
 	// UserAgent and Headers are applied to every request.
 	UserAgent string
 	Headers   map[string]string
+	// SeatLogin signs a seat's own requests to its platform in as the
+	// recorder's user (a Fansly channel read). It never goes with a playlist or
+	// segment request.
+	SeatLogin map[string]string
 	// Retries is the consecutive-failure budget for playlist polls.
 	Retries int
 	// FetchAttempts is the total attempts made for one init map or segment.
@@ -205,11 +209,11 @@ func Run(
 		}
 	}()
 
-	// A Niconico program's, an FC2 Live channel's or a Peeks broadcast's
-	// playlist is granted per seat: take one for this ingest and hold it while
-	// the playlist is read.
+	// A Niconico program's, an FC2 Live channel's, a Peeks broadcast's or a
+	// Fansly channel's playlist is granted per seat: take one for this ingest
+	// and hold it while the playlist is read.
 	if isSeatURL(cfg.URL) {
-		seat, oerr := openSeat(ctx, cfg.URL, client, o.userAgent(), logger)
+		seat, oerr := openSeat(ctx, cfg.URL, client, o.userAgent(), cfg.SeatLogin, logger)
 		if seatEnded(oerr) {
 			return nil
 		}
