@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/vodlabs-io/recorder/internal/fansly"
 )
 
 // Stream represents a single stream variant with quality information
@@ -33,10 +35,22 @@ func (s Stream) IsHLS() bool {
 	case FormatFLV:
 		return false
 	}
-	// A Niconico program (nicolive://), an FC2 Live channel (fc2live://) or a
-	// Peeks broadcast (peeks://) is recorded from the HLS its seat is granted.
+	// A Niconico program (nicolive://), an FC2 Live channel (fc2live://), a
+	// Peeks broadcast (peeks://) or a Fansly channel (fansly://) is recorded
+	// from the HLS its seat is granted.
 	return strings.Contains(s.URL, ".m3u8") || strings.HasPrefix(s.URL, "nicolive://") ||
-		strings.HasPrefix(s.URL, "fc2live://") || strings.HasPrefix(s.URL, "peeks://")
+		strings.HasPrefix(s.URL, "fc2live://") || strings.HasPrefix(s.URL, "peeks://") ||
+		fansly.IsURL(s.URL)
+}
+
+// SeatLoginHost names the platform host a stream's seat reads it from as the
+// recorder's user, where a login for the platform may sign the seat in: a
+// Fansly channel's API. Empty for every other stream.
+func (s Stream) SeatLoginHost() string {
+	if fansly.IsURL(s.URL) {
+		return fansly.APIHost
+	}
+	return ""
 }
 
 // IsVP8 reports whether the stream is known, before it is opened, to carry VP8

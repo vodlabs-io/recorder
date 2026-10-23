@@ -243,6 +243,9 @@ var scrapeDomains = map[string][]string{
 	"peeks": {
 		"peeks.com",
 	},
+	"fansly": {
+		"fansly.com",
+	},
 	"eplay": {
 		"eplay.com",
 		"letso.live",

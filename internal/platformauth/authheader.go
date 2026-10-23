@@ -60,6 +60,16 @@ const SchemeTiLiveChecksum = "tilive-checksum"
 // carries is public, and comes with the request.
 const SchemeXCSRF = "x-csrf"
 
+// SchemeAuthorizationCookie replays a cookie's value as the whole
+// Authorization header:
+//
+//	Authorization: <cookie value>
+//
+// It is Fansly's scheme: its API ignores cookies and reads the session token
+// the site keeps in local storage, which the desktop's login capture copies
+// into a cookie of the jar (see loginFlow.StorageCookies).
+const SchemeAuthorizationCookie = "authorization-cookie"
+
 // SignedRequest is the request a request-bound scheme signs.
 type SignedRequest struct {
 	URL  string
@@ -88,6 +98,8 @@ func (s Session) AuthHeaders(scheme string, cookieNames []string, origin string,
 		}
 	case strings.EqualFold(scheme, SchemeOAuthCookie):
 		return map[string]string{"Authorization": "OAuth " + secret}
+	case strings.EqualFold(scheme, SchemeAuthorizationCookie):
+		return map[string]string{"Authorization": secret}
 	case strings.EqualFold(scheme, SchemeTiLiveChecksum):
 		if len(cookieNames) < 2 {
 			return nil

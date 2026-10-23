@@ -504,11 +504,14 @@ async function runBrowserFetch(
 }
 
 // LoginView is the slice of a leased context another module may drive. It
-// exposes navigation only: the lease owner parks the view afterwards, and
-// nothing outside this file should touch the BrowserView's lifecycle.
+// exposes navigation and fire-and-forget script only: the lease owner parks the
+// view afterwards, and nothing outside this file should touch the BrowserView's
+// lifecycle.
 export type LoginView = {
   // navigate drives the view to url, resolving once the page can run script.
   navigate: (url: string, timeoutMs: number) => Promise<void>;
+  // run executes js in the loaded page, without a result.
+  run: (js: string) => void;
 };
 
 // withLoginView leases the platform's pooled hidden webview, runs fn on it, and
@@ -529,6 +532,7 @@ export async function withLoginView<T>(
   try {
     return await fn({
       navigate: (url, timeoutMs) => navigate(ctx, url, timeoutMs),
+      run: (js) => ctx.view.executeJavascript(js),
     });
   } finally {
     release(partition, ctx);

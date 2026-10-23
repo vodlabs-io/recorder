@@ -353,3 +353,34 @@ func TestDefaultXHasLogin(t *testing.T) {
 		t.Errorf("success pattern %q misses the home timeline", l.SuccessURLPattern)
 	}
 }
+
+// TestDefaultFanslyHasLogin guards the descriptor behind Fansly's locked
+// streams: the session token lives in the page's local storage, so the desktop
+// keeps it in a cookie of the jar, and the scheme replays it as the
+// Authorization header the API reads.
+func TestDefaultFanslyHasLogin(t *testing.T) {
+	l := LoginFlowFor("fansly")
+	if l == nil {
+		t.Fatal("fansly should have a login descriptor in the embedded default")
+	}
+	for _, h := range []string{"fansly.com", "apiv3.fansly.com"} {
+		if !l.AllowsHost(h) {
+			t.Errorf("fansly login should allow %q, domains=%v", h, l.CookieDomains)
+		}
+	}
+	// The IVS playlist and segments are authorized by their signed URLs alone.
+	for _, h := range []string{"live-video.net", "8e69c661e048.us-east-1.playback.live-video.net", "cdn3.fansly.com.evil.test"} {
+		if l.AllowsHost(h) {
+			t.Errorf("SECURITY: fansly login must not allow %q", h)
+		}
+	}
+	if len(l.StorageCookies) != 1 || l.StorageCookies[0] != (storageCookie{Key: "session_active_session", Field: "token", Cookie: "vl_session_token"}) {
+		t.Errorf("unexpected fansly storage cookies: %+v", l.StorageCookies)
+	}
+	if l.Auth == nil || l.Auth.Scheme != "authorization-cookie" || !slices.Equal(l.Auth.Cookies, []string{"vl_session_token"}) {
+		t.Errorf("unexpected fansly auth scheme: %+v", l.Auth)
+	}
+	if l.SessionCookie != "vl_session_token" {
+		t.Errorf("fansly session cookie %q should be the copied token", l.SessionCookie)
+	}
+}

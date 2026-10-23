@@ -11,7 +11,7 @@
 import { Session } from "electrobun/main";
 import type { DaemonSession } from "../../../shared/daemon/session";
 import { Subjects } from "../../../shared/daemon/subjects";
-import type { PlatformInfo, LoginFlow } from "../../../shared/types";
+import type { PlatformInfo, LoginFlow, StorageCookie } from "../../../shared/types";
 import { COOKIE_PREFIX, withLoginView } from "./browser-context";
 import { enableLoginPopups } from "./login-popups";
 import { createPartitionedWindow } from "./partitioned-window";
@@ -135,6 +135,45 @@ function captureCookies(login: LoginFlow, partition: string): DaemonCookie[] | n
       http_only: c.httpOnly,
       expires: c.expirationDate ? Math.floor(c.expirationDate) : undefined,
     }));
+}
+
+// How long a background refresh waits after copying storage values into
+// cookies (see storageCookieScript) before it captures the jar.
+const STORAGE_COPY_SETTLE_MS = 500;
+
+// storageCookieScript returns page JS that keeps each of the descriptor's
+// local-storage values (Fansly's session token) in a first-party cookie, so the
+// native cookie capture picks it up with the rest of the jar; a value that is
+// gone (the user signed out) removes its cookie, which is how a refresh sees
+// the session end. Empty when the descriptor names none.
+//
+// PRIVACY: the script runs in the platform's own page and writes the value
+// only into that site's own cookie jar; nothing is read out here.
+export function storageCookieScript(entries: StorageCookie[] | undefined): string {
+  const list = (entries ?? []).filter((e) => e.key && /^[A-Za-z0-9_]+$/.test(e.cookie));
+  if (list.length === 0) return "";
+  return `(function () {
+  var entries = ${JSON.stringify(list)};
+  var domain = location.hostname.split(".").slice(-2).join(".");
+  entries.forEach(function (e) {
+    var v = "";
+    try {
+      var raw = localStorage.getItem(e.key);
+      if (raw && e.field) {
+        var obj = JSON.parse(raw);
+        v = obj && typeof obj[e.field] === "string" ? obj[e.field] : "";
+      } else if (raw) {
+        v = raw;
+      }
+    } catch (err) { v = ""; }
+    var attrs = "; domain=" + domain + "; path=/; secure; samesite=lax";
+    if (v) {
+      document.cookie = e.cookie + "=" + encodeURIComponent(v) + attrs + "; max-age=31536000";
+    } else if (document.cookie.indexOf(e.cookie + "=") !== -1) {
+      document.cookie = e.cookie + "=" + attrs + "; max-age=0";
+    }
+  });
+})();`;
 }
 
 function eventUrl(e: unknown): string {
@@ -270,9 +309,20 @@ export async function runPlatformLogin(
       resolve(ok);
     };
 
+    // Platforms that keep their session in local storage get it copied into a
+    // cookie on every check; the copy lands by the next poll.
+    const storageScript = storageCookieScript(login.storage_cookies);
+
     let capturePending = false;
     const tryCapture = (url: string): void => {
       if (settled || capturePending) return;
+      if (storageScript) {
+        try {
+          view.executeJavascript(storageScript);
+        } catch {
+          /* page not ready yet; the next poll retries */
+        }
+      }
       // A sign-in is detected when a session cookie is present, or (fallback)
       // the post-login URL matches the descriptor's success pattern.
       let cookies = captureCookies(login, partition);
@@ -392,6 +442,14 @@ export async function refreshPlatformLogin(
 
         // The page is up. Let its JS settle (token rotation) before capturing.
         await sleep(REFRESH_SETTLE_MS);
+
+        // Bring local-storage values into the jar (or drop the ones the
+        // platform cleared) before it is captured.
+        const storageScript = storageCookieScript(login.storage_cookies);
+        if (storageScript) {
+          view.run(storageScript);
+          await sleep(STORAGE_COPY_SETTLE_MS);
+        }
 
         // The user may have signed out while this page was loading — never
         // re-store (or health-flag) a login that no longer exists.

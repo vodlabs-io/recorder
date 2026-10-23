@@ -65,6 +65,23 @@ func TestAuthHeadersDeclinesWhatItCannotSign(t *testing.T) {
 	}
 }
 
+// TestAuthorizationCookieHeader covers Fansly's scheme: the cookie's value is
+// the whole Authorization header.
+func TestAuthorizationCookieHeader(t *testing.T) {
+	s := Session{Platform: "fansly", Cookies: []Cookie{
+		{Name: "f-d", Value: "device"},
+		{Name: "vl_session_token", Value: "thetoken"},
+	}}
+	h := s.AuthHeaders(SchemeAuthorizationCookie, []string{"vl_session_token"}, "", SignedRequest{})
+	if len(h) != 1 || h["Authorization"] != "thetoken" {
+		t.Errorf("headers = %v, want only Authorization: thetoken", h)
+	}
+	empty := Session{Platform: "fansly", Cookies: []Cookie{{Name: "f-d", Value: "device"}}}
+	if h := empty.AuthHeaders(SchemeAuthorizationCookie, []string{"vl_session_token"}, "", SignedRequest{}); h != nil {
+		t.Errorf("got headers %v from a jar with no token, want nil", h)
+	}
+}
+
 // TestOAuthCookieHeader covers Twitch's scheme: the cookie's value replayed as
 // a bearer credential, which is the only thing that signs a GraphQL call in as
 // the user (its API ignores the Cookie header).

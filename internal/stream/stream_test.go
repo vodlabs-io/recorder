@@ -99,6 +99,7 @@ func TestIsHLS(t *testing.T) {
 		{Stream{URL: "nicolive://lv351585633"}, true},
 		{Stream{URL: "fc2live://58117384"}, true},
 		{Stream{URL: "peeks://6265400"}, true},
+		{Stream{URL: "fansly://645676306893123584"}, true},
 	} {
 		if got := tc.s.IsHLS(); got != tc.want {
 			t.Errorf("IsHLS(%+v) = %v, want %v", tc.s, got, tc.want)
