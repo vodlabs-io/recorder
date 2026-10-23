@@ -343,6 +343,11 @@
 		"channel_url": "https://www.myfreecams.com/#{username}"
 	},
 	{
+		"name": "popkontv",
+		"display_name": "PopkonTV",
+		"channel_url": "https://api.vodlabs.io/channel/popkontv/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
