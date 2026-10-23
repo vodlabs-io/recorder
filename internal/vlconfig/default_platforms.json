@@ -290,6 +290,11 @@
 		"channel_url": "https://www.xcams.com/chat/{username}/"
 	},
 	{
+		"name": "xiaohongshu",
+		"display_name": "Xiaohongshu",
+		"channel_url": "https://www.xiaohongshu.com/user/profile/{username}"
+	},
+	{
 		"name": "vklive",
 		"display_name": "VK Video Live",
 		"channel_url": "https://live.vkvideo.ru/{username}"
