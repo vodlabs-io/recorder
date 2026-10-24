@@ -37,6 +37,7 @@ func (a *App) Commands() []*cli.Command {
 		a.loginCommand(),
 		a.infoCommand(),
 		a.healthCommand(),
+		a.webCommand(),
 		a.flvFixCommand(),
 		a.updateCommand(),
 		a.restartCommand(),
