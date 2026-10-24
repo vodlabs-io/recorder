@@ -56,6 +56,13 @@ type App struct {
 func New(ctx context.Context) (*App, error) {
 	k := koanf.New(".")
 
+	// Before loading the config, which writes a default one on first run.
+	for _, dir := range []string{configDir(), cacheDir()} {
+		if err := checkContainerDir(dir); err != nil {
+			return nil, err
+		}
+	}
+
 	fs, err := parseFlags()
 	if err != nil {
 		return nil, err
@@ -63,6 +70,9 @@ func New(ctx context.Context) (*App, error) {
 
 	cfg, err := loadConfig(k, fs)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkContainerDir(cfg.Session.DownloadDir); err != nil {
 		return nil, err
 	}
 
