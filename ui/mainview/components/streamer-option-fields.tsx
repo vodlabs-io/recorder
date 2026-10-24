@@ -180,7 +180,8 @@ export function StreamerOptionFields({
               In Docker, use a container path inside a mounted volume (e.g. a
               subdirectory of the archive volume like{" "}
               <code className="font-mono">/archive/name</code>); host paths are
-              rejected. See docs/docker.md.
+              rejected. See the Docker guide (docs/docker.md in the recorder
+              repository).
             </>
           )}
         </div>

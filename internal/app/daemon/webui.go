@@ -2,15 +2,12 @@ package daemon
 
 import (
 	"fmt"
-	"io/fs"
 	"path/filepath"
 
 	"github.com/vodlabs-io/recorder/internal/webtoken"
 	"github.com/vodlabs-io/recorder/internal/webui"
+	"github.com/vodlabs-io/recorder/web"
 )
-
-// webDist is the built Web UI, nil when this build has none.
-var webDist fs.FS
 
 // startWebUI brings up the Web UI when [web] is enabled. A failure stops the
 // daemon: a container that can't serve its only interface should restart
@@ -26,7 +23,8 @@ func (a *App) startWebUI() error {
 	if err != nil {
 		return fmt.Errorf("web UI token: %w", err)
 	}
-	if webDist == nil {
+	dist := web.Dist()
+	if dist == nil {
 		a.log.Warn("This build has no Web UI assets; serving a placeholder page")
 	}
 
@@ -40,7 +38,7 @@ func (a *App) startWebUI() error {
 		},
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,
-		Dist:           webDist,
+		Dist:           dist,
 		Dial:           a.natsServer.InProcessConn,
 		Log:            a.log.With("component", "webui"),
 	})

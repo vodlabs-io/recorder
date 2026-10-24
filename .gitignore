@@ -74,6 +74,12 @@ node_modules/
 # Build and output directories
 build/
 dist/
+# web/dist is the daemon's //go:embed input, so it must exist on a clean
+# checkout. Re-include the directory, ignore the build output inside it, and
+# keep only the placeholder.
+!web/dist/
+web/dist/*
+!web/dist/.gitkeep
 out/
 artifacts/
 .cottontail-tmp

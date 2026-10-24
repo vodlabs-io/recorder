@@ -60,6 +60,9 @@ export function PasteCookiesDialog({
   }
 
   const name = platform ? platformDisplayName(platform) : ""
+  // Over plain HTTP from another machine, the pasted login crosses the
+  // network unencrypted. localhost counts as secure, so this shows only there.
+  const insecure = typeof window !== "undefined" && !window.isSecureContext
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -72,6 +75,15 @@ export function PasteCookiesDialog({
             Cookie). It stays on this device and is never uploaded.
           </DialogDescription>
         </DialogHeader>
+
+        {insecure && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            This page isn't on HTTPS, so the cookies you paste cross your
+            network unencrypted and anyone on it could sign in as you. Open the
+            Web UI over HTTPS, or from the recorder's own machine at localhost,
+            before pasting a login.
+          </p>
+        )}
 
         <textarea
           value={value}
