@@ -169,7 +169,7 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		fmt.Fprintf(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv/v.m3u8?sessionId=%s&auth=%s\n", strings.TrimPrefix(hk, "hk"), auth)
+		fmt.Fprintf(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv/v.m3u8?sessionId=%s&auth=%s\n#EXT-X-ENDLIST\n", strings.TrimPrefix(hk, "hk"), auth)
 	default:
 		http.NotFound(w, r)
 	}
@@ -285,6 +285,9 @@ func TestSeatRotatesAndSigns(t *testing.T) {
 	// The first seat (hk3, after two refusals) names the playlist still.
 	if !strings.Contains(string(body), "sessionId=3&auth=hk3-") {
 		t.Errorf("later seat's playlist not restamped as the first's:\n%s", body)
+	}
+	if strings.Contains(string(body), "ENDLIST") {
+		t.Errorf("seat's playlist still closed:\n%s", body)
 	}
 	f.mu.Lock()
 	last := f.served[len(f.served)-1]

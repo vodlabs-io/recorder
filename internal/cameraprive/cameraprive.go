@@ -350,7 +350,7 @@ func (t *signer) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 			continue
 		}
-		if err != nil || resp.StatusCode != http.StatusOK || v == t.s.first || !strings.HasSuffix(r.URL.Path, ".m3u8") {
+		if err != nil || resp.StatusCode != http.StatusOK || !strings.HasSuffix(r.URL.Path, ".m3u8") {
 			return resp, err
 		}
 		return t.s.restamp(resp, v)
@@ -360,16 +360,22 @@ func (t *signer) RoundTrip(req *http.Request) (*http.Response, error) {
 // restamp rewrites a later seat's playlist to name the first seat's auth and
 // HLS session, as the requests that follow it are signed afresh anyway: the
 // same segment then has the same URI whichever seat listed it, and the writer
-// sees one stream rather than a new one at each change of seat.
+// sees one stream rather than a new one at each change of seat. It drops
+// EXT-X-ENDLIST from every seat's playlist: a seat's playlist can close as its
+// free time runs out, and the seat, not the playlist, tells when the
+// broadcast ends.
 func (s *Seat) restamp(resp *http.Response, v *viewer) (*http.Response, error) {
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPage))
 	resp.Body.Close()
 	if err != nil {
 		return nil, err
 	}
-	pairs := []string{"auth=" + v.r.auth(), "auth=" + s.first.r.auth()}
-	if v.sessionID != "" && s.first.sessionID != "" {
-		pairs = append(pairs, "sessionId="+v.sessionID, "sessionId="+s.first.sessionID)
+	pairs := []string{"#EXT-X-ENDLIST\r\n", "", "#EXT-X-ENDLIST\n", "", "#EXT-X-ENDLIST", ""}
+	if v != s.first {
+		pairs = append(pairs, "auth="+v.r.auth(), "auth="+s.first.r.auth())
+		if v.sessionID != "" && s.first.sessionID != "" {
+			pairs = append(pairs, "sessionId="+v.sessionID, "sessionId="+s.first.sessionID)
+		}
 	}
 	body = []byte(strings.NewReplacer(pairs...).Replace(string(body)))
 	resp.Body = io.NopCloser(bytes.NewReader(body))
