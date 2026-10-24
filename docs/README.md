@@ -2,6 +2,8 @@
 
 - [Installing](install.md): the desktop app and the `vod` command-line tool,
   and the first-launch warnings on each system.
+- [Running in Docker](docker.md): the recorder on a server or NAS, with its
+  Web UI in the browser.
 - [Getting started](getting-started.md): add a streamer, and find your
   recordings.
 - [Supported platforms](platforms.md)
