@@ -16,6 +16,7 @@ const RootCommandName = "vod"
 
 type App struct {
 	cfg     vlconfig.DaemonConfig
+	web     vlconfig.WebConfig
 	nc      *nats.Conn
 	kv      jetstream.KeyValue
 	closing atomic.Bool

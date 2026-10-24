@@ -49,6 +49,9 @@ func (a *App) LoadConfig(ctx context.Context, cmd *cli.Command) (context.Context
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 	a.cfg = cfg
+	if err := k.Unmarshal("web", &a.web); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
 	a.natsURL = fmt.Sprintf("nats://%s:%d", a.cfg.Host, a.cfg.Port)
 
 	return ctx, nil
