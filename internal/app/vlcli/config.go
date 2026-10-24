@@ -17,7 +17,7 @@ func (a *App) LoadConfig(ctx context.Context, cmd *cli.Command) (context.Context
 	cfgFile := cmd.String("config")
 	var k = koanf.New(".")
 
-	k.Load(confmap.Provider(vlconfig.Default, "."), nil)
+	k.Load(confmap.Provider(vlconfig.Defaults(), "."), nil)
 
 	if err := vlconfig.EnsureConfigFileExists(cfgFile); err != nil {
 		return nil, fmt.Errorf("failed to ensure config file exists: %w", err)

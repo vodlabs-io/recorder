@@ -8,8 +8,9 @@ level = "info"
 directory = ""
 # Output mode for all components: off | file | console | both.
 # console = stdout + stderr (WARN/ERROR -> stderr).
+# Defaults to file, or console in a container.
 # Override per-component with e.g. [cloud.logger] mode = "off".
-mode = "file"
+# mode = "file"
 
 [daemon]
 # Embedded NATS server IP and port
@@ -19,7 +20,8 @@ port = 4222
 [session]
 # Where recordings are downloaded to while they are being captured, organized
 # into sub-folders. Keep this on a local disk for best recording performance.
-# Defaults to the user's Downloads folder (e.g. ~/Downloads) when empty.
+# Defaults to the user's Downloads folder (e.g. ~/Downloads/recordings), or
+# /recordings in a container, when empty.
 download_dir = ""
 # Quality variant to record (e.g. best, worst, 720p, etc).
 variant = "best"
