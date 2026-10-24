@@ -17,7 +17,7 @@ func (a *App) LoadConfig(ctx context.Context, cmd *cli.Command) (context.Context
 	cfgFile := cmd.String("config")
 	var k = koanf.New(".")
 
-	k.Load(confmap.Provider(vlconfig.Default, "."), nil)
+	k.Load(confmap.Provider(vlconfig.Defaults(), "."), nil)
 
 	if err := vlconfig.EnsureConfigFileExists(cfgFile); err != nil {
 		return nil, fmt.Errorf("failed to ensure config file exists: %w", err)
@@ -26,6 +26,11 @@ func (a *App) LoadConfig(ctx context.Context, cmd *cli.Command) (context.Context
 	// The file overrides the defaults.
 	if err := k.Load(file.Provider(cfgFile), toml.Parser()); err != nil {
 		return nil, fmt.Errorf("failed to load config file: %w", err)
+	}
+
+	// The environment overrides the file, as it does for the daemon.
+	if err := k.Load(confmap.Provider(vlconfig.EnvConfig(), "."), nil); err != nil {
+		return nil, fmt.Errorf("failed to load environment config: %w", err)
 	}
 
 	// cliflagv3.Provider prefixes keys with the command lineage (e.g. "vod.daemon.port").

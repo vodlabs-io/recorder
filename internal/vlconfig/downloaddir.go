@@ -13,9 +13,17 @@ import (
 // folder, used when [session] output_template is unset.
 const DefaultOutputTemplate = "{platform}/{username}/{datetime}"
 
-// DefaultDownloadDir returns the user's Downloads folder, falling back to the
-// current working directory if the home directory cannot be determined.
+// ContainerDownloadDir is the download folder in a container, where the
+// compose file mounts the recordings volume.
+const ContainerDownloadDir = "/recordings"
+
+// DefaultDownloadDir returns the user's Downloads folder (ContainerDownloadDir
+// in a container), falling back to the current working directory if the home
+// directory cannot be determined.
 func DefaultDownloadDir() string {
+	if RunningInContainer() {
+		return ContainerDownloadDir
+	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		return filepath.Join(home, "Downloads", "recordings")
 	}

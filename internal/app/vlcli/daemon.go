@@ -88,7 +88,9 @@ func (a *App) daemonUnreachableError(err error) error {
 	}
 	hint := fmt.Sprintf("start it with 'vlrecd', or set daemon.auto_start = true in %s",
 		vlconfig.DefaultConfigFilePath())
-	if a.cfg.AutoStart {
+	if vlconfig.RunningInContainer() {
+		hint = "it may still be starting, or it stopped; check 'docker compose logs recorder' on the host"
+	} else if a.cfg.AutoStart {
 		hint = "it did not come up; check the log above or run 'vlrecd' directly to see why"
 	}
 	return fmt.Errorf("the recorder daemon isn't running at %s — %s: %w", a.natsURL, hint, err)

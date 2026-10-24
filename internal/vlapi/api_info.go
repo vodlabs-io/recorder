@@ -10,6 +10,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/cloud"
 	"github.com/vodlabs-io/recorder/internal/diskspace"
 	"github.com/vodlabs-io/recorder/internal/version"
+	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vllog"
 )
 
@@ -69,7 +70,7 @@ func (s *Service) handleInfo(req micro.Request) {
 		Commit:                version.Commit,
 		OS:                    runtime.GOOS,
 		Arch:                  runtime.GOARCH,
-		Container:             runningInContainer(),
+		Container:             vlconfig.RunningInContainer(),
 		NatsURL:               s.natsURL,
 		CloudAPIURL:           cloud.APIBaseURL(),
 		CloudNATSURL:          cloud.NATSEndpoint(),

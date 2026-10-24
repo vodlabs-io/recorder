@@ -2,18 +2,10 @@ package vlapi
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 )
-
-// containerEnvVar marks a containerized deployment, where the daemon binary
-// can't be swapped in place and only mounted volumes are writable.
-const containerEnvVar = "VLREC_CONTAINER"
-
-// runningInContainer reports whether the daemon is running in a container.
-func runningInContainer() bool { return os.Getenv(containerEnvVar) != "" }
 
 // CheckArchiveDirWritable rejects an Archive folder the daemon can't write to,
 // so a misconfigured path fails at config time rather than on every move.
@@ -25,7 +17,7 @@ func CheckArchiveDirWritable(dest string) error {
 		return nil
 	}
 	if err := vlconfig.ArchiveDirWritable(dest); err != nil {
-		if runningInContainer() {
+		if vlconfig.RunningInContainer() {
 			return fmt.Errorf(
 				"archive folder %q is not writable inside the container; mount it as a "+
 					"volume in docker-compose.yml and set this to the container path "+
