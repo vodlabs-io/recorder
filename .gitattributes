@@ -7,3 +7,6 @@
 
 # Patches apply to upstream sources that check out with LF everywhere.
 *.patch text eol=lf
+
+# The image builds on Linux whatever the checkout platform.
+Dockerfile text eol=lf

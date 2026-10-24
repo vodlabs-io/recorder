@@ -1,0 +1,36 @@
+# VodLabs Recorder in Docker. See docs/docker.md.
+#
+#   docker compose up -d
+#   docker compose exec recorder vod web url
+#
+# Then open the printed link. The Web UI is reachable from your network and
+# needs that sign-in link; never forward its port from the internet.
+services:
+  recorder:
+    image: ghcr.io/vodlabs-io/recorder:latest
+    container_name: vodlabs-recorder
+    restart: unless-stopped
+    # The user the recorder runs as, and owns its files as. Set PUID and PGID
+    # in a .env file beside this one to your own (`id -u`, `id -g`).
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: ${TZ:-UTC}
+    volumes:
+      # Settings, the streamer list, databases and stored platform logins.
+      - ./config:/config
+      # Recordings. Add more volumes for an archive folder, e.g.
+      # - /mnt/nas/vods:/archive
+      - ./recordings:/recordings
+      # Logs, thumbnails and scratch space for encodes, which can reach GBs.
+      - cache:/cache
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # Lets a recording in progress finish its file on `docker compose down`.
+    stop_grace_period: 2m
+
+volumes:
+  cache:
