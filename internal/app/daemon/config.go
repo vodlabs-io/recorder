@@ -32,24 +32,13 @@ func loadConfig(k *koanf.Koanf, fs *flag.FlagSet) (vlconfig.AppConfig, error) {
 	}
 
 	// Environment overrides the file, mainly for container deployments.
-	if err := k.Load(confmap.Provider(envConfig(), "."), nil); err != nil {
+	if err := k.Load(confmap.Provider(vlconfig.EnvConfig(), "."), nil); err != nil {
 		return vlconfig.AppConfig{}, fmt.Errorf("failed to load environment config: %w", err)
 	}
-
-	// web.enabled is a tri-state with no default, so record whether anything
-	// has set it before the flags land.
-	webEnabledSet := k.Exists("web.enabled")
 
 	// Combine config with command-line flags, which take highest precedence
 	if err := k.Load(posflag.Provider(fs, ".", k), nil); err != nil {
 		return vlconfig.AppConfig{}, fmt.Errorf("failed to parse command-line flags: %w", err)
-	}
-
-	// posflag writes an unset flag whenever the key does not already exist, so
-	// an untouched --web.enabled would read as an explicit false and defeat the
-	// per-deployment default. Drop it again unless it was really set.
-	if !webEnabledSet && !fs.Changed("web.enabled") {
-		k.Delete("web.enabled")
 	}
 
 	// Set config file path at the proper location so it gets loaded into the struct

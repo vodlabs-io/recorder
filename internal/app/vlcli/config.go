@@ -28,6 +28,11 @@ func (a *App) LoadConfig(ctx context.Context, cmd *cli.Command) (context.Context
 		return nil, fmt.Errorf("failed to load config file: %w", err)
 	}
 
+	// The environment overrides the file, as it does for the daemon.
+	if err := k.Load(confmap.Provider(vlconfig.EnvConfig(), "."), nil); err != nil {
+		return nil, fmt.Errorf("failed to load environment config: %w", err)
+	}
+
 	// cliflagv3.Provider prefixes keys with the command lineage (e.g. "vod.daemon.port").
 	// Load into a separate instance and Cut the root command prefix before merging,
 	// so flag keys align with the flat keys used by the TOML file and defaults.
