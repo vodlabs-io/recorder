@@ -1,0 +1,30 @@
+# Only what the image builds from. Everything else stays out of the context:
+# build output, dependencies, local state, and anything secret.
+.git
+.github
+.wt-*
+.hutch
+.claude
+node_modules
+artifacts
+build
+dist
+out
+recordings
+config
+desktop/native
+ui/mainview/dist
+web/dist/*
+!web/dist/.gitkeep
+internal/ffmpeg/bin/*/
+**/*.test
+**/*.log
+.env*
+*.pem
+*.p12
+*.key
+vlrecd
+vod
+compose.yaml
+Dockerfile
+.dockerignore
