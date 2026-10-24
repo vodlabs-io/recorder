@@ -82,7 +82,7 @@ export function SettingsFiles() {
             )}
             <SettingsHint>
               {container
-                ? "Set by the Docker volume mounted at this path. Change it in your docker-compose configuration, not here."
+                ? "Set by the Docker volume mounted at this path. Change the volume in your compose.yaml, not here."
                 : "Where live streams are recorded to, organized into sub-folders. Keep this on a local disk for best recording performance."}
             </SettingsHint>
           </SettingsRow>
@@ -129,7 +129,7 @@ export function SettingsFiles() {
               {container && (
                 <SettingsHint>
                   In Docker this must be a path inside a volume you mount in
-                  docker-compose.yml, e.g. add{" "}
+                  compose.yaml, e.g. add{" "}
                   <code className="font-mono text-xs">
                     - /host/path:/archive
                   </code>{" "}
@@ -137,7 +137,8 @@ export function SettingsFiles() {
                   <code className="font-mono text-xs">/archive</code>. The folder
                   picker is disabled because it would pick a host path the
                   container can't write. A path that isn't writable in the
-                  container is rejected on save. See docs/docker.md.
+                  container is rejected on save. See the Docker guide
+                  (docs/docker.md in the recorder repository).
                 </SettingsHint>
               )}
             </SettingsRow>

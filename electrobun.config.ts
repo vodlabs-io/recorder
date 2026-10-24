@@ -30,7 +30,9 @@ export default {
 			"THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
 		},
 		// Ignore Vite output in watch mode — HMR handles view rebuilds separately.
-		watchIgnore: ["ui/mainview/dist/**"],
+		// web/dist is the Web UI's build output (see web/vite.config.ts),
+		// not part of the desktop package.
+		watchIgnore: ["ui/mainview/dist/**", "web/dist/**"],
 		mac: {
 			bundleCEF: false,
 			// Apple .iconset dir; Electrobun compiles it to .icns at build time.

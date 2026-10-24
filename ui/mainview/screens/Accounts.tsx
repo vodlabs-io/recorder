@@ -181,9 +181,10 @@ export function Accounts() {
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="text-sm text-muted-foreground">
               <p>
-                Without the desktop app, logins are added by pasting a cookie
-                header and are not renewed for you — re-paste one when it
-                expires. Its status stays unknown until then.
+                This recorder runs without the desktop app (in Docker, say), so
+                logins are added by pasting a cookie header from a browser where
+                you are signed in. They are not renewed for you — re-paste one
+                when it expires. Its status stays unknown until then.
               </p>
               <p className="mt-1">
                 Age-restricted TikTok rooms also need the desktop app, and are

@@ -1,0 +1,2 @@
+Keeps web/dist in git so //go:embed in ../embed.go always matches something.
+`bun run web:build` overwrites this directory with the real build.

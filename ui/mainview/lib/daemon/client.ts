@@ -97,6 +97,9 @@ export type DaemonCapabilities = {
   // Desktop only — a browser can't read another site's cookies, so the Web UI
   // offers only the "paste a Cookie header" path instead.
   webviewLogin: boolean;
+  // Signed in to the daemon with its sign-in token (the Web UI), so the UI
+  // offers Sign out.
+  webSession: boolean;
 };
 
 export interface DaemonClient {
@@ -211,6 +214,10 @@ export interface DaemonClient {
   // ask (the daemon has no login items of its own) report unsupported.
   getStartAtLogin(): Promise<StartAtLogin>;
   setStartAtLogin(enabled: boolean): Promise<StartAtLogin>;
+
+  // Ends this browser's Web UI session and goes to the sign-in page. Only
+  // meaningful when capabilities.webSession.
+  signOut(): Promise<void>;
 
   // Quit flow. getQuitPrompt pulls a pending prompt the window may have missed
   // on mount; confirm = graceful shutdown, force = skip pending processing,

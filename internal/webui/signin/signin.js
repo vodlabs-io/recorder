@@ -42,12 +42,17 @@
     if (input.value.trim()) void signIn(input.value);
   });
 
-  const params = new URLSearchParams(location.hash.slice(1));
-  const token = params.get("token");
-  if (token) {
+  // A link opened over this page changes only the hash.
+  function fromHash() {
+    const token = new URLSearchParams(location.hash.slice(1)).get("token");
+    if (!token) return false;
     history.replaceState(null, "", location.pathname + location.search);
     void signIn(token);
-  } else {
+    return true;
+  }
+  window.addEventListener("hashchange", fromHash);
+
+  if (!fromHash()) {
     fetch("api/session", { credentials: "same-origin" })
       .then((res) => {
         if (res.ok) location.replace("./");
