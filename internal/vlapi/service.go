@@ -138,6 +138,8 @@ func Init(
 	configGroup := ms.AddGroup("config")
 	configGroup.AddEndpoint("get", micro.HandlerFunc(vs.handleGetConfig))
 	configGroup.AddEndpoint("set", micro.HandlerFunc(vs.handleSetConfig))
+	// Local-only: names the container's mounted folders.
+	configGroup.AddEndpoint("folders", micro.HandlerFunc(vs.handleConfigFolders))
 	// The group name is the subject prefix, so it must track Subjects.vods* and
 	// the bridge allowlist.
 	vodsGroup := ms.AddGroup("vods")
