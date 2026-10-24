@@ -20,7 +20,7 @@ func CheckArchiveDirWritable(dest string) error {
 		if vlconfig.RunningInContainer() {
 			return fmt.Errorf(
 				"archive folder %q is not writable inside the container; mount it as a "+
-					"volume in docker-compose.yml and set this to the container path "+
+					"volume in compose.yaml and set this to the container path "+
 					"(see docs/docker.md): %w", dest, err)
 		}
 		return fmt.Errorf(

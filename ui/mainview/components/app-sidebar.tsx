@@ -18,6 +18,8 @@ import { sidebarItems } from "@/data/sidebar-items";
 import { appStore } from "@/state/app-state";
 import { selectUpdateAvailable } from "@/state/update";
 import { selectStorageAttention } from "@/components/storage-space";
+import { getDaemonClient } from "@/lib/daemon";
+import { LogOut } from "lucide-react";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
@@ -42,6 +44,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const encodingURL = sidebarItems.navEncoding.url;
   const updateItem = sidebarItems.navUpdate;
   const aboutItem = sidebarItems.navAbout;
+  const client = getDaemonClient();
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -134,6 +137,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
+        {client.capabilities.webSession && (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                className="cursor-default"
+                tooltip="Sign out"
+                onClick={() => void client.signOut()}
+              >
+                <LogOut />
+                <span>Sign out</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

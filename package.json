@@ -11,6 +11,8 @@
 		"dev": "electrobun dev --watch",
 		"dev:hmr": "concurrently --kill-others-on-fail \"bun run hmr\" \"bun run start\"",
 		"hmr": "electrobun prepare && vite --port 5173",
+		"web": "vite --config web/vite.config.ts",
+		"web:build": "vite build --config web/vite.config.ts",
 		"build:stable": "electrobun prepare && vite build && electrobun build --env=stable"
 	},
 	"dependencies": {
