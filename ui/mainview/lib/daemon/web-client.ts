@@ -18,6 +18,7 @@ import type {
   EncodeJob,
   EncodeQueue,
   EncoderList,
+  FolderSuggestion,
   PlatformInfo,
   QuitPrompt,
   StartAtLogin,
@@ -208,6 +209,8 @@ export class WebDaemonClient implements DaemonClient {
   getConfig = () => this.session.request<UserConfig>(Subjects.configGet)
   setConfig = (cfg: UserConfig) =>
     this.session.request<UserConfig>(Subjects.configSet, cfg)
+  getFolderSuggestions = () =>
+    this.session.request<FolderSuggestion[]>(Subjects.configFolders)
 
   // Platform logins. The browser can't open a native webview to read another
   // site's cookies (webviewLogin capability is false), so platformLogin is

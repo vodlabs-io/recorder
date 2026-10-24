@@ -12,6 +12,8 @@ export const Subjects = {
   cloudIntervals: "cloud.intervals",
   configGet: "config.get",
   configSet: "config.set",
+  // Folders mounted into a container daemon, for folder settings. Local-only.
+  configFolders: "config.folders",
   streamerList: "streamer.list",
   streamerAdd: "streamer.add",
   streamerRecordOnce: "streamer.record_once",

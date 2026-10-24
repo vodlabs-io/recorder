@@ -12,6 +12,7 @@ export type {
   DaemonInfo,
   DaemonMeta,
   DiskStatus,
+  FolderSuggestion,
   VODDeleteManyResponse,
   VODCancelMovesResponse,
   VODDeleteResult,

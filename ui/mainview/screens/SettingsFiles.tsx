@@ -14,6 +14,7 @@ import {
 import { useUserConfig } from "@/hooks/use-user-config"
 import { getDaemonClient } from "@/lib/daemon"
 import { StorageCard } from "@/components/storage-space"
+import { FolderDatalist, useFolderSuggestions } from "@/lib/folder-suggestions"
 
 // Where recordings land: the download folder, the folder layout inside it, and
 // the optional archive folder they are moved to afterwards.
@@ -26,6 +27,7 @@ import { StorageCard } from "@/components/storage-space"
 export function SettingsFiles() {
   const form = useUserConfig()
   const { cfg, update, container, canChoose } = form
+  const folders = useFolderSuggestions()
 
   // Whether the archive folder row is revealed. A saved config with a path set
   // opens it; the local override lets the box be ticked before a path is typed,
@@ -108,7 +110,9 @@ export function SettingsFiles() {
                     placeholder="e.g. /mnt/nas/recordings"
                     value={cfg.archive_dir}
                     onChange={(e) => update({ archive_dir: e.target.value })}
+                    list="archive-dir-folders"
                   />
+                  <FolderDatalist id="archive-dir-folders" folders={folders} writableOnly />
                   {canChoose && (
                     <Button
                       type="button"
