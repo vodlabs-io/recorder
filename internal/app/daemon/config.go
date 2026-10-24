@@ -14,7 +14,7 @@ import (
 )
 
 func loadConfig(k *koanf.Koanf, fs *flag.FlagSet) (vlconfig.AppConfig, error) {
-	k.Load(confmap.Provider(vlconfig.Default, "."), nil)
+	k.Load(confmap.Provider(vlconfig.Defaults(), "."), nil)
 
 	configFilePath, err := fs.GetString("config")
 	if err != nil {
