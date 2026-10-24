@@ -16,6 +16,7 @@ const RootCommandName = "vod"
 
 type App struct {
 	cfg     vlconfig.DaemonConfig
+	web     vlconfig.WebConfig
 	nc      *nats.Conn
 	kv      jetstream.KeyValue
 	closing atomic.Bool
@@ -36,6 +37,7 @@ func (a *App) Commands() []*cli.Command {
 		a.loginCommand(),
 		a.infoCommand(),
 		a.healthCommand(),
+		a.webCommand(),
 		a.flvFixCommand(),
 		a.updateCommand(),
 		a.restartCommand(),

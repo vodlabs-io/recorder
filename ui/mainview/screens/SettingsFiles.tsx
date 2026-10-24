@@ -14,6 +14,7 @@ import {
 import { useUserConfig } from "@/hooks/use-user-config"
 import { getDaemonClient } from "@/lib/daemon"
 import { StorageCard } from "@/components/storage-space"
+import { FolderDatalist, useFolderSuggestions } from "@/lib/folder-suggestions"
 
 // Where recordings land: the download folder, the folder layout inside it, and
 // the optional archive folder they are moved to afterwards.
@@ -26,6 +27,7 @@ import { StorageCard } from "@/components/storage-space"
 export function SettingsFiles() {
   const form = useUserConfig()
   const { cfg, update, container, canChoose } = form
+  const folders = useFolderSuggestions()
 
   // Whether the archive folder row is revealed. A saved config with a path set
   // opens it; the local override lets the box be ticked before a path is typed,
@@ -82,7 +84,7 @@ export function SettingsFiles() {
             )}
             <SettingsHint>
               {container
-                ? "Set by the Docker volume mounted at this path. Change it in your docker-compose configuration, not here."
+                ? "Set by the Docker volume mounted at this path. Change the volume in your compose.yaml, not here."
                 : "Where live streams are recorded to, organized into sub-folders. Keep this on a local disk for best recording performance."}
             </SettingsHint>
           </SettingsRow>
@@ -108,7 +110,9 @@ export function SettingsFiles() {
                     placeholder="e.g. /mnt/nas/recordings"
                     value={cfg.archive_dir}
                     onChange={(e) => update({ archive_dir: e.target.value })}
+                    list="archive-dir-folders"
                   />
+                  <FolderDatalist id="archive-dir-folders" folders={folders} writableOnly />
                   {canChoose && (
                     <Button
                       type="button"
@@ -129,7 +133,7 @@ export function SettingsFiles() {
               {container && (
                 <SettingsHint>
                   In Docker this must be a path inside a volume you mount in
-                  docker-compose.yml, e.g. add{" "}
+                  compose.yaml, e.g. add{" "}
                   <code className="font-mono text-xs">
                     - /host/path:/archive
                   </code>{" "}
@@ -137,7 +141,8 @@ export function SettingsFiles() {
                   <code className="font-mono text-xs">/archive</code>. The folder
                   picker is disabled because it would pick a host path the
                   container can't write. A path that isn't writable in the
-                  container is rejected on save. See docs/docker.md.
+                  container is rejected on save. See the Docker guide
+                  (docs/docker.md in the recorder repository).
                 </SettingsHint>
               )}
             </SettingsRow>

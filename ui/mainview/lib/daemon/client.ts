@@ -15,6 +15,7 @@ export type {
   DaemonInfo,
   DaemonMeta,
   DiskStatus,
+  FolderSuggestion,
   SpaceState,
   StorageRoot,
   DaemonUpdateStatus,
@@ -51,6 +52,7 @@ export type {
 } from "@shared/types";
 
 import type {
+  FolderSuggestion,
   StartAtLogin,
   VODDeleteManyResponse,
   VODCancelMovesResponse,
@@ -97,6 +99,12 @@ export type DaemonCapabilities = {
   // Desktop only — a browser can't read another site's cookies, so the Web UI
   // offers only the "paste a Cookie header" path instead.
   webviewLogin: boolean;
+  // Signed in to the daemon with its sign-in token (the Web UI), so the UI
+  // offers Sign out.
+  webSession: boolean;
+  // Recordings play and download in the page through mediaUrl, for hosts
+  // whose recordings live on another machine (the Web UI).
+  browserMedia: boolean;
 };
 
 export interface DaemonClient {
@@ -123,6 +131,9 @@ export interface DaemonClient {
 
   getConfig(): Promise<UserConfig>;
   setConfig(cfg: UserConfig): Promise<UserConfig>;
+  // Folders mounted into a container daemon, offered as suggestions in the
+  // folder settings. Empty for any other daemon.
+  getFolderSuggestions(): Promise<FolderSuggestion[]>;
   retryConnect(): Promise<ConnectionInfo>;
 
   // vodlabs.io account. startCloudSignIn mints a link code and returns the
@@ -211,6 +222,14 @@ export interface DaemonClient {
   // ask (the daemon has no login items of its own) report unsupported.
   getStartAtLogin(): Promise<StartAtLogin>;
   setStartAtLogin(enabled: boolean): Promise<StartAtLogin>;
+
+  // URL that plays (or, with download, saves) one file of a finished
+  // recording. "" unless capabilities.browserMedia.
+  mediaUrl(dir: string, file: string, download?: boolean): string;
+
+  // Ends this browser's Web UI session and goes to the sign-in page. Only
+  // meaningful when capabilities.webSession.
+  signOut(): Promise<void>;
 
   // Quit flow. getQuitPrompt pulls a pending prompt the window may have missed
   // on mount; confirm = graceful shutdown, force = skip pending processing,

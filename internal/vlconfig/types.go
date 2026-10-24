@@ -7,6 +7,7 @@ type AppConfig struct {
 	Processing ProcessingConfig   `koanf:"processing"`
 	Cloud      CloudConfig        `koanf:"cloud"`
 	Scraper    ScraperConfig      `koanf:"scraper"`
+	Web        WebConfig          `koanf:"web"`
 }
 
 type streamersConfig struct {

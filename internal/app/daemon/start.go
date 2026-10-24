@@ -103,6 +103,9 @@ func (a *App) start(ctx context.Context) (err error) {
 
 	// Before anything that reaches the network: startup can stall on a slow or
 	// unreachable API, which is exactly when the Admin needs a UI to look at.
+	if err := a.startWebUI(); err != nil {
+		return err
+	}
 
 	if _, err := a.natsKV.PutString(ctx, "daemon.start_time",
 		strconv.FormatInt(time.Now().Unix(), 10)); err != nil {
@@ -196,6 +199,7 @@ func (a *App) start(ctx context.Context) (err error) {
 	// The VOD Archive index needs procSvc (change events, active work) and
 	// sessionReg (suppressing still-recording sessions), both live by now.
 	a.initVODIndex()
+	a.vodReady.Store(true)
 
 	// Off the startup path: the roots can be network volumes, and nothing waits
 	// on reclaiming space from a delete that was already reported done.

@@ -17,6 +17,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { QuitDialog } from "@/components/quit-dialog"
 import { WelcomeDialog } from "@/components/welcome-dialog"
+import { VideoPlayerDialog } from "@/components/video-player-dialog"
 import { HashRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import SettingsGeneral from './screens/SettingsGeneral'
 import Dashboard from './screens/Dashboard'
@@ -99,6 +100,7 @@ function App() {
             (desktop); the Web UI just closes its tab. */}
         {getDaemonClient().capabilities.quit && <QuitDialog />}
         <WelcomeDialog />
+        {getDaemonClient().capabilities.browserMedia && <VideoPlayerDialog />}
         <SidebarProvider>
           <AppSidebar />
           <SidebarInset>

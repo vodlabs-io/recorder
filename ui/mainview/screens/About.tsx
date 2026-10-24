@@ -346,7 +346,7 @@ export function About() {
 
                     <p className="pt-1 text-xs text-muted-foreground">
                       The listed paths are inside the Docker container.
-                      Host paths can be changed by editing your docker-compose configuration. View logs with{" "}
+                      Host paths are set by the volumes in your compose.yaml. View logs with{" "}
                       <span className="font-mono">docker compose logs -f</span>.
                     </p>
 

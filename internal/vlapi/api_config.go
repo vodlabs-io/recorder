@@ -2,8 +2,11 @@ package vlapi
 
 import (
 	"encoding/json"
+	"runtime"
 
 	"github.com/nats-io/nats.go/micro"
+	"github.com/vodlabs-io/recorder/internal/mountinfo"
+	"github.com/vodlabs-io/recorder/internal/vlconfig"
 )
 
 // UserConfig is the user-facing subset of global daemon configuration exposed
@@ -77,4 +80,22 @@ func (s *Service) handleSetConfig(req micro.Request) {
 		return
 	}
 	respond(req, OK(s.configCtl.GetConfig()))
+}
+
+// handleConfigFolders suggests folders for the folder settings: in a Linux
+// container, the mounted volumes other than the container's own and the
+// download folder, since only a mounted folder reaches the host. Elsewhere
+// the list is empty.
+func (s *Service) handleConfigFolders(req micro.Request) {
+	folders := []mountinfo.Mount{}
+	if runtime.GOOS == "linux" && vlconfig.RunningInContainer() {
+		exclude := ""
+		if s.configCtl != nil {
+			exclude = s.configCtl.GetConfig().DownloadDir
+		}
+		if f := mountinfo.Folders(exclude); f != nil {
+			folders = f
+		}
+	}
+	respond(req, OK(folders))
 }

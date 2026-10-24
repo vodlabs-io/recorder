@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { OutputTemplateInput } from "@/components/output-template-input"
+import { FolderDatalist, useFolderSuggestions } from "@/lib/folder-suggestions"
 
 // Per-streamer overrides that can be left to inherit the global default.
 export type TriState = "inherit" | "on" | "off"
@@ -83,6 +84,7 @@ export function StreamerOptionFields({
   monitorLockedReason?: string
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const folders = useFolderSuggestions()
 
   const advancedFields = (
     <>
@@ -170,7 +172,9 @@ export function StreamerOptionFields({
           placeholder={archiveDirPlaceholder}
           value={archiveDir}
           onChange={(e) => onArchiveDirChange(e.target.value)}
+          list="streamer-archive-dir-folders"
         />
+        <FolderDatalist id="streamer-archive-dir-folders" folders={folders} writableOnly />
         <div className="col-span-2 col-start-2 text-xs text-muted-foreground">
           Move this streamer's finished recordings out of the download folder to
           here. Empty = global default; "off" = keep them in the download folder.
@@ -180,7 +184,8 @@ export function StreamerOptionFields({
               In Docker, use a container path inside a mounted volume (e.g. a
               subdirectory of the archive volume like{" "}
               <code className="font-mono">/archive/name</code>); host paths are
-              rejected. See docs/docker.md.
+              rejected. See the Docker guide (docs/docker.md in the recorder
+              repository).
             </>
           )}
         </div>

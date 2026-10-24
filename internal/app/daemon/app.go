@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/knadh/koanf/v2"
@@ -23,6 +24,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/vlstate"
 	"github.com/vodlabs-io/recorder/internal/vodindex"
 	"github.com/vodlabs-io/recorder/internal/webpage"
+	"github.com/vodlabs-io/recorder/internal/webui"
 )
 
 type App struct {
@@ -40,6 +42,7 @@ type App struct {
 	encSvc      *encoding.Service // Merge/re-encode job queue
 	streamerDB  *streamerdb.DB    // Per-streamer facts that outlive the daemon
 	vodIndex    *vodindex.Index   // Cached VOD Archive scans
+	vodReady    atomic.Bool       // vodIndex is set; the Web UI starts before it
 	revMu       sync.Mutex        // Guards the vods-rev coalescing fields below
 	revTimer    *time.Timer       // Armed to publish revPending when the window closes
 	revPending  int64             // Newest rev not yet published, 0 = none
@@ -47,6 +50,7 @@ type App struct {
 	thumbCache  *thumbcache.Cache // VOD screenshots, kept off the archive volume
 	cloudClient *cloud.Client
 	pages       *webpage.Resolver // finds what plays on pages no platform claims, on this machine
+	webSrv      *webui.Server     // Web UI listener, when [web] is enabled
 	sessionReg  *session.Registry
 	strFile     *vlconfig.StreamersFile // streamers.toml
 	cookieStore *platformauth.Store     // Local, encrypted third-party platform logins
@@ -88,6 +92,9 @@ func (a *App) cleanup() {
 		a.log.Info("Shutting down")
 		defer a.log.Close()
 		defer a.log.Info("Daemon stopped")
+	}
+	if a.webSrv != nil {
+		a.webSrv.Close()
 	}
 	if a.sessionReg != nil {
 		a.sessionReg.Close()

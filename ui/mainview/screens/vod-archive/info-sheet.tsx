@@ -14,11 +14,12 @@ import {
   platformDisplayName,
   streamerChannelURL,
 } from "@/data/supported-platforms"
-import { cn, joinPath } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import {
   Check,
   Clapperboard,
   Copy,
+  Download,
   ExternalLink,
   Film,
   FolderOpen,
@@ -39,6 +40,7 @@ import {
   spanSec,
 } from "./format"
 import { LazyThumb } from "./lazy-thumb"
+import { canDownloadVODs, canPlayVODs, downloadVOD, playVOD } from "@/lib/play-vod"
 
 type Props = {
   // The session to describe, or null when the sheet is closed. Held by the
@@ -190,7 +192,9 @@ function InfoBody({
 }) {
   const files = s.files ?? []
   const busy = s.state !== "ready"
-  const playable = canOpen && !busy && files.length > 0
+  const canPlay = canPlayVODs()
+  const canDownload = canDownloadVODs()
+  const playable = canPlay && !busy && files.length > 0
   const channelURL = s.username ? streamerChannelURL(s.platform, s.username) : null
 
   const span = spanSec(s)
@@ -229,13 +233,18 @@ function InfoBody({
 
         <div className="flex flex-wrap gap-2">
           {playable && (
-            <Button
-              onClick={() =>
-                void getDaemonClient().openPath(joinPath(s.dir, files[0].name))
-              }
-            >
+            <Button onClick={() => playVOD(s.dir, files[0].name)}>
               <Clapperboard className="h-4 w-4" />
               Play{files.length > 1 ? " part 1" : ""}
+            </Button>
+          )}
+          {canDownload && !busy && files.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => downloadVOD(s.dir, files[0].name)}
+            >
+              <Download className="h-4 w-4" />
+              Download{files.length > 1 ? " part 1" : ""}
             </Button>
           )}
           {canOpen && (
@@ -331,20 +340,24 @@ function InfoBody({
           <Section title={files.length === 1 ? "File" : "Parts"}>
             <div className="flex flex-col divide-y rounded-md border">
               {files.map((f, i) => {
-                const openable = canOpen && !busy
+                const openable = canPlay && !busy
                 return (
+                  <div key={f.name} className="flex items-center">
                   <button
-                    key={f.name}
                     type="button"
                     disabled={!openable}
-                    onClick={() =>
-                      void getDaemonClient().openPath(joinPath(s.dir, f.name))
-                    }
+                    onClick={() => playVOD(s.dir, f.name)}
                     className={cn(
-                      "flex items-center gap-2 px-2.5 py-2 text-left text-xs",
+                      "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-xs",
                       openable && "cursor-pointer hover:bg-accent",
                     )}
-                    title={openable ? `Open in video player (${f.name})` : f.name}
+                    title={
+                      !openable
+                        ? f.name
+                        : canOpen
+                          ? `Open in video player (${f.name})`
+                          : `Play ${f.name}`
+                    }
                   >
                     <Film className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate font-mono">{f.name}</span>
@@ -358,6 +371,18 @@ function InfoBody({
                       <span className="min-w-14 text-right">{formatBytes(f.bytes)}</span>
                     </span>
                   </button>
+                  {canDownload && !busy && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="mr-1 h-7 w-7 shrink-0"
+                      title={`Download ${f.name}`}
+                      onClick={() => downloadVOD(s.dir, f.name)}
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  </div>
                 )
               })}
             </div>
