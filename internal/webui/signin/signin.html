@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Sign in · VodLabs Recorder</title>
+    <link rel="stylesheet" href="signin.css" />
+    <script src="signin.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1>VodLabs Recorder</h1>
+      <form id="form" autocomplete="off">
+        <label for="token">Sign-in token</label>
+        <input id="token" name="token" type="password" autocomplete="current-password" required autofocus />
+        <button type="submit">Sign in</button>
+        <p id="status" role="status" aria-live="polite"></p>
+      </form>
+      <p class="hint">
+        Get a sign-in link on the host with
+        <code>docker compose exec recorder vod web url</code>.
+      </p>
+    </main>
+  </body>
+</html>
