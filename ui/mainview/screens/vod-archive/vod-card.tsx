@@ -14,11 +14,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { getDaemonClient, type VOD } from "@/lib/daemon"
 import { platformDisplayName } from "@/data/supported-platforms"
-import { cn, joinPath } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import {
   Clapperboard,
   Combine,
   Copy,
+  Download,
   EllipsisVertical,
   Film,
   FolderOpen,
@@ -39,6 +40,7 @@ import {
   sessionTime,
 } from "./format"
 import { LazyThumb } from "./lazy-thumb"
+import { canDownloadVODs, canPlayVODs, downloadVOD, playVOD } from "@/lib/play-vod"
 
 type Props = {
   session: VOD
@@ -67,7 +69,7 @@ type Props = {
 }
 
 function openFile(s: VOD, file: string): void {
-  void getDaemonClient().openPath(joinPath(s.dir, file))
+  playVOD(s.dir, file)
 }
 
 // A session is mergeable when it has ≥2 numbered parts (vodN.mp4 or
@@ -124,13 +126,16 @@ export const VodCard = React.memo(function VodCard({
 
   const files = s.files ?? []
   const busy = s.state !== "ready"
-  const clickable = !busy && files.length > 0 && (canOpen || files.length > 1)
+  // Playing goes to the OS player where there is one, else to the page.
+  const canPlay = canPlayVODs()
+  const canDownload = canDownloadVODs()
+  const clickable = !busy && files.length > 0 && (canPlay || files.length > 1)
   const recordedTime = formatRecordedTime(sessionTime(s))
 
   const onCardClick = useCallback(() => {
     const files = s.files ?? []
     if (s.state !== "ready" || files.length === 0) return
-    if (files.length === 1 && canOpen) {
+    if (files.length === 1 && canPlay) {
       openFile(s, files[0].name)
       return
     }
@@ -143,7 +148,7 @@ export const VodCard = React.memo(function VodCard({
       return
     }
     onExpandedChange(expanded ? null : sessionKey(s))
-  }, [s, canOpen, expanded, onExpandedChange])
+  }, [s, canPlay, expanded, onExpandedChange])
 
   return (
     <Card ref={cardRef} className="group relative overflow-hidden py-0 gap-0">
@@ -158,7 +163,9 @@ export const VodCard = React.memo(function VodCard({
           !clickable
             ? undefined
             : files.length === 1
-              ? "Open in video player"
+              ? canOpen
+                ? "Open in video player"
+                : "Play"
               : "Show parts"
         }
       >
@@ -267,9 +274,15 @@ export const VodCard = React.memo(function VodCard({
                 <DropdownMenuItem onClick={() => onInfo(s)}>
                   <Info className="h-4 w-4" /> Info
                 </DropdownMenuItem>
-                {canOpen && files.length > 0 && !busy && (
+                {canPlay && files.length > 0 && !busy && (
                   <DropdownMenuItem onClick={() => openFile(s, files[0].name)}>
-                    <Clapperboard className="h-4 w-4" /> Open
+                    <Clapperboard className="h-4 w-4" /> {canOpen ? "Open" : "Play"}
+                    {files.length > 1 ? " first part" : ""}
+                  </DropdownMenuItem>
+                )}
+                {canDownload && files.length > 0 && !busy && (
+                  <DropdownMenuItem onClick={() => downloadVOD(s.dir, files[0].name)}>
+                    <Download className="h-4 w-4" /> Download
                     {files.length > 1 ? " first part" : ""}
                   </DropdownMenuItem>
                 )}
@@ -356,13 +369,19 @@ export const VodCard = React.memo(function VodCard({
                   <button
                     key={f.name}
                     type="button"
-                    disabled={!canOpen || busy}
+                    disabled={!canPlay || busy}
                     onClick={() => openFile(s, f.name)}
                     className={cn(
                       "flex items-center gap-2 whitespace-nowrap px-2 py-1.5 text-left text-xs",
-                      canOpen && !busy && "cursor-pointer hover:bg-accent",
+                      canPlay && !busy && "cursor-pointer hover:bg-accent",
                     )}
-                    title={canOpen ? `Open in video player (${f.name})` : f.name}
+                    title={
+                      canOpen
+                        ? `Open in video player (${f.name})`
+                        : canPlay
+                          ? `Play ${f.name}`
+                          : f.name
+                    }
                   >
                     <Film className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="font-mono">Part {i + 1}</span>

@@ -100,6 +100,9 @@ export type DaemonCapabilities = {
   // Signed in to the daemon with its sign-in token (the Web UI), so the UI
   // offers Sign out.
   webSession: boolean;
+  // Recordings play and download in the page through mediaUrl, for hosts
+  // whose recordings live on another machine (the Web UI).
+  browserMedia: boolean;
 };
 
 export interface DaemonClient {
@@ -214,6 +217,10 @@ export interface DaemonClient {
   // ask (the daemon has no login items of its own) report unsupported.
   getStartAtLogin(): Promise<StartAtLogin>;
   setStartAtLogin(enabled: boolean): Promise<StartAtLogin>;
+
+  // URL that plays (or, with download, saves) one file of a finished
+  // recording. "" unless capabilities.browserMedia.
+  mediaUrl(dir: string, file: string, download?: boolean): string;
 
   // Ends this browser's Web UI session and goes to the sign-in page. Only
   // meaningful when capabilities.webSession.

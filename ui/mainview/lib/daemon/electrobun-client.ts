@@ -82,6 +82,8 @@ const electrobunClient: DaemonClient = {
     webviewLogin: true,
     // The desktop app reaches its own daemon with no sign-in.
     webSession: false,
+    // Recordings are on this machine; the OS player opens them.
+    browserMedia: false,
   },
 
   getConnection: () => req.getConnection({}),
@@ -100,6 +102,7 @@ const electrobunClient: DaemonClient = {
   getStartAtLogin: () => req.getStartAtLogin({}),
   setStartAtLogin: (enabled) => req.setStartAtLogin({ enabled }),
   signOut: () => Promise.resolve(),
+  mediaUrl: () => "",
 
   // Platform logins run in the bun process (only it can open a webview and read
   // its cookie store). PRIVACY: cookies are captured in bun and handed to the

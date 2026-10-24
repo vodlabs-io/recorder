@@ -17,6 +17,18 @@ describe("webUrls", () => {
   })
 })
 
+describe("media URLs", () => {
+  test("encode the folder and file, and stay under the subpath", () => {
+    const u = webUrls("https://home.example/recorder/")
+    expect(u.media("/recordings/kick/a b/2026-10-01", "vod #1.mp4")).toBe(
+      "https://home.example/recorder/api/vods/file?dir=%2Frecordings%2Fkick%2Fa+b%2F2026-10-01&file=vod+%231.mp4",
+    )
+    expect(u.media("/r", "vod.mp4", true)).toBe(
+      "https://home.example/recorder/api/vods/file?dir=%2Fr&file=vod.mp4&download=1",
+    )
+  })
+})
+
 describe("sessionExpired", () => {
   const answer = (status: number) =>
     (async () => new Response(null, { status })) as unknown as typeof fetch

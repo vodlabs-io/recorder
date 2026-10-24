@@ -54,6 +54,7 @@ export type WebUrls = {
   session: string
   signout: string
   signin: string
+  media: (dir: string, file: string, download?: boolean) => string
 }
 
 export function webUrls(base: string): WebUrls {
@@ -65,6 +66,13 @@ export function webUrls(base: string): WebUrls {
     session: at("api/session").href,
     signout: at("api/signout").href,
     signin: at("signin").href,
+    media: (dir, file, download = false) => {
+      const u = at("api/vods/file")
+      u.searchParams.set("dir", dir)
+      u.searchParams.set("file", file)
+      if (download) u.searchParams.set("download", "1")
+      return u.href
+    },
   }
 }
 
@@ -109,6 +117,8 @@ export class WebDaemonClient implements DaemonClient {
     webviewLogin: false,
     // Signed in with the daemon's sign-in token, so it offers Sign out.
     webSession: true,
+    // Recordings live on the daemon's machine; the daemon serves them.
+    browserMedia: true,
   }
 
   private readonly session: DaemonSession
@@ -344,6 +354,9 @@ export class WebDaemonClient implements DaemonClient {
     Promise.resolve<StartAtLogin>({ supported: false, enabled: false })
   setStartAtLogin = () =>
     Promise.resolve<StartAtLogin>({ supported: false, enabled: false })
+
+  mediaUrl = (dir: string, file: string, download = false) =>
+    this.urls.media(dir, file, download)
 
   // Signs this browser out: the daemon revokes the session and closes its
   // sockets, so the page goes to the sign-in page whatever the answer.

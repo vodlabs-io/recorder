@@ -199,6 +199,7 @@ func (a *App) start(ctx context.Context) (err error) {
 	// The VOD Archive index needs procSvc (change events, active work) and
 	// sessionReg (suppressing still-recording sessions), both live by now.
 	a.initVODIndex()
+	a.vodReady.Store(true)
 
 	// Off the startup path: the roots can be network volumes, and nothing waits
 	// on reclaiming space from a delete that was already reported done.
