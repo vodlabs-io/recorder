@@ -260,6 +260,10 @@ var scrapeDomains = map[string][]string{
 		// HS CDN is a shared CDN, so only the host PopkonTV's HLS is on.
 		"live-popkontv.hscdn.com",
 	},
+	"rutube": {
+		"rutube.ru", // the API, and the stream balancer and CDN hosts
+		"rtbcdn.ru", // the stream CDN
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host
