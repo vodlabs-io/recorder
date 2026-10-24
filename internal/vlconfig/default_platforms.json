@@ -348,6 +348,11 @@
 		"channel_url": "https://api.vodlabs.io/channel/popkontv/{username}"
 	},
 	{
+		"name": "rutube",
+		"display_name": "RUTUBE",
+		"channel_url": "https://api.vodlabs.io/channel/rutube/{username}"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
