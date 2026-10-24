@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { FolderDatalist, useFolderSuggestions } from "@/lib/folder-suggestions"
 import { getDaemonClient, type VOD, type UserConfig } from "@/lib/daemon"
 import {
   AlertTriangle,
@@ -89,6 +90,7 @@ export function FoldersPopover({
   // Free-text path entry, for hosts without a native picker (the Web UI, whose
   // daemon may not even be on this machine).
   const [typedPath, setTypedPath] = useState("")
+  const folders = useFolderSuggestions()
 
   const loadConfig = useCallback(async () => {
     try {
@@ -269,7 +271,9 @@ export function FoldersPopover({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") addTyped()
                 }}
+                list="scan-dir-folders"
               />
+              <FolderDatalist id="scan-dir-folders" folders={folders} />
               <Button
                 variant="outline"
                 size="sm"

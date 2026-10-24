@@ -454,6 +454,13 @@ export type UpdateState = {
 };
 
 // DaemonInfo mirrors vlapi.DaemonInfo (the info endpoint).
+// FolderSuggestion mirrors mountinfo.Mount (the config.folders endpoint): a
+// folder mounted into a container daemon.
+export type FolderSuggestion = {
+  path: string;
+  writable: boolean;
+};
+
 // StartAtLogin is whether the OS will start the recorder when the user logs
 // in. `supported` is false where the app has no way to ask (an unknown
 // platform, or a host that is not the desktop app at all).

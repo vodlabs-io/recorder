@@ -15,6 +15,7 @@ export type {
   DaemonInfo,
   DaemonMeta,
   DiskStatus,
+  FolderSuggestion,
   SpaceState,
   StorageRoot,
   DaemonUpdateStatus,
@@ -51,6 +52,7 @@ export type {
 } from "@shared/types";
 
 import type {
+  FolderSuggestion,
   StartAtLogin,
   VODDeleteManyResponse,
   VODCancelMovesResponse,
@@ -129,6 +131,9 @@ export interface DaemonClient {
 
   getConfig(): Promise<UserConfig>;
   setConfig(cfg: UserConfig): Promise<UserConfig>;
+  // Folders mounted into a container daemon, offered as suggestions in the
+  // folder settings. Empty for any other daemon.
+  getFolderSuggestions(): Promise<FolderSuggestion[]>;
   retryConnect(): Promise<ConnectionInfo>;
 
   // vodlabs.io account. startCloudSignIn mints a link code and returns the
