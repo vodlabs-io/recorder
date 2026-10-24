@@ -28,3 +28,18 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Base-image digests in the Dockerfile. Go and bun versions move with go.mod
+  # and CI, deliberately, so only their digests are refreshed here.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: golang
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: oven/bun
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+    groups:
+      docker:
+        patterns: ["*"]
