@@ -40,6 +40,7 @@ func (a *App) startWebUI() error {
 		TrustedProxies: cfg.TrustedProxies,
 		Dist:           dist,
 		Dial:           a.natsServer.InProcessConn,
+		Files:          a,
 		Log:            a.log.With("component", "webui"),
 	})
 	if err != nil {
