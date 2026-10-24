@@ -1,4 +1,4 @@
-package daemon
+package vlconfig
 
 import (
 	"os"
@@ -12,7 +12,8 @@ import (
 //
 // Environment configuration exists mainly for container deployments, where
 // putting settings in the run command beats mounting a config file to change
-// one value.
+// one value. The daemon and `vod` both apply it, so `docker exec … vod` reads
+// the same settings the daemon runs with.
 var envKeys = map[string]string{
 	"VLREC_DAEMON_HOST":       "daemon.host",
 	"VLREC_DAEMON_PORT":       "daemon.port",
@@ -28,9 +29,10 @@ var envKeys = map[string]string{
 	"VLREC_DELETE_PART_FILES": "processing.delete_part_files",
 }
 
-// envConfig collects the set environment variables as a flat config map. Values
-// stay strings; the unmarshaller is weakly typed and converts them.
-func envConfig() map[string]any {
+// EnvConfig collects the set environment variables as a flat config map, to
+// load over the config file. Values stay strings; the unmarshaller is weakly
+// typed and converts them.
+func EnvConfig() map[string]any {
 	out := make(map[string]any, len(envKeys))
 	for env, key := range envKeys {
 		if v, ok := os.LookupEnv(env); ok && strings.TrimSpace(v) != "" {
@@ -39,3 +41,10 @@ func envConfig() map[string]any {
 	}
 	return out
 }
+
+// containerEnv marks a containerized deployment, where the daemon binary
+// can't be swapped in place and only mounted volumes are writable.
+const containerEnv = "VLREC_CONTAINER"
+
+// RunningInContainer reports whether this process runs in a container.
+func RunningInContainer() bool { return strings.TrimSpace(os.Getenv(containerEnv)) != "" }

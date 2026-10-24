@@ -8,6 +8,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/nats-io/nats.go/micro"
 	"github.com/vodlabs-io/recorder/internal/version"
+	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vlupdate"
 )
 
@@ -54,7 +55,7 @@ func (s *Service) handleUpdate(req micro.Request) {
 		respond(req, fail(errInternal, err.Error()))
 		return
 	}
-	inContainer := runningInContainer()
+	inContainer := vlconfig.RunningInContainer()
 	if currentVersion.GreaterThanEqual(latestVersion) {
 		respond(req, OK(UpdateResponse{
 			DaemonVersion: currentVersion.String(),
