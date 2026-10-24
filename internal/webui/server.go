@@ -34,7 +34,9 @@ type Config struct {
 	Dist fs.FS
 	// Dial opens a connection to the daemon's NATS server.
 	Dial func() (net.Conn, error)
-	Log  *slog.Logger
+	// Files serves recordings for playback and download; nil disables it.
+	Files FileOpener
+	Log   *slog.Logger
 }
 
 // pollInterval is how often the token and session secret are re-read.
@@ -194,6 +196,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /api/session", s.handleSessionStatus)
 	mux.HandleFunc("POST /api/signout", s.requireSession(s.handleSignOut))
 	mux.HandleFunc("GET /nats", s.requireSession(s.handleBridge))
+	mux.HandleFunc("GET /api/vods/file", s.requireSession(s.handleVODFile))
+	mux.HandleFunc("HEAD /api/vods/file", s.requireSession(s.handleVODFile))
 	mux.HandleFunc("GET /{$}", s.requirePage(s.serveIndex))
 	mux.HandleFunc("GET /assets/", s.requirePage(s.serveAsset))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

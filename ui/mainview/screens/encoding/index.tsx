@@ -13,7 +13,7 @@ import {
   type EncodeProgress,
 } from "@/lib/daemon"
 import { platformDisplayName } from "@/data/supported-platforms"
-import { joinPath } from "@/lib/utils"
+import { canPlayVODs, playVOD } from "@/lib/play-vod"
 import {
   AlertTriangle,
   ChevronDown,
@@ -171,7 +171,7 @@ export default function Encoding() {
   }, [paused, refresh])
 
   const client = getDaemonClient()
-  const canOpen = client.capabilities.openPath
+  const canPlay = canPlayVODs()
   const queuedIds = (jobs ?? [])
     .filter((j) => j.status === "queued")
     .map((j) => j.id)
@@ -247,15 +247,13 @@ export default function Encoding() {
                         )}
                         {statusBadge(j)}
 
-                        {j.status === "done" && canOpen && (
+                        {j.status === "done" && canPlay && (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6"
                             title="Watch"
-                            onClick={() =>
-                              void client.openPath(joinPath(j.dir, j.output))
-                            }
+                            onClick={() => playVOD(j.dir, j.output)}
                           >
                             <Play className="h-4 w-4" />
                           </Button>

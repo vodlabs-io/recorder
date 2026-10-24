@@ -52,6 +52,7 @@ export class ShowcaseDaemonClient implements DaemonClient {
     installUpdates: true,
     webviewLogin: true,
     webSession: false,
+    browserMedia: false,
   }
 
   private readonly session: DaemonSession
@@ -258,6 +259,7 @@ export class ShowcaseDaemonClient implements DaemonClient {
   setStartAtLogin = (enabled: boolean) =>
     Promise.resolve<StartAtLogin>({ supported: true, enabled })
   signOut = () => Promise.resolve()
+  mediaUrl = () => ""
 
   getQuitPrompt = () => Promise.resolve<QuitPrompt | null>(null)
   confirmQuit = () => Promise.resolve(false)

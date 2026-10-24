@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/knadh/koanf/v2"
@@ -41,6 +42,7 @@ type App struct {
 	encSvc      *encoding.Service // Merge/re-encode job queue
 	streamerDB  *streamerdb.DB    // Per-streamer facts that outlive the daemon
 	vodIndex    *vodindex.Index   // Cached VOD Archive scans
+	vodReady    atomic.Bool       // vodIndex is set; the Web UI starts before it
 	revMu       sync.Mutex        // Guards the vods-rev coalescing fields below
 	revTimer    *time.Timer       // Armed to publish revPending when the window closes
 	revPending  int64             // Newest rev not yet published, 0 = none

@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vodlabs-io/recorder/internal/webui"
+
 	"github.com/vodlabs-io/recorder/internal/diskspace"
 	"github.com/vodlabs-io/recorder/internal/processing"
 	"github.com/vodlabs-io/recorder/internal/streamer"
@@ -625,3 +627,36 @@ func (a *App) sweepVODTrash() {
 
 // Compile-time check that App satisfies the API's controller contract.
 var _ vlapi.VODController = (*App)(nil)
+
+// OpenVODFile implements webui.FileOpener: it opens one file of a finished,
+// listed session for the Web UI to play or download. Like VODThumbnail it
+// only touches files the scan listed, and it opens them inside the session
+// folder, so neither a crafted name nor a symlink reaches anything else.
+func (a *App) OpenVODFile(ctx context.Context, dir, file string) (*os.File, error) {
+	if !a.vodReady.Load() {
+		return nil, webui.ErrNotReady
+	}
+	if file == "" || file != filepath.Base(file) || strings.ContainsAny(file, `/\`) ||
+		file == "." || file == ".." {
+		return nil, webui.ErrNotFound
+	}
+	session, ok := a.vodIndex.Find(ctx, dir)
+	if !ok || session.State != vodindex.StateReady {
+		return nil, webui.ErrNotFound
+	}
+	listed := false
+	for _, f := range session.Files {
+		if f.Name == file {
+			listed = true
+			break
+		}
+	}
+	if !listed {
+		return nil, webui.ErrNotFound
+	}
+	f, err := os.OpenInRoot(session.Dir, file)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", webui.ErrNotFound, err)
+	}
+	return f, nil
+}
