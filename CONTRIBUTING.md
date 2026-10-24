@@ -78,6 +78,23 @@ Set `VLREC_DEV_SPAWN_DAEMON=1` to test how a release build finds or starts its
 daemon: it looks at `VLREC_DAEMON_PATH`, then `vlrecd` on your `PATH`, then its
 download cache, and downloads the latest release as a last resort.
 
+## Running the Web UI
+
+The Web UI is the same interface, built for the browser, which the daemon
+serves when `web.enabled` is on (the default only in Docker). With a daemon
+running from the terminal as above:
+
+```sh
+VLREC_WEB_ENABLED=1 bun run daemon --logger.mode console
+bun run web                 # Vite on http://127.0.0.1:5174, proxying the daemon on :8080
+VLREC_WEB_ENABLED=1 ./vod web url   # a sign-in link; open it, then switch the port to 5174
+```
+
+`bun run web:build` builds `web/dist`, which `go build` embeds; a daemon
+built without it serves a page saying so. `scripts/docker-build.sh` builds
+the image, and `bun scripts/docker-smoke.ts <image>` runs the checks CI runs
+on it.
+
 ## Before you open a pull request
 
 Run the checks CI runs:

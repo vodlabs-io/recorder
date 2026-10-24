@@ -82,6 +82,18 @@ $env:VOD_VERSION = '0.1.0'; irm https://vodlabs.io/install.ps1 | iex
 You can also download `cli_<os>_<arch>` and `daemon_<os>_<arch>` archives
 from a release and put `vod` and `vlrecd` on your `PATH` yourself.
 
+## Docker
+
+On a server or NAS with no desktop, run the Docker image, which serves the
+app's interface as a web page you open from any browser on your network:
+
+```sh
+docker compose up -d
+docker compose exec recorder vod web url
+```
+
+[Running in Docker](docker.md) covers the setup.
+
 ## Checking a download
 
 Every release file is built by this repository's release workflow on GitHub,

@@ -66,6 +66,8 @@ Every command that takes `<url>` also accepts `<platform> <username>`.
 | --- | --- |
 | `vod config path`<br>`vod config edit` | Print or edit the config file. Alias: `cfg`. |
 | `vod info` | Print the daemon's settings and the paths of its files and logs. |
+| `vod health` | Exit with 0 if the daemon is running and answering, 1 if not. Never starts a daemon. For scripts and container health checks. |
+| `vod web url`<br>`vod web token [--rotate]` | Print a sign-in link for the [Web UI](docker.md#signing-in), or its token. `--rotate` replaces the token and signs every browser out. |
 | `vod update` | Update the daemon and `vod` to the latest release. |
 | `vod restart` | Restart the daemon. |
 | `vod quit` | Stop all recordings and the daemon. Finished recordings are processed first unless you pass `--force`. |

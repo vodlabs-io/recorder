@@ -19,6 +19,9 @@ The settings folder holds:
 - `processing.db`, the queue of recordings waiting to be processed or merged;
 - your platform logins, encrypted.
 
+In Docker, these are the `/config`, `/cache` and `/recordings` volumes; see
+[Running in Docker](docker.md#folders).
+
 `vod info`, and **About** in the app, print the exact paths on your machine.
 To keep everything somewhere else, set `VLREC_CONFIG_DIR` and
 `VLREC_CACHE_DIR` to the folders to use.
@@ -46,10 +49,12 @@ with `vod config edit`. The main settings:
 | `processing.low_space_warn_gb` | `20` | Warn when a recording folder has less free space than this, in GiB. |
 | `logger.level` | `info` | How much to log: `debug`, `info`, `warn` or `error`. |
 
-Environment variables override the file: `VLREC_DOWNLOAD_DIR`,
-`VLREC_ARCHIVE_DIR`, `VLREC_OUTPUT_TEMPLATE`, `VLREC_VARIANT`,
-`VLREC_SPLIT_SIZE`, `VLREC_SPLIT_DURATION`, `VLREC_DELETE_PART_FILES`,
-`VLREC_ENCODER`, `VLREC_LOG_LEVEL` and `VLREC_LOG_MODE`.
+Environment variables override the file, for the daemon and for `vod` alike:
+`VLREC_DOWNLOAD_DIR`, `VLREC_ARCHIVE_DIR`, `VLREC_OUTPUT_TEMPLATE`,
+`VLREC_VARIANT`, `VLREC_SPLIT_SIZE`, `VLREC_SPLIT_DURATION`,
+`VLREC_DELETE_PART_FILES`, `VLREC_ENCODER`, `VLREC_LOG_LEVEL`,
+`VLREC_LOG_MODE`, `VLREC_DAEMON_HOST` and `VLREC_DAEMON_PORT`. The Web UI's
+settings, under `[web]`, are described in [Running in Docker](docker.md#settings).
 
 ## streamers.toml
 

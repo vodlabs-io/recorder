@@ -38,6 +38,15 @@ irm https://vodlabs.io/install.ps1 | iex
 
 Then see [Getting started](docs/getting-started.md).
 
+On a server or NAS, run it in Docker, with the app's interface in your browser:
+
+```sh
+docker compose up -d   # with this repository's compose.yaml
+docker compose exec recorder vod web url
+```
+
+See [Running in Docker](docs/docker.md).
+
 ## How it works, and what VodLabs sees
 
 - **Recording happens on your machine.** Video goes straight from the

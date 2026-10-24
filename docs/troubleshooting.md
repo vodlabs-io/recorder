@@ -58,6 +58,11 @@ can't start. Stop the other program. For the command-line tool alone, you can
 instead move the daemon to another port with `daemon.port` in `config.toml`;
 the desktop app always looks for it on 4222.
 
+## Docker
+
+[Running in Docker](docker.md#troubleshooting) covers a container that
+keeps restarting, a Web UI that won't connect, and sign-in problems.
+
 ## A recording has several files
 
 A new file starts whenever the stream's video format changes, for example
