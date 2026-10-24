@@ -27,6 +27,17 @@ var envKeys = map[string]string{
 	"VLREC_ARCHIVE_DIR":       "processing.archive_dir",
 	"VLREC_ENCODER":           "processing.encoder",
 	"VLREC_DELETE_PART_FILES": "processing.delete_part_files",
+	"VLREC_WEB_ENABLED":       "web.enabled",
+	"VLREC_WEB_HOST":          "web.host",
+	"VLREC_WEB_PORT":          "web.port",
+	"VLREC_WEB_TOKEN":         "web.token",
+	"VLREC_WEB_TOKEN_FILE":    "web.token_file",
+}
+
+// envListKeys are the variables holding a comma-separated list.
+var envListKeys = map[string]string{
+	"VLREC_WEB_ALLOWED_ORIGINS": "web.allowed_origins",
+	"VLREC_WEB_TRUSTED_PROXIES": "web.trusted_proxies",
 }
 
 // EnvConfig collects the set environment variables as a flat config map, to
@@ -38,6 +49,19 @@ func EnvConfig() map[string]any {
 		if v, ok := os.LookupEnv(env); ok && strings.TrimSpace(v) != "" {
 			out[key] = strings.TrimSpace(v)
 		}
+	}
+	for env, key := range envListKeys {
+		v, ok := os.LookupEnv(env)
+		if !ok || strings.TrimSpace(v) == "" {
+			continue
+		}
+		var list []string
+		for _, item := range strings.Split(v, ",") {
+			if item = strings.TrimSpace(item); item != "" {
+				list = append(list, item)
+			}
+		}
+		out[key] = list
 	}
 	return out
 }
