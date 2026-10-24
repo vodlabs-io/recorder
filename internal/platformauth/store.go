@@ -19,9 +19,10 @@
 //   - They are NEVER logged. Log cookie counts, never names or values.
 //
 // At rest, cookies are encrypted with AES-256-GCM. The encryption key lives in
-// the OS keychain when one is available; on a headless host with no keychain it
-// falls back to a key derived from stable machine identifiers. Cookies are never
-// written to disk in plaintext.
+// the OS keychain when one is available. On a headless host with no keychain it
+// is derived from the machine id, or, where there is none (a container), read
+// from a random cookies.key kept next to the jar. Cookies are never written to
+// disk in plaintext.
 package platformauth
 
 import (
@@ -31,8 +32,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -56,6 +59,9 @@ const (
 	cookieFileName = "cookies.json"
 	// legacyCookieFileName is the jar in $HOME that NewStore migrates.
 	legacyCookieFileName = ".vodlabs-cookies.json"
+	// keyFileName holds the random key on a host with neither a keychain nor
+	// a machine id, next to the jar.
+	keyFileName = "cookies.key"
 
 	// machineKeySalt domain-separates the fallback machine-derived key.
 	machineKeySalt = "vodlabs-cookie-store-v1"
@@ -183,6 +189,23 @@ type Store struct {
 	// keyOverride, when set, is used instead of the keychain/machine key. Tests
 	// set this to avoid touching the real keychain.
 	keyOverride []byte
+	// The key sources, swapped by tests.
+	keyring        keyringAPI
+	machineIDPaths []string
+	hostname       func() (string, error)
+}
+
+// keyringAPI is the slice of go-keyring the store uses.
+type keyringAPI interface {
+	Get(service, user string) (string, error)
+	Set(service, user, password string) error
+}
+
+type osKeyring struct{}
+
+func (osKeyring) Get(service, user string) (string, error) { return keyring.Get(service, user) }
+func (osKeyring) Set(service, user, password string) error {
+	return keyring.Set(service, user, password)
 }
 
 // Option customizes a Store (used by tests to isolate the file path).
@@ -198,7 +221,12 @@ func WithFilePath(path string) Option {
 // (encrypted), so VLREC_CONFIG_DIR moves the logins with the rest of the
 // daemon's state.
 func NewStore(opts ...Option) *Store {
-	s := &Store{filePath: vlconfig.DefaultFilePath(cookieFileName)}
+	s := &Store{
+		filePath:       vlconfig.DefaultFilePath(cookieFileName),
+		keyring:        osKeyring{},
+		machineIDPaths: []string{"/etc/machine-id", "/var/lib/dbus/machine-id"},
+		hostname:       os.Hostname,
+	}
 	for _, o := range opts {
 		o(s)
 	}
@@ -335,9 +363,10 @@ type fileEnvelope struct {
 }
 
 // load reads and decrypts the store. A missing file yields an empty map. A file
-// that fails to decrypt (e.g. key rotated because a keychain appeared where
-// there was none) is treated as empty so the user can simply sign in again,
-// rather than being wedged.
+// written under the hostname-derived key is re-saved under the current one. A
+// file that fails to decrypt (e.g. key rotated because a keychain appeared
+// where there was none) is treated as empty so the user can simply sign in
+// again, rather than being wedged.
 func (s *Store) load() (map[string]Session, error) {
 	raw, err := os.ReadFile(s.filePath)
 	if os.IsNotExist(err) {
@@ -359,8 +388,16 @@ func (s *Store) load() (map[string]Session, error) {
 		return nil, err
 	}
 	plain, err := decrypt(key, blob)
+	migrated := false
 	if err != nil {
-		return map[string]Session{}, nil
+		legacy := s.hostnameKey()
+		if legacy == nil {
+			return map[string]Session{}, nil
+		}
+		if plain, err = decrypt(legacy, blob); err != nil {
+			return map[string]Session{}, nil
+		}
+		migrated = true
 	}
 	var sessions map[string]Session
 	if err := json.Unmarshal(plain, &sessions); err != nil {
@@ -368,6 +405,10 @@ func (s *Store) load() (map[string]Session, error) {
 	}
 	if sessions == nil {
 		sessions = map[string]Session{}
+	}
+	if migrated {
+		// Best effort: on failure the next load migrates again.
+		_ = s.save(sessions)
 	}
 	return sessions, nil
 }
@@ -413,13 +454,18 @@ func (s *Store) save(sessions map[string]Session) error {
 }
 
 // encryptionKey returns the 32-byte AES key: the keychain-held key when a
-// keychain is available (created on first use), else a machine-derived fallback.
+// keychain is available (created on first use), else one derived from the
+// machine id, else the random key in cookies.key (created on first use).
 func (s *Store) encryptionKey() ([]byte, error) {
 	if s.keyOverride != nil {
 		return s.keyOverride, nil
 	}
+	kr := s.keyring
+	if kr == nil {
+		kr = osKeyring{}
+	}
 	// Existing keychain key.
-	if b64, err := keyring.Get(keyringCookieService, keyEncKeyItem); err == nil {
+	if b64, err := kr.Get(keyringCookieService, keyEncKeyItem); err == nil {
 		if key, err := base64.StdEncoding.DecodeString(b64); err == nil && len(key) == 32 {
 			return key, nil
 		}
@@ -429,44 +475,95 @@ func (s *Store) encryptionKey() ([]byte, error) {
 	if _, err := rand.Read(key); err != nil {
 		return nil, fmt.Errorf("generate key: %w", err)
 	}
-	if err := keyring.Set(keyringCookieService, keyEncKeyItem,
+	if err := kr.Set(keyringCookieService, keyEncKeyItem,
 		base64.StdEncoding.EncodeToString(key)); err == nil {
 		return key, nil
 	}
-	// No keychain (headless): derive a key from stable machine identifiers.
-	// Weaker than a keychain-held key, but never plaintext — it defends against
-	// casual disk/backup harvesting, not a local attacker running as this user.
-	return machineKey(), nil
+	// No keychain (headless). Weaker than a keychain-held key, but never
+	// plaintext — it defends against casual disk/backup harvesting, not a
+	// local attacker running as this user.
+	if id := s.machineID(); id != "" {
+		return derivedKey(id), nil
+	}
+	return s.fileKey()
 }
 
-// machineKey derives a 32-byte key from stable, non-portable machine identifiers
-// so the encrypted file can't be decrypted by simply copying it elsewhere.
-func machineKey() []byte {
+// derivedKey hashes a stable, non-portable machine identifier into a key, so
+// the encrypted file can't be decrypted by simply copying it elsewhere.
+func derivedKey(id string) []byte {
 	h := sha256.New()
 	h.Write([]byte(machineKeySalt))
-	if id := machineID(); id != "" {
-		h.Write([]byte(id))
-	}
+	h.Write([]byte(id))
 	if home, err := os.UserHomeDir(); err == nil {
 		h.Write([]byte(home))
 	}
 	return h.Sum(nil)
 }
 
-// machineID returns a best-effort stable per-machine identifier. It is not
-// required to be secret — it just anchors the fallback key to this host.
-func machineID() string {
-	for _, p := range []string{"/etc/machine-id", "/var/lib/dbus/machine-id"} {
+// machineID returns the host's machine id, or "" when it has none. It is not
+// required to be secret — it just anchors the derived key to this host.
+func (s *Store) machineID() string {
+	for _, p := range s.machineIDPaths {
 		if b, err := os.ReadFile(p); err == nil {
 			if id := strings.TrimSpace(string(b)); id != "" {
 				return id
 			}
 		}
 	}
-	if host, err := os.Hostname(); err == nil {
-		return host
-	}
 	return ""
+}
+
+// hostnameKey returns the key a host with no keychain and no machine id
+// derived from its hostname, which a container changes on every recreate. Nil
+// when the host has a machine id: its current key is that same derivation.
+func (s *Store) hostnameKey() []byte {
+	if s.keyOverride != nil || s.machineID() != "" || s.hostname == nil {
+		return nil
+	}
+	host, err := s.hostname()
+	if err != nil || host == "" {
+		return nil
+	}
+	return derivedKey(host)
+}
+
+// fileKey reads the random key in cookies.key, creating it on first use.
+func (s *Store) fileKey() ([]byte, error) {
+	path := filepath.Join(filepath.Dir(s.filePath), keyFileName)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, fmt.Errorf("create cookie key dir: %w", err)
+	}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, fmt.Errorf("generate key: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err == nil {
+		_, werr := f.Write([]byte(base64.StdEncoding.EncodeToString(key)))
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			os.Remove(path)
+			return nil, fmt.Errorf("write cookie key: %w", werr)
+		}
+		return key, nil
+	}
+	if !errors.Is(err, fs.ErrExist) {
+		return nil, fmt.Errorf("create cookie key: %w", err)
+	}
+	// Another process may have created it a moment ago and still be writing.
+	for range 20 {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("read cookie key: %w", err)
+		}
+		if key, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(b))); err == nil && len(key) == 32 {
+			return key, nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return nil, fmt.Errorf("cookie key %s is corrupt; delete it and sign in again", path)
 }
 
 func encrypt(key, plaintext []byte) ([]byte, error) {
