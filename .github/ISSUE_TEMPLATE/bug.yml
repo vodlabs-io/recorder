@@ -31,13 +31,14 @@ body:
         - The desktop app
         - The command-line tool (vod)
         - Both
+        - Docker (the Web UI)
     validations:
       required: true
   - type: textarea
     id: details
     attributes:
       label: Versions and system
-      description: In the app, About → Copy diagnostics, then paste. With the command-line tool, paste the first lines of `vod info`.
+      description: In the app or the Web UI, About → Copy diagnostics, then paste. With the command-line tool, paste the first lines of `vod info` (in Docker, `docker compose exec recorder vod info`).
       render: text
     validations:
       required: true
@@ -45,5 +46,5 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Anything relevant from the logs (About → Open logs folder, or the paths `vod info` prints). Check it holds nothing you'd rather keep private.
+      description: Anything relevant from the logs (About → Open logs folder, the paths `vod info` prints, or `docker compose logs recorder`). Check it holds nothing you'd rather keep private.
       render: text

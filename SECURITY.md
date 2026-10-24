@@ -25,6 +25,12 @@ platform logins, so these matter most:
   encryption should prevent, or sending them anywhere.
 - **The daemon's local API** on `127.0.0.1:4222`, for example if another
   website or another user on the machine can drive it.
+- **The Web UI** that the Docker image serves on port 8080: getting a
+  session without the sign-in token, keeping one after sign-out or a token
+  rotation, driving it from another website, or reading a file through it
+  that isn't a finished recording. A session has full control of the
+  recorder, including your stored platform logins, so the sign-in is the
+  boundary.
 - **Updates and releases.** Anything that could get the app or the
   command-line tool to install something other than a release built here.
 
