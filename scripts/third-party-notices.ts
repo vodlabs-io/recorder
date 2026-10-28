@@ -126,7 +126,7 @@ General Public License, version 2 (LGPL-2), along with other libraries under
 permissive licenses. <https://bun.com/docs/project/license> lists them with
 their licenses and explains how to relink Bun against a modified
 JavaScriptCore, whose source is at <https://github.com/oven-sh/WebKit>. The
-app ships Bun 1.4.0, the release Electrobun pins, unmodified.
+app ships Bun 1.4.4, the release Electrobun pins, unmodified.
 
 ## Electrobun
 

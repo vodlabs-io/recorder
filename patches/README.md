@@ -4,7 +4,7 @@ Source patches we carry against third-party code, with the built artefacts they
 produce. Each one exists because a bug upstream blocks a feature here and the
 fix has not landed (or shipped) yet.
 
-## `electrobun-2.0.2-sdk.patch`
+## `electrobun-2.0.5-sdk.patch`
 
 Against Electrobun's TypeScript SDK as Hutch projects it into `.hutch/devkit`,
 which the main process is bundled from. The npm package carries no SDK, so
@@ -31,7 +31,7 @@ A standalone reproduction (a pthread calling a threadsafe JSCallback, no
 Electrobun) crashed 10 of 10 runs within a second on 1.3.14, and survived 10 of
 10 on 1.4.2 plus ten minutes under `BUN_JSC_collectContinuously=1`.
 
-Electrobun 2.0.2 bundles Bun 1.4.0 for `build.mainProcess: "bun"` apps, which
+Electrobun 2.0.5 bundles Bun 1.4.4 for `build.mainProcess: "bun"` apps, which
 has the fix, and reads 1.4's string-typed `cstring` callback arguments itself.
 
 ### What the patch changes
@@ -65,9 +65,9 @@ into every frame, once the view's native webview exists. Windows already runs
 a custom preload in every frame. Linux's WebKitGTK wrapper injects both
 preloads into the top frame only, so iframe players stay out of reach there.
 
-## `electrobun-2.0.2-win-cookie-api.patch`
+## `electrobun-2.0.5-win-cookie-api.patch`
 
-Against `blackboardsh/electrobun` at tag `v2.0.2`, file
+Against `blackboardsh/electrobun` at tag `v2.0.5`, file
 `package/src/native/win/nativeWrapper.cpp`. Makes the `Session` cookie API work
 on Windows.
 
@@ -207,10 +207,10 @@ Microsoft.VisualStudio.Workload.VCTools --includeRecommended"`), CMake
 (`winget install Kitware.CMake`), Node.js (`winget install OpenJS.NodeJS.LTS`)
 and Hutch (`irm https://hutch.blackboard.sh/hutch/install.ps1 | iex`).
 
-    git clone --branch v2.0.2 --recurse-submodules ^
+    git clone --branch v2.0.5 --recurse-submodules ^
         https://github.com/blackboardsh/electrobun.git electrobun
     cd electrobun
-    git apply ..\recorder\patches\electrobun-2.0.2-win-cookie-api.patch
+    git apply ..\recorder\patches\electrobun-2.0.5-win-cookie-api.patch
     cd package
     hutch run install
     call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
@@ -224,9 +224,9 @@ checksum here so the artefact's origin stays traceable either way.
 When bumping electrobun, re-cut the patch against the new tag, rebuild, and
 update the checksum, commit hash and `ELECTROBUN_VERSION`.
 
-## `electrobun-2.0.2-linux-cookie-api.patch`
+## `electrobun-2.0.5-linux-cookie-api.patch`
 
-Against `blackboardsh/electrobun` at tag `v2.0.2`, file
+Against `blackboardsh/electrobun` at tag `v2.0.5`, file
 `package/src/native/linux/nativeWrapper.cpp`. Makes the `Session` cookie API
 work on Linux.
 
@@ -317,27 +317,27 @@ tag, applies this patch, builds with Hutch on `ubuntu-24.04`, and uploads
 the artifact to `desktop/native/linux-x64/` and set `ELECTROBUN_VERSION`.
 
 The committed artefact should come from that workflow rather than a local build,
-so its glibc baseline (2.38) matches upstream's own 2.0.2 Linux libraries.
+so its glibc baseline (2.38) matches upstream's own 2.0.5 Linux libraries.
 
 **Iterating on the patch locally** is much faster than a CI round trip, and only
 needs headers — the GTK-only wrapper compiles against CEF but does not link it,
 so there is no need for electrobun's full vendoring (Hutch, a zig toolchain and
-the CEF binary distribution). The CEF and dawn versions below are 2.0.2's
+the CEF binary distribution). The CEF and dawn versions below are 2.0.5's
 (`package/src/shared/cef-version.ts`, `package/src/shared/build-dependencies.ts`):
 
     sudo apt install build-essential cmake pkg-config libgtk-3-dev \
         libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
         libx11-dev libxext-dev
 
-    git clone --depth 1 --branch v2.0.2 \
+    git clone --depth 1 --branch v2.0.5 \
         https://github.com/blackboardsh/electrobun.git src
     cd src/package
     # CEF headers only (~4MB of a ~150MB stream), and the dawn headers
     mkdir -p vendors/cef && curl -sL \
-      "https://cef-builds.spotifycdn.com/cef_binary_147.0.10%2Bgd58e84d%2Bchromium-147.0.7727.118_linux64_minimal.tar.bz2" \
+      "https://cef-builds.spotifycdn.com/cef_binary_156.0.7%2Bg47dbc1d%2Bchromium-156.0.8078.17_linux64_minimal.tar.bz2" \
       | tar -xj --strip-components=1 -C vendors/cef --wildcards "*/include/*"
     mkdir -p vendors/wgpu && curl -sL \
-      "https://electrobun-artifacts.blackboard.sh/electrobun-dawn/releases/0.2.5/electrobun-dawn-linux-x64.tar.gz" \
+      "https://electrobun-artifacts.blackboard.sh/electrobun-dawn/releases/0.2.7/electrobun-dawn-linux-x64.tar.gz" \
       | tar -xz -C vendors/wgpu
     # libasar.so from the bin/ of any Linux build of the app
     cp <app>/bin/libasar.so vendors/

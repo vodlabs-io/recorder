@@ -1,8 +1,8 @@
 diff --git a/package/src/native/linux/nativeWrapper.cpp b/package/src/native/linux/nativeWrapper.cpp
-index 2be8905..3b7b0aa 100644
+index 3ed4aa3e..55a1212e 100644
 --- a/package/src/native/linux/nativeWrapper.cpp
 +++ b/package/src/native/linux/nativeWrapper.cpp
-@@ -2817,6 +2817,9 @@ public:
+@@ -2823,6 +2823,9 @@ public:
      virtual void evaluateJavaScriptWithNoCompletion(const char* jsString) = 0;
      virtual void callAsyncJavascript(const char* messageId, const char* jsString, uint32_t webviewId, uint32_t hostWebviewId, void* completionHandler) = 0;
      virtual void addPreloadScriptToWebView(const char* jsString) = 0;
@@ -12,7 +12,7 @@ index 2be8905..3b7b0aa 100644
      virtual void updateCustomPreloadScript(const char* jsString) = 0;
      virtual void resize(const GdkRectangle& frame, const char* masksJson) = 0;
      virtual void resizeLogical(const LogicalRect& frame, const char* masksJson) {
-@@ -3039,6 +3042,8 @@ public:
+@@ -3045,6 +3048,8 @@ public:
      bool partitionContextReleased = false;
      bool isTransparent = false;
      bool isHidden = false;
@@ -21,7 +21,7 @@ index 2be8905..3b7b0aa 100644
      
      // Navigation state tracking
      bool lastNavigationWasBlocked = false;
-@@ -3239,6 +3244,9 @@ public:
+@@ -3245,6 +3250,9 @@ public:
          // Handle file chooser requests for <input type="file">
          g_signal_connect(webview, "run-file-chooser", G_CALLBACK(onRunFileChooser), this);
  
@@ -31,7 +31,7 @@ index 2be8905..3b7b0aa 100644
          // Handle downloads
          WebKitWebContext* defaultContext = webkit_web_view_get_context(WEBKIT_WEB_VIEW(webview));
          if (defaultContext) {
-@@ -3723,6 +3731,60 @@ public:
+@@ -3729,6 +3737,60 @@ public:
          return FALSE;
      }
      
@@ -92,7 +92,7 @@ index 2be8905..3b7b0aa 100644
      static void onLoadChanged(WebKitWebView* webview, WebKitLoadEvent event, gpointer user_data) {
          WebKitWebViewImpl* impl = static_cast<WebKitWebViewImpl*>(user_data);
          if (impl->eventHandler) {
-@@ -9911,6 +9973,14 @@ ELECTROBUN_EXPORT void stopWindowMove() {
+@@ -9923,6 +9985,14 @@ ELECTROBUN_EXPORT void stopWindowMove() {
    fflush(stdout);
  }
  
@@ -107,7 +107,7 @@ index 2be8905..3b7b0aa 100644
  ELECTROBUN_EXPORT void addPreloadScriptToWebView(AbstractView* abstractView, const char* scriptContent, bool forMainFrameOnly) {
      if (abstractView) {
          dispatch_sync_main_void([&]() {
-@@ -12509,63 +12579,49 @@ ELECTROBUN_EXPORT uint64_t getMouseButtons() {
+@@ -12527,63 +12597,49 @@ ELECTROBUN_EXPORT uint64_t getMouseButtons() {
   * =============================================================================
   */
  
@@ -204,7 +204,7 @@ index 2be8905..3b7b0aa 100644
  }
  
  
-@@ -12576,29 +12632,76 @@ struct CookieCallbackData {
+@@ -12594,29 +12650,76 @@ struct CookieCallbackData {
      GMainLoop* loop;
  };
  
@@ -295,7 +295,7 @@ index 2be8905..3b7b0aa 100644
              json << "\"secure\":" << (soup_cookie_get_secure(cookie) ? "true" : "false") << ",";
              json << "\"httpOnly\":" << (soup_cookie_get_http_only(cookie) ? "true" : "false");
  
-@@ -12608,25 +12711,143 @@ static void onGetCookiesFinished(GObject* source, GAsyncResult* result, gpointer
+@@ -12626,25 +12729,143 @@ static void onGetCookiesFinished(GObject* source, GAsyncResult* result, gpointer
              }
  
              json << "}";
@@ -445,7 +445,7 @@ index 2be8905..3b7b0aa 100644
  // Get cookies for a partition (WebKit2GTK)
  ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier, const char* filterJson) {
      // Copy arguments before dispatching to main thread
-@@ -12657,31 +12878,48 @@ ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier,
+@@ -12675,31 +12896,48 @@ ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partitionIdentifier,
              }
          }
  

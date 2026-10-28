@@ -1,8 +1,8 @@
 diff --git a/package/src/native/win/nativeWrapper.cpp b/package/src/native/win/nativeWrapper.cpp
-index d804b305..b049b766 100644
+index 8262a4d2..9e8ac475 100644
 --- a/package/src/native/win/nativeWrapper.cpp
 +++ b/package/src/native/win/nativeWrapper.cpp
-@@ -40,6 +40,8 @@
+@@ -41,6 +41,8 @@
  #include <shobjidl.h>  // For IFileOpenDialog
  #include <shlobj.h>    // For SHGetKnownFolderPath, FOLDERID_Downloads
  #include <shlguid.h>   // For CLSID_FileOpenDialog
@@ -11,7 +11,7 @@ index d804b305..b049b766 100644
  #include <commdlg.h>   // For COMDLG_FILTERSPEC
  #include <dcomp.h>     // For DirectComposition
  #include <dxgi1_2.h>   // For DXGI 1.2 (CreateSwapChainForComposition)
-@@ -502,8 +504,10 @@ static std::mutex browserMapMutex;
+@@ -504,8 +506,10 @@ static std::mutex browserMapMutex;
  
  // Global map to store CEFViews by container window handle (using void* to avoid forward declaration issues)
  static std::map<HWND, void*> g_cefViews;
@@ -24,7 +24,7 @@ index d804b305..b049b766 100644
  
  // Global map to store pending CEF navigations for timing workaround - use browser ID instead of pointer
  static std::map<int, std::string> g_pendingCefNavigations;
-@@ -3727,6 +3731,10 @@ private:
+@@ -3761,6 +3765,10 @@ private:
      bool removed = false;
  
  public:
@@ -35,8 +35,8 @@ index d804b305..b049b766 100644
      std::string pendingUrl;
      std::string pendingHtml;  // Stored inline HTML for loading after async creation
      std::string electrobunScript;
-@@ -3759,6 +3767,10 @@ public:
-         containerHwnd = hwnd;
+@@ -3805,6 +3813,10 @@ public:
+         nativeWindow.bringToFront(containerHwnd);
      }
  
 +    HWND getContainerHwnd() const {
@@ -46,7 +46,7 @@ index d804b305..b049b766 100644
      ComPtr<ICoreWebView2> getWebView() const {
          return webview;
      }
-@@ -3841,6 +3853,64 @@ public:
+@@ -3887,6 +3899,64 @@ public:
          webview->AddHostObjectToScript(L"eventBridge", &eventBridgeVariant);
          VariantClear(&eventBridgeVariant);
  
@@ -111,7 +111,7 @@ index d804b305..b049b766 100644
          // hostBridge/bunBridge aliases and internalBridge - RPC bridges (only for non-sandboxed webviews)
          if (!isSandboxed) {
              // RPC bridges may carry thousands of packets in a burst. Synchronous
-@@ -5054,7 +5124,11 @@ void SetBrowserOnCEFView(HWND parentWindow, CefRefPtr<CefBrowser> browser) {
+@@ -5061,7 +5131,11 @@ void SetBrowserOnCEFView(HWND parentWindow, CefRefPtr<CefBrowser> browser) {
  // Helper function to set webview on WebView2View (defined after WebView2View class)
  void SetWebViewOnWebView2View(HWND containerWindow, void* webview) {
      std::cout << "[WebView2] Looking for WebView2View with containerWindow: " << containerWindow << std::endl;
@@ -124,7 +124,7 @@ index d804b305..b049b766 100644
      if (viewIt != g_webview2Views.end()) {
          auto view = static_cast<WebView2View*>(viewIt->second);
          if (view) {
-@@ -7313,6 +7387,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+@@ -7323,6 +7397,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
      view->hwnd = hwnd;
      view->parentWindow = hwnd;
      view->fullSize = autoResize;
@@ -132,7 +132,7 @@ index d804b305..b049b766 100644
      view->pendingStartTransparent = startTransparent;
      view->pendingStartPassthrough = startPassthrough;
      view->setLogicalFrame(x, y, width, height);
-@@ -8071,8 +8146,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+@@ -8099,8 +8174,7 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
                              trackAbstractView(view.get());
  
                              // Store WebView2View in global map for JavaScript execution
@@ -142,7 +142,7 @@ index d804b305..b049b766 100644
  
  
                              return S_OK;
-@@ -8097,7 +8171,29 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
+@@ -8125,7 +8199,29 @@ static std::shared_ptr<WebView2View> createWebView2View(uint32_t webviewId,
          // Create WebView2 environment with custom scheme support
          try {
              auto options = Microsoft::WRL::Make<CoreWebView2EnvironmentOptions>();
@@ -173,7 +173,7 @@ index d804b305..b049b766 100644
  
              // Get the interface that supports custom scheme registration
              Microsoft::WRL::ComPtr<ICoreWebView2EnvironmentOptions4> options4;
-@@ -14200,21 +14296,167 @@ static WebView2View* findWebView2ById(uint32_t webviewId) {
+@@ -14231,21 +14327,167 @@ static WebView2View* findWebView2ById(uint32_t webviewId) {
      return nullptr;
  }
  
@@ -351,7 +351,7 @@ index d804b305..b049b766 100644
      size_t urlPos = filterStr.find("\"url\"");
      if (urlPos != std::string::npos) {
          size_t colonPos = filterStr.find(':', urlPos);
-@@ -14225,58 +14467,33 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+@@ -14256,58 +14498,33 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
          }
      }
  
@@ -432,7 +432,7 @@ index d804b305..b049b766 100644
                              cookie->get_Name(&name);
                              cookie->get_Value(&value);
                              cookie->get_Domain(&domain);
-@@ -14285,24 +14502,20 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+@@ -14316,24 +14533,20 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
                              cookie->get_IsHttpOnly(&httpOnly);
                              cookie->get_Expires(&expires);
  
@@ -470,7 +470,7 @@ index d804b305..b049b766 100644
                              }
                              json << "}";
  
-@@ -14311,47 +14524,26 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
+@@ -14342,47 +14555,26 @@ extern "C" ELECTROBUN_EXPORT const char* sessionGetCookies(const char* partition
                              CoTaskMemFree(domain);
                              CoTaskMemFree(path);
                          }
@@ -530,7 +530,7 @@ index d804b305..b049b766 100644
  
      // Parse JSON
      std::string jsonStr = cookieJson;
-@@ -14382,7 +14574,11 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
+@@ -14413,7 +14605,11 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
          size_t colonPos = jsonStr.find(':', pos);
          size_t numStart = colonPos + 1;
          while (numStart < jsonStr.size() && (jsonStr[numStart] == ' ' || jsonStr[numStart] == '\t')) numStart++;
@@ -543,7 +543,7 @@ index d804b305..b049b766 100644
      };
  
      std::string name = extractString("name");
-@@ -14410,195 +14606,126 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
+@@ -14441,195 +14637,126 @@ extern "C" ELECTROBUN_EXPORT bool sessionSetCookie(const char* partitionIdentifi
  
      if (path.empty()) path = "/";
  
