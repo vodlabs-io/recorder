@@ -13,10 +13,9 @@ the command-line tool, the app uses its `vlrecd` when that is newer.
 
 ### macOS
 
-Download `VodLabs-Recorder-macOS-arm64.dmg` (Apple Silicon, M1 and later,
-macOS 14 or later), open it, and drag **VodLabs Recorder** into
-**Applications**. There is no desktop app for Intel Macs; the command-line
-tool still runs on them.
+Download `VodLabs-Recorder-macOS-arm64.dmg` (Apple Silicon, M1 and later) or
+`VodLabs-Recorder-macOS-x64.dmg` (Intel), both for macOS 14 or later, open it,
+and drag **VodLabs Recorder** into **Applications**.
 
 The app is signed and notarized by Apple, so it opens without a warning.
 
