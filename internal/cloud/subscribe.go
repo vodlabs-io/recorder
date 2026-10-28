@@ -60,14 +60,15 @@ type subscribeRejection struct {
 }
 
 // Definitive reports whether the cloud judged the entry itself. Only a
-// definitive rejection may delete the entry, so neither an outage nor a full
-// subscription can delete a streamer.
+// definitive rejection may delete the entry, so only the codes that say the
+// URL names nothing recordable are: an outage, a full subscription, a spent
+// daily quota or a code this build does not know all keep the streamer.
 func (r subscribeRejection) Definitive() bool {
 	switch r.Error {
-	case codeUnavailable, codeOverCapacity:
-		return false
+	case codeUnsupportedSite, codeNotALiveURL, codeNotFound:
+		return true
 	}
-	return true
+	return false
 }
 
 // name identifies the rejected entry for a log line: the streamer if the cloud
