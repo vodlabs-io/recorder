@@ -21,21 +21,21 @@ require (
 	github.com/knadh/koanf/v2 v2.4.1
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/nats-io/nats-server/v2 v2.15.1
-	github.com/nats-io/nats.go v1.54.0
+	github.com/nats-io/nats.go v1.55.0
 	github.com/nats-io/nkeys v0.4.16
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/pion/dtls/v3 v3.1.14
-	github.com/pion/interceptor v0.1.49
-	github.com/pion/rtcp v1.2.19
-	github.com/pion/rtp v1.10.5
-	github.com/pion/webrtc/v4 v4.2.24
+	github.com/pion/dtls/v3 v3.1.15
+	github.com/pion/interceptor v0.1.51
+	github.com/pion/rtcp v1.2.20
+	github.com/pion/rtp v1.10.6
+	github.com/pion/webrtc/v4 v4.2.25
 	github.com/sgtdi/fswatcher v1.3.0
 	github.com/spf13/pflag v1.0.10
 	github.com/tidwall/gjson v1.20.0
 	github.com/urfave/cli/v3 v3.14.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/sys v0.49.0
-	modernc.org/sqlite v1.60.1
+	modernc.org/sqlite v1.61.0
 )
 
 require (
@@ -54,10 +54,10 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/nats-io/jwt/v2 v2.8.2 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
-	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pion/datachannel v1.6.3 // indirect
-	github.com/pion/ice/v4 v4.4.7 // indirect
+	github.com/pion/ice/v4 v4.4.8 // indirect
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.2.2 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
@@ -74,7 +74,7 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	modernc.org/libc v1.77.1 // indirect
+	modernc.org/libc v1.79.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
