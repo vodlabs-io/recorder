@@ -4,7 +4,7 @@
 //
 //   bun scripts/docker-smoke.ts [image]   (default ghcr.io/vodlabs-io/recorder:latest)
 import { wsconnect, type NatsConnection } from "@nats-io/nats-core";
-import { mkdtempSync, chmodSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -62,8 +62,9 @@ async function waitHealthy(): Promise<void> {
   throw new Error(`container never turned healthy:\n${sh(["docker", "logs", name], false)}`);
 }
 
+// Read through the container: the token file is 0600 and owned by its uid.
 function token(): string {
-  return readFileSync(join(configDir, "web-token"), "utf8").trim();
+  return sh(["docker", "exec", name, "vod", "web", "token"]);
 }
 
 async function signIn(tok: string, hdrs: Record<string, string> = {}): Promise<Response> {
@@ -185,7 +186,12 @@ try {
 } finally {
   sh(["docker", "rm", "-f", name], false);
   sh(["docker", "volume", "rm", "-f", cacheVolume], false);
-  rmSync(root, { recursive: true, force: true });
+  try {
+    rmSync(root, { recursive: true, force: true });
+  } catch (e) {
+    // Folders the container made are its uid's, which the host may not remove.
+    console.warn(`left ${root}: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 if (failures > 0) {
