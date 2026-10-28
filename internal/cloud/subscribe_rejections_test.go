@@ -27,15 +27,17 @@ func TestDefinitiveRejections(t *testing.T) {
 	}
 }
 
-// TestDefinitiveRejections_UnknownCode covers a code this build doesn't know.
-// An unrecognised code is treated as final, matching how a rejection reads:
-// codeUnavailable is the single named exception, so anything else is a verdict.
-func TestDefinitiveRejections_UnknownCode(t *testing.T) {
+// TestDefinitiveRejections_KeepsSoftCodes covers the codes that say nothing
+// about the streamer, including one this build doesn't know: deleting over a
+// code that may be temporary would lose an entry the user has no copy of.
+func TestDefinitiveRejections_KeepsSoftCodes(t *testing.T) {
 	got := definitiveRejections([]subscribeRejection{
-		{URL: "https://example.com/x", Error: "some_future_code"},
+		{URL: "https://example.com/a", Error: codeOverCapacity},
+		{URL: "https://example.com/b", Error: codeDailyCapReached},
+		{URL: "https://example.com/c", Error: "some_future_code"},
 	})
-	if !slices.Equal(got, []string{"https://example.com/x"}) {
-		t.Errorf("definitiveRejections = %v, want the entry", got)
+	if len(got) != 0 {
+		t.Errorf("definitiveRejections = %v, want nothing", got)
 	}
 }
 
