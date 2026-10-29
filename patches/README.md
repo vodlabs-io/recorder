@@ -187,9 +187,9 @@ falling back. `desktop/native/win-x64/ELECTROBUN_VERSION` names the release it
 was built from; the native ABI changes between releases, so the hook also fails
 when that is not the release being built.
 
-The committed copy is the `v2.0.2` build (SHA-256
-`2df0e5ca5b61e919fccdecee1a690bb84dde83117fea98ea7050bbddd3e2f576`, from
-`e424efbc8af0315e565811fcef0920d3b757e3fc`).
+The committed copy is the `v2.0.5` build (SHA-256
+`045686cfb40c7a5566378b3bb95c2046797db222ef930cfb0005dbf05ac580d5`, from
+`d06abc9edf0b4e55116129cabbfe17bf89e11791`), built by workflow run 40791385661.
 
 ### Rebuilding
 
@@ -304,9 +304,9 @@ without it silently ships a sign-in flow that cannot finish.
 Electrobun's `postBuild` hook, which runs for dev builds too, and fails the
 build rather than falling back, or when
 `desktop/native/linux-x64/ELECTROBUN_VERSION` is not the release being built.
-The committed copy is the `v2.0.2` build (SHA-256
-`03e1f3bfa7a804f75f2c75cf9abc5197ff68a8090eec19a371b776e9e6520036`, from
-`e424efbc8af0315e565811fcef0920d3b757e3fc`), built by workflow run 39085029252
+The committed copy is the `v2.0.5` build (SHA-256
+`cf05bd85de0f1aae5c1226b38e57b28dbec1b0807aff5e92cf3a7bc5c0515c98`, from
+`d06abc9edf0b4e55116129cabbfe17bf89e11791`), built by workflow run 40791388358
 with the popup handler included.
 
 ### Rebuilding
