@@ -69,6 +69,22 @@ describe("StreamerState.snapshot", () => {
     expect(snap.daemon.subscriptionCount).toBe(4);
   });
 
+  test("reads a block from the upstream version", () => {
+    const s = new StreamerState();
+    expect(s.snapshot().daemon.blocked).toBe(false);
+
+    s.applyKvEntry("daemon.upstream_version", "PUT",
+      JSON.stringify({ blocked: true, blocked_until: 1700000000 }));
+    expect(s.snapshot().daemon.blocked).toBe(true);
+    expect(s.snapshot().daemon.blockedUntil).toBe(1700000000);
+
+    s.applyKvEntry("daemon.upstream_version", "PUT", JSON.stringify({ blocked: true }));
+    expect(s.snapshot().daemon.blockedUntil).toBeNull();
+
+    s.applyKvEntry("daemon.upstream_version", "PUT", JSON.stringify({ recommended_version: "1.0.0" }));
+    expect(s.snapshot().daemon.blocked).toBe(false);
+  });
+
   test("maps split fields from the doc", () => {
     const s = new StreamerState();
     const doc = JSON.stringify({

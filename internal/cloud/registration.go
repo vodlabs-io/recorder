@@ -71,6 +71,13 @@ func (c *Client) retryRegistration(ctx context.Context) bool {
 			return false
 		case <-time.After(jitter(delay)):
 		}
+		if c.isBlocked() {
+			// The block's probe asks instead; register once it lifts.
+			if !c.waitUnblocked(ctx) {
+				return false
+			}
+			delay = registerRetryMin
+		}
 
 		if err := c.register(ctx); err != nil {
 			log.Warn("Registration retry failed",

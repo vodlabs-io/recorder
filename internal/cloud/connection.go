@@ -43,6 +43,11 @@ func (c *Client) connect() error {
 			c.publishServiceState(context.Background(), true, "")
 			c.resumeLanes() // the path is back; stop holding off
 		}),
+		nats.ReconnectErrHandler(func(_ *nats.Conn, err error) {
+			if isUpgradeRefused(err) {
+				c.probeAfterRefusedUpgrade(c.lifetime(context.Background()))
+			}
+		}),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 			log.Error("NATS error", "error", err)
 			if errors.Is(err, nats.ErrAuthRevoked) {
@@ -90,8 +95,19 @@ func (c *Client) onDisconnect(nc *nats.Conn, err error) {
 func (c *Client) closeConnection() {
 	log := c.logger.With("func", "closeConnection")
 
-	if c.nc != nil {
-		c.nc.Close()
+	// Read under the lock: a block can close the connection from any call.
+	c.mu.RLock()
+	nc := c.nc
+	c.mu.RUnlock()
+	if nc != nil && !nc.IsClosed() {
+		nc.Close()
 		log.Info("NATS connection closed")
 	}
+}
+
+// isUpgradeRefused reports whether a NATS connect failed because the server
+// answered the WebSocket upgrade with something other than 101, which is how
+// nats.go reports any HTTP refusal.
+func isUpgradeRefused(err error) bool {
+	return err != nil && err.Error() == "invalid websocket connection"
 }

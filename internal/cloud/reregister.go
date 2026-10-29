@@ -31,6 +31,9 @@ func (c *Client) noteResponse(ctx context.Context, resp *http.Response) {
 	if resp == nil {
 		return
 	}
+	if c.noteBlockedReply(ctx, resp) {
+		return
+	}
 	if resp.StatusCode == http.StatusUpgradeRequired {
 		c.noteUpgradeRequired(ctx)
 		return
@@ -42,6 +45,9 @@ func (c *Client) noteResponse(ctx context.Context, resp *http.Response) {
 		// Some other 401: a bad signature, a clock too far out. Re-registering
 		// would throw away a good identity without fixing any of them.
 		return
+	}
+	if c.isBlocked() {
+		return // a blocked recorder never registers again
 	}
 	c.reregister(ctx)
 }
@@ -63,7 +69,7 @@ func (c *Client) reregister(ctx context.Context) {
 
 		delay := reregisterRetryMin
 		for attempt := 1; ; attempt++ {
-			if ctx.Err() != nil {
+			if ctx.Err() != nil || c.isBlocked() {
 				return
 			}
 			// register() overwrites the identity in memory and on disk, so a

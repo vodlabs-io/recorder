@@ -41,6 +41,8 @@ const EMPTY_DAEMON: DaemonMeta = {
   version: null,
   recommendedVersion: null,
   updateRequired: false,
+  blocked: false,
+  blockedUntil: null,
   service: null,
   startTime: null,
   subscriptionCount: 0,

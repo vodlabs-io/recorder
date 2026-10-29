@@ -45,6 +45,11 @@ func (c *Client) handleHeartbeat(ctx context.Context) {
 		select {
 		case <-timer.C:
 			next := heartbeatInterval
+			if c.isBlocked() {
+				// The block's own probe stands in for the heartbeat.
+				timer.Reset(next)
+				continue
+			}
 			if err := c.sendHeartbeat(ctx); err != nil {
 				log.Error("Failed to send heartbeat", "error", err, "retry_in", retry)
 				next = retry
@@ -60,6 +65,14 @@ func (c *Client) handleHeartbeat(ctx context.Context) {
 }
 
 func (c *Client) sendHeartbeat(ctx context.Context) error {
+	if err := c.checkBlocked(); err != nil {
+		return err
+	}
+	return c.heartbeat(ctx)
+}
+
+// heartbeat is sendHeartbeat without the blocked gate, so it can probe a block.
+func (c *Client) heartbeat(ctx context.Context) error {
 	log := c.logger.With("func", "sendHeartbeat")
 
 	timestamp := time.Now().Unix()

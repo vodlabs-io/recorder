@@ -182,6 +182,9 @@ func (c *Client) fetchPoWChallenge(ctx context.Context) (challengeResponse, erro
 		return challengeResponse{}, fmt.Errorf("challenge request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if c.noteBlockedReply(ctx, resp) {
+		return challengeResponse{}, errBlocked
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -273,6 +276,9 @@ func (c *Client) register(ctx context.Context) error {
 		return fmt.Errorf("registration request failed: %w", err)
 	}
 	defer resp.Body.Close()
+	if c.noteBlockedReply(ctx, resp) {
+		return errBlocked
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

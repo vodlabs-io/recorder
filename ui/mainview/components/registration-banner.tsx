@@ -15,9 +15,11 @@ import { appStore } from "@/state/app-state"
 // on disk afterwards, and a later outage is an ordinary connection problem.
 export function RegistrationBanner() {
   const registration = appStore((s) => s.daemon.registration)
+  const blocked = appStore((s) => s.daemon.blocked)
 
-  // null until the daemon has written it; absence is not a problem.
-  if (!registration || registration.registered) return null
+  // null until the daemon has written it; absence is not a problem. A blocked
+  // recorder has its own banner.
+  if (!registration || registration.registered || blocked) return null
 
   return (
     <Banner className={PAGE_BANNER} icon={AlertTriangle}>

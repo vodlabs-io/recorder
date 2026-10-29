@@ -83,6 +83,9 @@ func (r subscribeRejection) name() string {
 // subscribe gets a new JWT and consumer for the current streamer IDs and updates client state
 func (c *Client) subscribe(ctx context.Context, strIDs streamer.StreamerRefs) (streamer.StreamerRefs, []subscribeRejection, error) {
 	log := c.logger.With("func", "subscribe")
+	if err := c.checkBlocked(); err != nil {
+		return nil, nil, err
+	}
 
 	reqBody := subscribeRequest{
 		StreamerIDs:  strIDs,
@@ -231,6 +234,11 @@ func (c *Client) handleSubscription(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-c.ResubscribeCh:
+			if c.isBlocked() {
+				// Lifting the block triggers a fresh subscribe.
+				c.markInitialSubDone()
+				continue
+			}
 			// Stay under the subscribe rate limit and coalesce bursts: if the
 			// previous subscribe was less than subscribeMinInterval ago, wait out
 			// the remainder, folding any triggers that arrive meanwhile into this
@@ -262,6 +270,9 @@ func (c *Client) handleSubscription(ctx context.Context) {
 				log.Warn("Config reload failed", "error", err)
 			}
 		case <-resubTicker.C:
+			if c.isBlocked() {
+				continue
+			}
 			if time.Now().Before(holdUntil) {
 				continue // holding off after a failed subscribe
 			}

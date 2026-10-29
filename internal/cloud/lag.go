@@ -43,6 +43,9 @@ func (c *Client) handleLagReports(ctx context.Context) {
 }
 
 func (c *Client) reportLag(ctx context.Context, strKey streamer.StreamerKey) error {
+	if err := c.checkBlocked(); err != nil {
+		return err
+	}
 	timestamp := time.Now().Unix()
 	reqURL := fmt.Sprintf("%s%s/%s/%s/lagging",
 		apiBaseURL,

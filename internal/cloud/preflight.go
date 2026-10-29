@@ -54,6 +54,9 @@ type resolveResponse struct {
 // never becomes an entry. Every failure, including a network failure, is a
 // *rejectionError.
 func (c *Client) ResolveStreamer(ctx context.Context, id streamer.StreamerRef) (streamer.StreamerRef, error) {
+	if c.isBlocked() {
+		return streamer.StreamerRef{}, blockedRejection()
+	}
 	body, err := json.Marshal(id)
 	if err != nil {
 		return streamer.StreamerRef{}, &rejectionError{Code: codeUnavailable, Message: err.Error()}
@@ -81,6 +84,9 @@ func (c *Client) ResolveStreamer(ctx context.Context, id streamer.StreamerRef) (
 		return streamer.StreamerRef{}, unreachable(ctx, err)
 	}
 	defer resp.Body.Close()
+	if c.noteBlockedReply(ctx, resp) {
+		return streamer.StreamerRef{}, blockedRejection()
+	}
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
@@ -142,4 +148,10 @@ func unreachable(ctx context.Context, err error) *rejectionError {
 		Message: "Could not reach the cloud to check that streamer. Nothing was added.",
 		cause:   err,
 	}
+}
+
+// blockedRejection refuses an add while this recorder is blocked. It is not a
+// verdict on the streamer.
+func blockedRejection() *rejectionError {
+	return &rejectionError{Code: codeUnavailable, Message: BlockedMessage + ". Nothing was added.", cause: errBlocked}
 }

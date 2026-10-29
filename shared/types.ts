@@ -118,6 +118,10 @@ export type DaemonMeta = {
   // True when the service will no longer serve this daemon version: every call
   // but the heartbeat is refused until it updates.
   updateRequired: boolean;
+  // True while the service refuses every call from this recorder; blockedUntil
+  // is when that ends (unix seconds), null for no set end.
+  blocked: boolean;
+  blockedUntil: number | null;
   // Whether the daemon can reach the VodLabs service (rides daemon.service);
   // null until the daemon has written it.
   service: ServiceState | null;
