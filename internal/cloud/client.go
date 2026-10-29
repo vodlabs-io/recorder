@@ -94,6 +94,15 @@ type Client struct {
 	// upgradeRequired is set once the service has refused a call for being too
 	// old, so the daemon reports it once rather than on every refusal.
 	upgradeRequired atomic.Bool
+	// block is set while the service refuses this recorder (see blocked.go).
+	blockMu sync.Mutex
+	block   *blockState
+	// lastUpgradeProbe is when a refused NATS upgrade last started a heartbeat
+	// (unix seconds).
+	lastUpgradeProbe atomic.Int64
+	// runCtx is the daemon's lifetime, for work a single call starts but must
+	// outlive it.
+	runCtx context.Context
 	// serviceState is the last reachability verdict published, so a repeat of
 	// the same one keeps the time it began. See publishServiceState.
 	serviceState atomic.Pointer[serviceState]
@@ -137,6 +146,7 @@ func Init(
 	log := logger.With("func", "Init")
 
 	client := &Client{
+		runCtx:           ctx,
 		httpClient:       httpClient,
 		localNC:          localNC,
 		kv:               kv,

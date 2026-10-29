@@ -348,6 +348,9 @@ func (c *Client) serve(
 		} else {
 			str, err = c.fetchSingleStatus(ctx, id, kind == kindAuthed, kind == kindStream)
 		}
+		if errors.Is(err, errBlocked) {
+			return // every status is fetched again once the block lifts
+		}
 		if err != nil {
 			started, holding := l.noteFailure(time.Now())
 			if holding {
@@ -501,6 +504,9 @@ func (c *Client) retryStatusFetch(
 		}
 
 		str, err := c.fetchSingleStatus(ctx, id, kind == kindAuthed, kind == kindStream)
+		if errors.Is(err, errBlocked) {
+			return
+		}
 		if err != nil {
 			if started, holding := l.noteFailure(time.Now()); holding {
 				logHold(log, id, kind, started, err)

@@ -73,6 +73,9 @@ func (c *Client) getIntervals(
 
 // fetchIntervals performs a signed GET against the intervals endpoint.
 func (c *Client) fetchIntervals(ctx context.Context) (*intervalsResponse, error) {
+	if err := c.checkBlocked(); err != nil {
+		return nil, err
+	}
 	timestamp := time.Now().Unix()
 	reqURL := apiBaseURL + intervalsEndpoint
 

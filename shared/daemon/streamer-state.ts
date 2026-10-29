@@ -120,6 +120,8 @@ export class StreamerState {
       version: null,
       recommendedVersion: null,
       updateRequired: false,
+      blocked: false,
+      blockedUntil: null,
       service: null,
       startTime: null,
       subscriptionCount: 0,
@@ -238,11 +240,15 @@ export class StreamerState {
           // Keys match version.Upstream's Go JSON tags.
           const upstream = JSON.parse(val) as {
             update_required?: boolean;
+            blocked?: boolean;
+            blocked_until?: number;
             recommended_version?: string;
             server_version?: string;
             server_started_at?: number;
           };
           meta.updateRequired = upstream.update_required ?? false;
+          meta.blocked = upstream.blocked ?? false;
+          meta.blockedUntil = upstream.blocked_until || null;
           meta.recommendedVersion = upstream.recommended_version ?? null;
           meta.serverVersion = upstream.server_version ?? null;
           meta.serverStartedAt = upstream.server_started_at ?? null;

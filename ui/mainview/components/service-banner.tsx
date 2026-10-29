@@ -1,10 +1,10 @@
-import { CloudOff, ListX } from "lucide-react"
+import { Ban, CloudOff, ListX } from "lucide-react"
 import { Banner, PAGE_BANNER } from "@/components/banner"
 import { appStore } from "@/state/app-state"
 import type { ServiceState } from "@shared/types"
 
-// ServiceBanner explains a daemon that cannot reach the VodLabs service, or
-// whose streamer list the service has refused.
+// ServiceBanner explains a daemon that cannot reach the VodLabs service, is
+// blocked from it, or whose streamer list the service has refused.
 //
 // Whether a streamer is live is the service's answer, so while it is
 // unreachable nothing is checked and no new recording can start — recordings
@@ -13,6 +13,10 @@ import type { ServiceState } from "@shared/types"
 export function ServiceBanner() {
   const service = appStore((s) => s.daemon.service)
   const registration = appStore((s) => s.daemon.registration)
+  const blocked = appStore((s) => s.daemon.blocked)
+  const blockedUntil = appStore((s) => s.daemon.blockedUntil)
+
+  if (blocked) return <BlockedBanner until={blockedUntil} />
 
   // null until the daemon has written it; absence is not a problem. A daemon
   // that has never registered has its own banner, which says more.
@@ -35,6 +39,24 @@ export function ServiceBanner() {
           Last error: {service.error}
         </span>
       ) : null}
+    </Banner>
+  )
+}
+
+// BlockedBanner explains a recorder the service refuses outright. Nothing is
+// checked meanwhile; the daemon asks again hourly and when the block ends.
+function BlockedBanner({ until }: { until: number | null }) {
+  const ends = until
+    ? new Date(until * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+    : null
+  return (
+    <Banner tone="danger" className={PAGE_BANNER} icon={Ban} align="start">
+      <span className="font-medium">This recorder is blocked from VodLabs cloud services</span>
+      <span className="text-muted-foreground">
+        {" "}
+        {ends ? `until ${ends}.` : "with no set end."} Nothing is checked and no
+        new recording starts meanwhile; recordings already running continue.
+      </span>
     </Banner>
   )
 }

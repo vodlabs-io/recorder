@@ -13,7 +13,12 @@ type Upstream struct {
 	// UpdateRequired is set when the service will no longer serve this version:
 	// every call but the heartbeat is refused with 426 until the daemon updates.
 	// It comes from the heartbeat, which answers such a client for this reason.
-	UpdateRequired     bool   `json:"update_required,omitempty"`
+	UpdateRequired bool `json:"update_required,omitempty"`
+	// Blocked is set while the service refuses every call from this recorder
+	// (HTTP 403 client_blocked). BlockedUntil is when that ends, in unix
+	// seconds; 0 means no set end. Both come from the daemon, not the heartbeat.
+	Blocked            bool   `json:"blocked,omitempty"`
+	BlockedUntil       int64  `json:"blocked_until,omitempty"`
 	MinimumVersion     string `json:"minimum_version"`
 	MaximumVersion     string `json:"maximum_version"`
 	RecommendedVersion string `json:"recommended_version"`

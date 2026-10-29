@@ -60,6 +60,9 @@ type statusOpts struct {
 func (c *Client) fetchStatus(ctx context.Context, opts statusOpts, id ...streamer.StreamerRef) (streamer.List, error) {
 	log := c.logger.With("func", "fetchStatus", "streamer_filter", id,
 		"authed", opts.authed, "recheck", opts.recheck, "streams_only", opts.streamsOnly)
+	if err := c.checkBlocked(); err != nil {
+		return nil, err
+	}
 	timestamp := time.Now().Unix()
 	reqURL := apiBaseURL + streamersRoute
 
@@ -279,6 +282,9 @@ func (c *Client) initStatusRetrying(ctx context.Context, base, max time.Duration
 					log.Info("Fetched the initial status after retrying", "attempts", attempt)
 				}
 				return
+			}
+			if errors.Is(err, errBlocked) {
+				return // fetched again once the block lifts
 			}
 			if ctx.Err() != nil {
 				return
