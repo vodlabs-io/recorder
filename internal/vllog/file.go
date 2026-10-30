@@ -11,6 +11,16 @@ import (
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 )
 
+// wrapHandler, when set, wraps every logger's handler, so an app can send
+// records somewhere besides the log file. Set it with WrapHandlers.
+var wrapHandler func(slog.Handler) slog.Handler
+
+// WrapHandlers makes every logger created after it pass its handler through
+// wrap. Call it before creating any logger.
+func WrapHandlers(wrap func(slog.Handler) slog.Handler) {
+	wrapHandler = wrap
+}
+
 type FileLogger struct {
 	logger  *slog.Logger
 	rotator *timberjack.Logger
@@ -74,6 +84,9 @@ func (f *FileLogger) init(cfg vlconfig.LoggerConfig, service string) error {
 		handler = handlers[0]
 	default:
 		handler = fanoutHandler{handlers: handlers}
+	}
+	if wrapHandler != nil {
+		handler = wrapHandler(handler)
 	}
 
 	f.logger = slog.New(handler).With("service", service)

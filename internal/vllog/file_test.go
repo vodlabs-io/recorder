@@ -1,6 +1,8 @@
 package vllog
 
 import (
+	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,3 +59,32 @@ func TestNewFileLoggerInvalidMode(t *testing.T) {
 		t.Error("expected error for invalid mode, got nil")
 	}
 }
+
+func TestWrapHandlersSeesEveryLevel(t *testing.T) {
+	var seen []slog.Level
+	WrapHandlers(func(h slog.Handler) slog.Handler {
+		return slog.NewMultiHandler(h, levelRecorder{&seen})
+	})
+	t.Cleanup(func() { WrapHandlers(nil) })
+
+	// Logging off and a level above error still reach the wrapper.
+	l, err := NewFileLogger(vlconfig.LoggerConfig{Level: "error", Mode: "off"}, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Warn("w")
+	l.Error("e")
+	if len(seen) != 2 || seen[0] != slog.LevelWarn || seen[1] != slog.LevelError {
+		t.Fatalf("wrapper saw %v, want [WARN ERROR]", seen)
+	}
+}
+
+type levelRecorder struct{ seen *[]slog.Level }
+
+func (r levelRecorder) Enabled(context.Context, slog.Level) bool { return true }
+func (r levelRecorder) Handle(_ context.Context, rec slog.Record) error {
+	*r.seen = append(*r.seen, rec.Level)
+	return nil
+}
+func (r levelRecorder) WithAttrs([]slog.Attr) slog.Handler { return r }
+func (r levelRecorder) WithGroup(string) slog.Handler      { return r }
