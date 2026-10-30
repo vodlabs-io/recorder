@@ -6,6 +6,7 @@
 import { appendFileSync, mkdirSync, renameSync, statSync } from "fs";
 import { join } from "path";
 import { daemonLogDir } from "./daemon-process";
+import { noteConsole } from "./error-reports";
 
 const LOG_FILE = "desktop.log";
 const LOG_FILE_PREV = "desktop.prev.log";
@@ -105,9 +106,11 @@ export function installFileLogging(): void {
   ];
   for (const [level, method] of levels) {
     const original = console[method].bind(console);
+    const report = method === "log" ? "info" : method;
     console[method] = (...args: unknown[]): void => {
       original(...args);
       write(level, args);
+      noteConsole(report, args);
     };
   }
 
