@@ -4,11 +4,12 @@ import type { VODPreviews } from "@/lib/daemon"
 // is a position across the whole VOD, earlier on the left. Pure functions
 // here; scrub-overlay.tsx renders them.
 
-// The three-up thumbnail's geometry, as the daemon composes it (480x270 with
-// 3 px gaps): panel p covers the p-th third of the VOD.
+// The three-up thumbnail's geometry, as the daemon composes it (480x270,
+// panels edge to edge, each frame cropped to fill): panel p covers the p-th
+// third of the VOD.
 export const TRIPTYCH_W = 480
-export const TRIPTYCH_GAP = 3
-export const TRIPTYCH_PANEL_W = Math.floor((TRIPTYCH_W - 2 * TRIPTYCH_GAP) / 3)
+export const TRIPTYCH_H = 270
+export const TRIPTYCH_PANEL_W = TRIPTYCH_W / 3
 
 export type ScrubFile = { name: string; durationMs: number }
 
@@ -41,10 +42,17 @@ export function panelAt(fraction: number): number {
 
 // panelBox is panel p's left edge and width as percentages of the card.
 export function panelBox(p: number): { left: number; width: number } {
-  return {
-    left: ((p * (TRIPTYCH_PANEL_W + TRIPTYCH_GAP)) / TRIPTYCH_W) * 100,
-    width: (TRIPTYCH_PANEL_W / TRIPTYCH_W) * 100,
-  }
+  const width = (TRIPTYCH_PANEL_W / TRIPTYCH_W) * 100
+  return { left: p * width, width }
+}
+
+// coverBox sizes a tile-shaped frame to fill a panel, as the triptych crops
+// it: width and height as percentages of the panel, overflow centred.
+export function coverBox(tileW: number, tileH: number): { width: number; height: number } {
+  const tile = tileW / tileH
+  const panel = TRIPTYCH_PANEL_W / TRIPTYCH_H
+  if (!(tile > 0)) return { width: 100, height: 100 }
+  return tile < panel ? { width: 100, height: (panel / tile) * 100 } : { width: (tile / panel) * 100, height: 100 }
 }
 
 // spriteStyle crops tile i out of the strip with percentage background

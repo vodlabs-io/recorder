@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { frameAt, locate, panelAt, panelBox, spriteStyle } from "./scrub"
+import { coverBox, frameAt, locate, panelAt, panelBox, spriteStyle } from "./scrub"
 
 const previews = { duration_ms: 48_000, scrub: { cols: 8, count: 48, times_ms: [] } }
 
@@ -38,9 +38,15 @@ describe("triptych", () => {
     expect(panelAt(0.99)).toBe(2)
     expect(panelAt(1)).toBe(2)
   })
-  test("panels follow the daemon's 480x270 layout", () => {
+  test("panels meet edge to edge across the card", () => {
     expect(panelBox(0).left).toBe(0)
-    expect(panelBox(2).left + panelBox(2).width).toBeCloseTo(((2 * 161 + 158) / 480) * 100)
+    expect(panelBox(1).left).toBeCloseTo(panelBox(0).width)
+    expect(panelBox(2).left + panelBox(2).width).toBeCloseTo(100)
+  })
+  test("a 9:16 frame covers its panel, cropped top and bottom", () => {
+    const c = coverBox(144, 256)
+    expect(c.width).toBe(100)
+    expect(c.height).toBeGreaterThan(100)
   })
 })
 
