@@ -65,7 +65,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '18'
+          node-version: '24'
 
       - name: Install Hutch
         uses: ./electrobun/.github/actions/install-hutch
