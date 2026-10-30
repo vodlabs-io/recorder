@@ -4,6 +4,7 @@ import {
   Subjects,
   VODS_DELETE_TIMEOUT_MS,
   VODS_REV_KEY,
+  VODS_PREVIEWS_TIMEOUT_MS,
   VODS_THUMBNAIL_TIMEOUT_MS,
   refPayload,
 } from "@shared/daemon/subjects"
@@ -24,6 +25,7 @@ import type {
   StreamersSnapshot,
   UpdateState,
   UserConfig,
+  VODPreviews,
 } from "@shared/types"
 import type { DaemonClient } from "@/lib/daemon/client"
 
@@ -150,6 +152,20 @@ export class ShowcaseDaemonClient implements DaemonClient {
     )
     return res.jpeg_b64
   }
+  getVodPreviews = (dir: string, file: string) =>
+    this.session.request<VODPreviews>(
+      Subjects.vodsPreviews,
+      { dir, file },
+      VODS_PREVIEWS_TIMEOUT_MS,
+    )
+  getContactSheet = async (dir: string, file: string) => {
+    const res = await this.session.request<{ jpeg_b64: string }>(
+      Subjects.vodsContactSheet,
+      { dir, file },
+      VODS_PREVIEWS_TIMEOUT_MS,
+    )
+    return res.jpeg_b64
+  }
   deleteVOD = (dir: string) =>
     this.session.request<string>(Subjects.vodsDelete, { dir })
   deleteVODs = (dirs: string[]) =>
@@ -260,6 +276,7 @@ export class ShowcaseDaemonClient implements DaemonClient {
     Promise.resolve<StartAtLogin>({ supported: true, enabled })
   signOut = () => Promise.resolve()
   mediaUrl = () => ""
+  previewTrackUrl = () => ""
   getFolderSuggestions = () => Promise.resolve([])
 
   getQuitPrompt = () => Promise.resolve<QuitPrompt | null>(null)

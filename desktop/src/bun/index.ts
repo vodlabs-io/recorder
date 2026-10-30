@@ -11,6 +11,7 @@ import type { AppRPCType } from "../rpc";
 import type {
   VODDeleteManyResponse,
   VODCancelMovesResponse,
+  VODPreviews,
   AddStreamerResult,
   CloudIntervals,
   ConnectionInfo,
@@ -42,6 +43,7 @@ import {
   BUG_REPORT_TIMEOUT_MS,
   VODS_DELETE_TIMEOUT_MS,
   VODS_REV_KEY,
+  VODS_PREVIEWS_TIMEOUT_MS,
   VODS_THUMBNAIL_TIMEOUT_MS,
   refPayload,
 } from "../../../shared/daemon/subjects";
@@ -331,6 +333,20 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
           Subjects.vodsThumbnail,
           { dir, file },
           VODS_THUMBNAIL_TIMEOUT_MS,
+        );
+        return res.jpeg_b64;
+      },
+      getVodPreviews: ({ dir, file }) =>
+        session.request<VODPreviews>(
+          Subjects.vodsPreviews,
+          { dir, file },
+          VODS_PREVIEWS_TIMEOUT_MS,
+        ),
+      getContactSheet: async ({ dir, file }) => {
+        const res = await session.request<{ jpeg_b64: string }>(
+          Subjects.vodsContactSheet,
+          { dir, file },
+          VODS_PREVIEWS_TIMEOUT_MS,
         );
         return res.jpeg_b64;
       },

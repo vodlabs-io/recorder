@@ -39,6 +39,7 @@ import {
   sessionTime,
   spanSec,
 } from "./format"
+import { ContactSheet } from "./contact-sheet"
 import { LazyThumb } from "./lazy-thumb"
 import { canDownloadVODs, canPlayVODs, downloadVOD, playVOD } from "@/lib/play-vod"
 
@@ -220,9 +221,13 @@ function InfoBody({
         {/* shrink-0: an aspect-ratio box is a flex item with a min-content
             height of zero, so without it a panel whose content overflows
             squashes the thumbnail to a strip instead of scrolling. */}
-        <div className="shrink-0 overflow-hidden rounded-lg border">
-          <LazyThumb dir={s.dir} file={files.length > 0 ? files[0].name : null} />
-        </div>
+        {!busy && files.length > 0 ? (
+          <ContactSheet dir={s.dir} files={files} />
+        ) : (
+          <div className="shrink-0 overflow-hidden rounded-lg border">
+            <LazyThumb dir={s.dir} file={files.length > 0 ? files[0].name : null} />
+          </div>
+        )}
 
         {busy && (
           <div className="flex flex-col gap-1.5">
