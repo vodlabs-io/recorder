@@ -192,7 +192,10 @@ func (a *App) SetConfig(c vlapi.UserConfig) error {
 	// applied.
 	a.ArchiveConfigChanged()
 
-	if err := writeUserConfig(configPath, applied); err != nil {
+	a.cfgFileMu.Lock()
+	err = writeUserConfig(configPath, applied)
+	a.cfgFileMu.Unlock()
+	if err != nil {
 		return fmt.Errorf("failed to persist config: %w", err)
 	}
 	return nil

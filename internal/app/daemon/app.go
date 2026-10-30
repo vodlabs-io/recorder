@@ -30,6 +30,7 @@ import (
 type App struct {
 	k           *koanf.Koanf
 	cfgMu       sync.RWMutex // Guards the user-facing appCfg fields that config.set live-updates.
+	cfgFileMu   sync.Mutex   // Serializes rewrites of config.toml.
 	appCfg      vlconfig.AppConfig
 	log         *vllog.FileLogger
 	natsConn    *nats.Conn
@@ -55,6 +56,8 @@ type App struct {
 	strFile     *vlconfig.StreamersFile // streamers.toml
 	cookieStore *platformauth.Store     // Local, encrypted third-party platform logins
 	errCh       chan error              // Fatal error channel
+	// flushReports sends queued error reports; set by startErrorReports.
+	flushReports func()
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -88,6 +91,9 @@ func New(ctx context.Context) (*App, error) {
 }
 
 func (a *App) cleanup() {
+	if a.flushReports != nil {
+		defer a.flushReports()
+	}
 	if a.log != nil {
 		a.log.Info("Shutting down")
 		defer a.log.Close()

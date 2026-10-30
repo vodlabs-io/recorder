@@ -29,10 +29,12 @@ import (
 )
 
 func (a *App) start(ctx context.Context) (err error) {
+	a.startErrorReports()
 	a.log, err = vllog.NewFileLogger(a.appCfg.Daemon.Logger, "daemon")
 	if err != nil {
 		return fmt.Errorf("failed to initialize main logger: %w", err)
 	}
+	a.watchCrashes()
 	a.log.Info("Starting", "version", version.Version)
 	a.log.Info("Config loaded", "path", a.appCfg.Daemon.ConfigFilePath)
 
@@ -239,6 +241,7 @@ func (a *App) start(ctx context.Context) (err error) {
 	// Storage-root free space: published for every client over the existing
 	// "daemon.>" KV watch, and sampled on demand for `vod info`.
 	a.apiSvc.SetDiskStatusProvider(a.diskRoots)
+	a.apiSvc.SetReportController(a)
 	go a.runDiskMonitor(ctx)
 
 	return nil
