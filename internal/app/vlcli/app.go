@@ -21,6 +21,8 @@ type App struct {
 	kv      jetstream.KeyValue
 	closing atomic.Bool
 	natsURL string
+	// flushReports sends queued error reports; set by LoadConfig.
+	flushReports func()
 }
 
 func (a *App) Commands() []*cli.Command {
@@ -33,6 +35,7 @@ func (a *App) Commands() []*cli.Command {
 		a.mergeCommand(),
 		a.queueCommand(),
 		a.configCommand(),
+		a.reportCommand(),
 		a.cloudCommand(),
 		a.loginCommand(),
 		a.infoCommand(),
@@ -97,6 +100,10 @@ func rejectExtraArgs(cmd *cli.Command, taken int, path string) error {
 
 func (a *App) Cleanup(ctx context.Context, cmd *cli.Command) error {
 	fmt.Print(cr())
+
+	if a.flushReports != nil {
+		a.flushReports()
+	}
 
 	if a.nc != nil {
 		a.closing.Store(true)

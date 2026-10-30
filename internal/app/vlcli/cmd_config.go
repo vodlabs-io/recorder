@@ -21,6 +21,7 @@ func (a *App) configCommand() *cli.Command {
 		Commands: []*cli.Command{
 			a.configPathCommand(),
 			a.configEditCommand(),
+			a.configErrorReportsCommand(),
 		},
 	}
 }
