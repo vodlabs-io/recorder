@@ -48,7 +48,15 @@ export const Subjects = {
   platformLoginRemove: "platformlogin.remove",
   platformLoginList: "platformlogin.list",
   platformLoginHealth: "platformlogin.health",
+  // Error and bug reports. Local-only: the user's answer, and their logs,
+  // belong to this machine.
+  reportsGet: "reports.get",
+  reportsSet: "reports.set",
+  reportsBug: "reports.bug",
 } as const;
+
+// BUG_REPORT_TIMEOUT_MS covers a bug report with its logs leaving the daemon.
+export const BUG_REPORT_TIMEOUT_MS = 45_000;
 
 // PLATFORM_LOGIN_REFRESH_SUBJECT is a plain LOCAL NATS subject (not a micro endpoint)
 // the daemon publishes on to ask a running desktop app to refresh a platform's

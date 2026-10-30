@@ -22,6 +22,9 @@ import type {
   StreamerRef,
   UpdateState,
   UserConfig,
+  ErrorReportsState,
+  BugReportRequest,
+  BugReportResult,
 } from "../../../shared/types";
 import {
   START_HIDDEN_FLAG,
@@ -30,11 +33,13 @@ import {
   startAtLoginSupported,
 } from "./start-at-login";
 import { connect } from "@nats-io/transport-node";
+import { followErrorReports, initErrorReports } from "./error-reports";
 import { DaemonSession } from "../../../shared/daemon/session";
 import { DaemonError } from "../../../shared/daemon/connection";
 import {
   PLATFORM_LOGIN_REFRESH_SUBJECT,
   Subjects,
+  BUG_REPORT_TIMEOUT_MS,
   VODS_DELETE_TIMEOUT_MS,
   VODS_REV_KEY,
   VODS_THUMBNAIL_TIMEOUT_MS,
@@ -210,6 +215,14 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
       getConfig: () => session.request<UserConfig>(Subjects.configGet),
       setConfig: (cfg: UserConfig) =>
         session.request<UserConfig>(Subjects.configSet, cfg),
+      getErrorReports: async () =>
+        followErrorReports(await session.request<ErrorReportsState>(Subjects.reportsGet)),
+      setErrorReports: async ({ enabled }) =>
+        followErrorReports(
+          await session.request<ErrorReportsState>(Subjects.reportsSet, { enabled }),
+        ),
+      sendBugReport: (r: BugReportRequest) =>
+        session.request<BugReportResult>(Subjects.reportsBug, r, BUG_REPORT_TIMEOUT_MS),
       getStartAtLogin: async () => ({
         supported: startAtLoginSupported(),
         enabled: await getStartAtLogin(),
@@ -726,6 +739,11 @@ async function onConnected(info: DaemonInfo): Promise<void> {
   void daemonUpdater.check();
   startLoginRefresh();
   startBrowserFetch();
+  // The user may have changed their answer with vod since the last connect.
+  session
+    .request<ErrorReportsState>(Subjects.reportsGet)
+    .then(followErrorReports)
+    .catch(() => {});
 }
 
 // startBrowserFetch (re)wires the LOCAL request-reply handler the daemon uses to
@@ -968,6 +986,7 @@ async function getMainViewUrl(): Promise<string> {
 // Resolved before the daemon connection starts, so the first update check
 // already knows whether this is a dev build.
 appChannel = await Updater.localInfo.channel();
+initErrorReports(await Updater.localInfo.version(), appChannel);
 const url = await getMainViewUrl();
 
 // mainWindow is the app's single window. Closing it (title-bar X / red button)

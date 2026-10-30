@@ -19,6 +19,9 @@ import type {
   UpdateState,
   StartAtLogin,
   UserConfig,
+  ErrorReportsState,
+  BugReportRequest,
+  BugReportResult,
   VODListPage,
 } from "../../shared/types";
 
@@ -46,6 +49,11 @@ export type AppRPCType = {
       getDesktopLogPath: { params: {}; response: string };
       getConfig: { params: {}; response: UserConfig };
       setConfig: { params: UserConfig; response: UserConfig };
+      // Error and bug reports (the daemon's reports.* subjects). The host
+      // follows the answer for its own error reports.
+      getErrorReports: { params: {}; response: ErrorReportsState };
+      setErrorReports: { params: { enabled: boolean }; response: ErrorReportsState };
+      sendBugReport: { params: BugReportRequest; response: BugReportResult };
       retryConnect: { params: {}; response: ConnectionInfo };
       // Start at login. The response is what the OS holds after the change,
       // which is not always what was asked for — see desktop/src/bun/start-at-login.

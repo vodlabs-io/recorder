@@ -282,6 +282,25 @@ export type SetPlatformLoginParams = {
   cookieHeader: string;
 };
 
+// ErrorReportsState mirrors vlapi.ErrorReportsState (reports.get / reports.set).
+// enabled is null until the user has answered, which is when the app asks;
+// available is false in a build that can't send reports (a development build).
+export type ErrorReportsState = {
+  enabled: boolean | null;
+  available: boolean;
+};
+
+// BugReportRequest mirrors vlapi.BugReportRequest (reports.bug).
+export type BugReportRequest = {
+  message: string;
+  include_logs: boolean;
+  sent_from: "app" | "web" | "cli";
+  app_version?: string;
+};
+
+// BugReportResult identifies a sent bug report in Sentry.
+export type BugReportResult = { id: string };
+
 // UserConfig mirrors vlapi.UserConfig (config.get / config.set).
 export type UserConfig = {
   download_dir: string;
