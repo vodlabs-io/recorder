@@ -17,6 +17,7 @@
 # NB: not under a top-level vendor/ — that name puts the Go build into vendor
 # mode and breaks it.
 !desktop/native/win-x64/libNativeWrapper.dll
+!desktop/native/win-arm64/libNativeWrapper.dll
 !desktop/native/linux-x64/libNativeWrapper.so
 
 # Test binary, built with 'go test -c'
