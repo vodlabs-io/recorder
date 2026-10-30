@@ -57,6 +57,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   xcams: "XCams",
   vklive: "VK Video Live",
   rutube: "RUTUBE",
+  joystick: "Joystick.tv",
   xiaohongshu: "Xiaohongshu",
   younow: "YouNow",
   peeks: "Peeks",

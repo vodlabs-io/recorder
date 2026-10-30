@@ -408,3 +408,27 @@ func TestDefaultCameraPriveHasLogin(t *testing.T) {
 		t.Errorf("cameraprive session cookie %q", l.SessionCookie)
 	}
 }
+
+func TestDefaultJoystickHasLogin(t *testing.T) {
+	l := LoginFlowFor("joystick")
+	if l == nil {
+		t.Fatal("joystick should have a login descriptor in the embedded default")
+	}
+	if !l.AllowsHost("joystick.tv") || !l.AllowsHost("api.joystick.tv") {
+		t.Errorf("joystick login should allow the site, domains=%v", l.CookieDomains)
+	}
+	// The playback CDN is authorized by the token in the stream URL, not by the
+	// login, so the login's cookies have no business going there.
+	for _, h := range []string{"cdn.playbackhost.com", "playbackhost.com", "joystick.tv.evil.test"} {
+		if l.AllowsHost(h) {
+			t.Errorf("SECURITY: joystick login must not allow %q", h)
+		}
+	}
+	// No auth scheme: the seat reads the token out of the "user" cookie itself.
+	if l.Auth != nil {
+		t.Errorf("joystick needs no auth scheme: %+v", l.Auth)
+	}
+	if l.SessionCookie != "user" {
+		t.Errorf("joystick session cookie %q", l.SessionCookie)
+	}
+}

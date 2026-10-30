@@ -9,6 +9,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/cameraprive"
 	"github.com/vodlabs-io/recorder/internal/fansly"
 	"github.com/vodlabs-io/recorder/internal/fc2live"
+	"github.com/vodlabs-io/recorder/internal/joystick"
 	"github.com/vodlabs-io/recorder/internal/nicolive"
 	"github.com/vodlabs-io/recorder/internal/peeks"
 )
@@ -43,9 +44,14 @@ type camerapriveSeat struct{ *cameraprive.Seat }
 
 func (s camerapriveSeat) master() string { return s.MasterURL }
 
+type joystickSeat struct{ *joystick.Seat }
+
+func (s joystickSeat) master() string { return s.MasterURL }
+
 // isSeatURL reports whether u names a broadcast recorded through a seat.
 func isSeatURL(u string) bool {
-	return nicolive.IsURL(u) || fc2live.IsURL(u) || peeks.IsURL(u) || fansly.IsURL(u) || cameraprive.IsURL(u)
+	return nicolive.IsURL(u) || fc2live.IsURL(u) || peeks.IsURL(u) || fansly.IsURL(u) ||
+		cameraprive.IsURL(u) || joystick.IsURL(u)
 }
 
 // openSeat takes a seat on the broadcast u names. login signs a Fansly seat's
@@ -64,6 +70,13 @@ func openSeat(ctx context.Context, u string, client *http.Client, userAgent stri
 			return nil, err
 		}
 		return fanslySeat{s}, nil
+	}
+	if joystick.IsURL(u) {
+		s, err := joystick.Open(ctx, u, client, userAgent, login, logger)
+		if err != nil {
+			return nil, err
+		}
+		return joystickSeat{s}, nil
 	}
 	if peeks.IsURL(u) {
 		s, err := peeks.Open(ctx, u, client, userAgent, logger)
@@ -95,5 +108,6 @@ func seatEnded(err error) bool {
 		errors.Is(err, peeks.ErrEnded) || errors.Is(err, peeks.ErrPaid) ||
 		errors.Is(err, fansly.ErrEnded) || errors.Is(err, fansly.ErrLocked) ||
 		errors.Is(err, cameraprive.ErrEnded) || errors.Is(err, cameraprive.ErrPaid) ||
-		errors.Is(err, cameraprive.ErrLocked)
+		errors.Is(err, cameraprive.ErrLocked) ||
+		errors.Is(err, joystick.ErrEnded) || errors.Is(err, joystick.ErrLocked)
 }

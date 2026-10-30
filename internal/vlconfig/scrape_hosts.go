@@ -267,6 +267,10 @@ var scrapeDomains = map[string][]string{
 		"rutube.ru", // the API, and the stream balancer and CDN hosts
 		"rtbcdn.ru", // the stream CDN
 	},
+	"joystick": {
+		"joystick.tv",      // the site and API
+		"playbackhost.com", // the streaming CDN (cdn.playbackhost.com)
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host

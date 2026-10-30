@@ -363,6 +363,17 @@
 		"channel_url": "https://api.vodlabs.io/channel/rutube/{username}"
 	},
 	{
+		"name": "joystick",
+		"display_name": "Joystick.tv",
+		"channel_url": "https://joystick.tv/u/{username}",
+		"login": {
+			"url": "https://joystick.tv/",
+			"refresh_url": "https://joystick.tv/",
+			"cookie_domains": ["joystick.tv"],
+			"session_cookie": "user"
+		}
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
