@@ -23,6 +23,7 @@ import type {
   BugReportRequest,
   BugReportResult,
   VODListPage,
+  VODPreviews,
 } from "../../shared/types";
 
 // AppRPCType is the Electrobun RPC schema between the bun process and the
@@ -104,6 +105,14 @@ export type AppRPCType = {
         response: VODListPage;
       };
       getRecordingThumbnail: {
+        params: { dir: string; file: string };
+        response: string;
+      };
+      getVodPreviews: {
+        params: { dir: string; file: string };
+        response: VODPreviews;
+      };
+      getContactSheet: {
         params: { dir: string; file: string };
         response: string;
       };

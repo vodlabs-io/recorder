@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { Film, Loader2 } from "lucide-react"
 import { getDaemonClient } from "@/lib/daemon"
+import { ScrubOverlay } from "./scrub-overlay"
+import type { ScrubFile } from "./scrub"
 
 // Thumbnails without a sidecar are generated on demand by the daemon
 // (ffmpeg), which is slow. Firing one request per card during a fast scroll
@@ -136,7 +138,17 @@ function subscribeGeneration(onChange: () => void): () => void {
 // thumbnails on demand, which can take a moment — hence the
 // per-card spinner. file "" asks for any screenshot of a session still being
 // worked on; null means there is nothing to show.
-export function LazyThumb({ dir, file }: { dir: string; file: string | null }) {
+// scrub, when given, lets the cursor scrub through the VOD's timeline
+// previews once the thumbnail has loaded.
+export function LazyThumb({
+  dir,
+  file,
+  scrub,
+}: {
+  dir: string
+  file: string | null
+  scrub?: ScrubFile[]
+}) {
   const ref = useRef<HTMLDivElement | null>(null)
   const [visible, setVisible] = useState(false)
   const [url, setUrl] = useState<string | null>(null)
@@ -199,7 +211,10 @@ export function LazyThumb({ dir, file }: { dir: string; file: string | null }) {
       className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-t-xl bg-muted"
     >
       {url ? (
-        <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
+        <>
+          <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
+          {scrub && scrub.length > 0 && <ScrubOverlay dir={dir} files={scrub} />}
+        </>
       ) : failed || file == null ? (
         <Film className="h-8 w-8 text-muted-foreground/50" />
       ) : visible ? (

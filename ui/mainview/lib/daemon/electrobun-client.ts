@@ -108,6 +108,7 @@ const electrobunClient: DaemonClient = {
   setStartAtLogin: (enabled) => req.setStartAtLogin({ enabled }),
   signOut: () => Promise.resolve(),
   mediaUrl: () => "",
+  previewTrackUrl: () => "",
 
   // Platform logins run in the bun process (only it can open a webview and read
   // its cookie store). PRIVACY: cookies are captured in bun and handed to the
@@ -123,6 +124,8 @@ const electrobunClient: DaemonClient = {
   listVodsPage: (offset, limit, rescan = false) =>
     req.listVodsPage({ offset, limit, rescan }),
   getRecordingThumbnail: (dir, file) => req.getRecordingThumbnail({ dir, file }),
+  getVodPreviews: (dir, file) => req.getVodPreviews({ dir, file }),
+  getContactSheet: (dir, file) => req.getContactSheet({ dir, file }),
   deleteVOD: (dir) => req.deleteVOD({ dir }),
   deleteVODs: (dirs) => req.deleteVODs({ dirs }),
   cancelMoves: (key) => req.cancelMoves(key ?? {}),

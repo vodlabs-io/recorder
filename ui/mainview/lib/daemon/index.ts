@@ -45,6 +45,7 @@ export type {
   BugReportRequest,
   BugReportResult,
   VODFile,
+  VODPreviews,
   RecordingListResult,
   VOD,
   VODState,

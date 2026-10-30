@@ -5,6 +5,7 @@ import {
   BUG_REPORT_TIMEOUT_MS,
   VODS_DELETE_TIMEOUT_MS,
   VODS_REV_KEY,
+  VODS_PREVIEWS_TIMEOUT_MS,
   VODS_THUMBNAIL_TIMEOUT_MS,
   refPayload,
 } from "@shared/daemon/subjects"
@@ -13,6 +14,7 @@ import type {
   VODCancelMovesResponse,
   AddStreamerResult,
   VODListPage,
+  VODPreviews,
   CloudIntervals,
   ConnectionInfo,
   DaemonInfo,
@@ -60,6 +62,7 @@ export type WebUrls = {
   signout: string
   signin: string
   media: (dir: string, file: string, download?: boolean) => string
+  previewTrack: (dir: string, file: string) => string
 }
 
 export function webUrls(base: string): WebUrls {
@@ -76,6 +79,13 @@ export function webUrls(base: string): WebUrls {
       u.searchParams.set("dir", dir)
       u.searchParams.set("file", file)
       if (download) u.searchParams.set("download", "1")
+      return u.href
+    },
+    previewTrack: (dir, file) => {
+      const u = at("api/vods/preview")
+      u.searchParams.set("dir", dir)
+      u.searchParams.set("file", file)
+      u.searchParams.set("kind", "vtt")
       return u.href
     },
   }
@@ -254,6 +264,20 @@ export class WebDaemonClient implements DaemonClient {
     )
     return res.jpeg_b64
   }
+  getVodPreviews = (dir: string, file: string) =>
+    this.session.request<VODPreviews>(
+      Subjects.vodsPreviews,
+      { dir, file },
+      VODS_PREVIEWS_TIMEOUT_MS,
+    )
+  getContactSheet = async (dir: string, file: string) => {
+    const res = await this.session.request<{ jpeg_b64: string }>(
+      Subjects.vodsContactSheet,
+      { dir, file },
+      VODS_PREVIEWS_TIMEOUT_MS,
+    )
+    return res.jpeg_b64
+  }
   deleteVOD = (dir: string) =>
     this.session.request<string>(Subjects.vodsDelete, { dir })
   deleteVODs = (dirs: string[]) =>
@@ -371,6 +395,7 @@ export class WebDaemonClient implements DaemonClient {
 
   mediaUrl = (dir: string, file: string, download = false) =>
     this.urls.media(dir, file, download)
+  previewTrackUrl = (dir: string, file: string) => this.urls.previewTrack(dir, file)
 
   // Signs this browser out: the daemon revokes the session and closes its
   // sockets, so the page goes to the sign-in page whatever the answer.

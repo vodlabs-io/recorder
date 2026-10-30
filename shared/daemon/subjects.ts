@@ -27,6 +27,8 @@ export const Subjects = {
   streamerSetOptions: "streamer.set_options",
   vodsList: "vods.list",
   vodsThumbnail: "vods.thumbnail",
+  vodsPreviews: "vods.previews",
+  vodsContactSheet: "vods.contact_sheet",
   vodsDelete: "vods.delete",
   vodsDeleteMany: "vods.delete_many",
   vodsCancelMoves: "vods.cancel_moves",
@@ -103,6 +105,10 @@ export const VODS_DELETE_TIMEOUT_MS = 120_000;
 // retry would start another ffmpeg. The daemon bounds its own work slightly
 // tighter (vodThumbnailTimeout), so a stuck generation reports an error.
 export const VODS_THUMBNAIL_TIMEOUT_MS = 60_000;
+
+// Previews (timeline sprites, hover strip, contact sheet) are generated on
+// first request like thumbnails, so they share the same ceiling.
+export const VODS_PREVIEWS_TIMEOUT_MS = VODS_THUMBNAIL_TIMEOUT_MS;
 
 // The KV key holding free space per Storage root (DiskStatus JSON). Rides the
 // "daemon.>" watch like the keys above, so the desktop app, the Web UI and the

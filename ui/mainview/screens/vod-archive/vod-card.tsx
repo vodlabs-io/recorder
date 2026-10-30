@@ -40,6 +40,7 @@ import {
   sessionTime,
 } from "./format"
 import { LazyThumb } from "./lazy-thumb"
+import { scrubFiles } from "./scrub-overlay"
 import { canDownloadVODs, canPlayVODs, downloadVOD, playVOD } from "@/lib/play-vod"
 
 type Props = {
@@ -171,7 +172,11 @@ export const VodCard = React.memo(function VodCard({
       >
         {/* A busy session with nothing produced yet asks for any screenshot
             of it (""), which the daemon takes from its raw parts. */}
-        <LazyThumb dir={s.dir} file={files[0]?.name ?? (busy ? "" : null)} />
+        <LazyThumb
+          dir={s.dir}
+          file={files[0]?.name ?? (busy ? "" : null)}
+          scrub={busy ? undefined : scrubFiles(files, s.duration_sec)}
+        />
         {files.length > 1 && (
           <Badge
             variant="secondary"

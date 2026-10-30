@@ -46,6 +46,7 @@ export type {
   BugReportResult,
   VODFile,
   VODListPage,
+  VODPreviews,
   RecordingListResult,
   VOD,
   VODState,
@@ -79,6 +80,7 @@ import type {
   BugReportRequest,
   BugReportResult,
   VODListPage,
+  VODPreviews,
 } from "@shared/types";
 
 // DaemonCapabilities declares which host-dependent features a DaemonClient
@@ -174,6 +176,11 @@ export interface DaemonClient {
   // (capability-gated: desktop only).
   listVodsPage(offset: number, limit: number, rescan?: boolean): Promise<VODListPage>;
   getRecordingThumbnail(dir: string, file: string): Promise<string>;
+  // getVodPreviews resolves to one file's preview layout and hover strip,
+  // getContactSheet to its contact sheet as base64 JPEG bytes. Both are
+  // generated on first request.
+  getVodPreviews(dir: string, file: string): Promise<VODPreviews>;
+  getContactSheet(dir: string, file: string): Promise<string>;
   deleteVOD(dir: string): Promise<string>;
   // deleteVODs removes a selection in one call. Not a loop over deleteVOD:
   // each single delete bumps the archive rev (refetching the list underneath
@@ -238,6 +245,9 @@ export interface DaemonClient {
   // URL that plays (or, with download, saves) one file of a finished
   // recording. "" unless capabilities.browserMedia.
   mediaUrl(dir: string, file: string, download?: boolean): string;
+  // URL of one file's timeline-preview track (WebVTT) for a player's seek
+  // bar. "" unless capabilities.browserMedia.
+  previewTrackUrl(dir: string, file: string): string;
 
   // Ends this browser's Web UI session and goes to the sign-in page. Only
   // meaningful when capabilities.webSession.

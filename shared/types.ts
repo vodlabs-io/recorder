@@ -589,6 +589,26 @@ export type VOD = {
   display_name?: string;
 };
 
+// VODPreviews mirrors vlapi's vods.previews response: how one VOD file's
+// timeline previews are laid out, and its hover strip (scrub_b64, a JPEG of
+// scrub.count tiles of tile size, scrub.cols per row, tile i showing the
+// video at scrub.times_ms[i]). portrait marks a three-up thumbnail.
+export type VODPreviews = {
+  version: number;
+  width: number;
+  height: number;
+  portrait: boolean;
+  duration_ms: number;
+  interval_ms: number;
+  frames: number;
+  sheets: number;
+  tile: [number, number];
+  scrub: { cols: number; count: number; times_ms: number[] };
+  codec?: string;
+  frame_rate?: number;
+  scrub_b64: string;
+};
+
 // VODTitle mirrors vodindex.Title: one title a session ran under, and when the
 // recorder first saw it.
 export type VODTitle = {
