@@ -27,8 +27,11 @@
     } else {
         "$releases/latest/download"
     }
-    # Windows builds are x64 only; Windows on Arm runs them under emulation.
-    $archive = 'cli_windows_amd64.zip'
+    # The machine's own architecture: an emulated x64 shell reports AMD64 in
+    # $env:PROCESSOR_ARCHITECTURE.
+    $machineArch = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment').PROCESSOR_ARCHITECTURE
+    $arch = if ($machineArch -eq 'ARM64') { 'arm64' } else { 'amd64' }
+    $archive = "cli_windows_$arch.zip"
     $dir = if ($env:VOD_INSTALL_DIR) {
         $env:VOD_INSTALL_DIR
     } else {
