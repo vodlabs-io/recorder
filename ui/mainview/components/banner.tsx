@@ -4,9 +4,10 @@ import { cn } from "@/lib/utils"
 // One notice strip, shared by every banner in the app so tone, spacing and
 // icon treatment cannot drift apart between screens.
 
-export type BannerTone = "warning" | "danger"
+export type BannerTone = "info" | "warning" | "danger"
 
 const TONE: Record<BannerTone, { box: string; icon: string }> = {
+  info: { box: "border-border bg-muted/40", icon: "text-muted-foreground" },
   warning: { box: "border-amber-500/40 bg-amber-500/10", icon: "text-amber-500" },
   danger: { box: "border-red-500/40 bg-red-500/10", icon: "text-red-500" },
 }
