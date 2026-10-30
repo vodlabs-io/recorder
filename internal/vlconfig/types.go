@@ -8,6 +8,14 @@ type AppConfig struct {
 	Cloud      CloudConfig        `koanf:"cloud"`
 	Scraper    ScraperConfig      `koanf:"scraper"`
 	Web        WebConfig          `koanf:"web"`
+	// ErrorReports is the user's answer to sending error reports.
+	ErrorReports ErrorReportsConfig `koanf:"error_reports"`
+}
+
+// ErrorReportsConfig is the [error_reports] section. Enabled is nil until the
+// user has answered.
+type ErrorReportsConfig struct {
+	Enabled *bool `koanf:"enabled"`
 }
 
 type streamersConfig struct {

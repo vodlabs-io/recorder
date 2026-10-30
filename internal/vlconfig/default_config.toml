@@ -94,3 +94,9 @@ scan_dirs = []
 # Absolute rather than a percentage: the question is always whether the next
 # VOD fits. 0 disables the warning.
 low_space_warn_gb = 20
+
+[error_reports]
+# Send error reports and crash reports to VodLabs (Sentry) so bugs can be
+# fixed. Off until you turn it on; the app asks once. What a report holds is
+# described at https://vodlabs.io/privacy#error-reports.
+# enabled = false
