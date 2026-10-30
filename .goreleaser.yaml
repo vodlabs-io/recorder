@@ -15,9 +15,6 @@ builds:
       - CGO_ENABLED=0
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
-    ignore:
-      - goos: windows
-        goarch: arm64
     # Reproducible: the same commit builds byte-identical binaries, so anyone
     # can rebuild a release and compare it with the published one.
     flags: [-trimpath]
@@ -52,9 +49,6 @@ builds:
       - CGO_ENABLED=0
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
-    ignore:
-      - goos: windows
-        goarch: arm64
     # Reproducible: the same commit builds byte-identical binaries, so anyone
     # can rebuild a release and compare it with the published one.
     flags: [-trimpath]

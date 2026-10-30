@@ -17,6 +17,7 @@ The ffmpeg package allows the application to use FFmpeg for post-processing with
 - Linux x86_64 (linux_amd64)
 - Linux ARM64 (linux_arm64)
 - Windows x86_64 (windows_amd64)
+- Windows ARM64 (windows_arm64)
 
 ## Download Latest Binaries
 
