@@ -37,6 +37,7 @@ import {
   formatRecordedTime,
   moveReasonDetail,
   moveReasonLabel,
+  playerTitles,
   sessionKey,
   sessionTime,
 } from "./format"
@@ -78,7 +79,7 @@ type Props = {
 }
 
 function openFile(s: VOD, file: string): void {
-  playVOD(s.dir, file)
+  playVOD(s.dir, file, playerTitles(s, file))
 }
 
 // A session is mergeable when it has ≥2 numbered parts (vodN.mp4 or
@@ -300,7 +301,7 @@ export const VodCard = React.memo(function VodCard({
                   </DropdownMenuItem>
                 )}
                 {hasPlayerChoice() && files.length > 0 && !busy && (
-                  <DropdownMenuItem onClick={() => playVOD(s.dir, files[0].name, other)}>
+                  <DropdownMenuItem onClick={() => playVOD(s.dir, files[0].name, { ...playerTitles(s, files[0].name), player: other })}>
                     {other === "app" ? (
                       <>
                         <Clapperboard className="h-4 w-4" /> Play in app

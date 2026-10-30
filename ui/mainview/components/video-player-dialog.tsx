@@ -3,6 +3,7 @@ import { Download, ExternalLink, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -21,7 +22,7 @@ type Source = { stream: RecordingStreamUrls } | { file: true }
 // recording holds a file that can't be streamed (WebM). The daemon serves
 // files with Range support, so seeking works either way.
 export function VideoPlayerDialog() {
-  const { dir, file, open } = playerStore()
+  const { dir, file, title, subtitle, open } = playerStore()
   const client = getDaemonClient()
   const [source, setSource] = useState<Source | null>(null)
 
@@ -45,8 +46,6 @@ export function VideoPlayerDialog() {
     }
   }, [client, dir, file, open])
 
-  const whole = source && "stream" in source
-  const title = whole ? dir.split(/[\\/]/).filter(Boolean).pop() || file : file
 
   return (
     <Dialog
@@ -54,8 +53,11 @@ export function VideoPlayerDialog() {
       onOpenChange={(o) => playerStore.setState({ open: o })}
     >
       <DialogContent className="sm:max-w-4xl">
-        <DialogHeader>
-          <DialogTitle className="truncate pr-8 font-mono text-sm">{title}</DialogTitle>
+        <DialogHeader className="min-w-0 gap-0.5 pr-8">
+          <DialogTitle className="line-clamp-2 break-words text-base" title={title}>
+            {title}
+          </DialogTitle>
+          {subtitle && <DialogDescription className="truncate">{subtitle}</DialogDescription>}
         </DialogHeader>
         <Suspense fallback={<PlayerPlaceholder />}>
           {!source ? (
@@ -75,7 +77,7 @@ export function VideoPlayerDialog() {
               variant="outline"
               onClick={() => {
                 playerStore.setState({ open: false })
-                playVOD(dir, file, "os")
+                playVOD(dir, file, { player: "os" })
               }}
             >
               <ExternalLink className="h-4 w-4" />

@@ -6,15 +6,22 @@ import { appStore } from "@/state/app-state"
 // Playing a recording means the app's own player, or on the desktop the OS
 // video player when the user prefers it; this module picks between them.
 
-// The file the in-page player shows, or null when it is closed.
+// The file the in-page player shows, and the title over it.
 export const playerStore = create<{
   dir: string
   file: string
+  title: string
+  subtitle?: string
   open: boolean
-}>(() => ({ dir: "", file: "", open: false }))
+}>(() => ({ dir: "", file: "", title: "", open: false }))
 
 // Player is where a recording plays: the app's own player, or the OS one.
 export type Player = "app" | "os"
+
+// PlayOptions pick the player (by default the user's) and what the app's
+// player shows over the video: the stream title, and a line under it. A
+// missing title falls back to the file name.
+export type PlayOptions = { player?: Player; title?: string; subtitle?: string }
 
 // canPlayVODs reports whether this host can play a recording at all.
 export function canPlayVODs(): boolean {
@@ -49,10 +56,11 @@ export function canDownloadVODs(): boolean {
   return getDaemonClient().capabilities.browserMedia
 }
 
-// playVOD plays one file of a recording in player. The app's player plays
-// the whole recording from that file on; if it can't be reached, the OS
-// player takes over where there is one.
-export function playVOD(dir: string, file: string, player: Player = defaultPlayer()): void {
+// playVOD plays one file of a recording. The app's player plays the whole
+// recording from that file on; if it can't be reached, the OS player takes
+// over where there is one.
+export function playVOD(dir: string, file: string, opts: PlayOptions = {}): void {
+  const player = opts.player ?? defaultPlayer()
   const client = getDaemonClient()
   if (player === "os" && client.capabilities.openPath) {
     void client.openPath(joinPath(dir, file))
@@ -60,7 +68,7 @@ export function playVOD(dir: string, file: string, player: Player = defaultPlaye
   }
   if (!client.capabilities.inPagePlayer) return
   void client.prepareMedia().then((ok) => {
-    if (ok) playerStore.setState({ dir, file, open: true })
+    if (ok) playerStore.setState({ dir, file, title: opts.title || file, subtitle: opts.subtitle, open: true })
     else if (client.capabilities.openPath) void client.openPath(joinPath(dir, file))
   })
 }
