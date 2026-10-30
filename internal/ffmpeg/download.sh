@@ -35,7 +35,7 @@ PLATFORM="${GOOS}_${GOARCH}"
 
 # Limit supported binaries to known release artifacts
 case "$PLATFORM" in
-    darwin_amd64|darwin_arm64|linux_amd64|linux_arm64|windows_amd64) ;;
+    darwin_amd64|darwin_arm64|linux_amd64|linux_arm64|windows_amd64|windows_arm64) ;;
     *)
         echo "ERROR: No prebuilt ffmpeg binary available for platform: $PLATFORM"
         exit 1
@@ -50,14 +50,15 @@ REPO="$REPO_OWNER/$REPO_NAME"
 # Pinned release and per-platform checksums (custom-ffmpeg's build-ffmpeg.yml,
 # FFmpeg n9.0.2 + x264 commit b35605ace3ddf7c1a5d67a2eb553f034aef41d55). Bump
 # both together, deliberately, in a commit that names the new release.
-RELEASE_TAG="ffmpeg-15-1"
+RELEASE_TAG="ffmpeg-18-1"
 sha256_for_platform() {
     case "$1" in
-        darwin_amd64)  echo "4fd0890d8d3548efa08816c99db6c7a9949beb9a2d9dcd61277d2d0c42bba02c" ;;
-        darwin_arm64)  echo "bdce9af5449a6ab8362a045019a3060666ec2ead5808e17638abe4f89b8c5739" ;;
-        linux_amd64)   echo "86747d31d2e48f6d5f9ba2d5baedd7b4eecbe41383250bb327f2343faa839ef6" ;;
-        linux_arm64)   echo "0c921f974b37c20baacc48a409fe015651ce1ccf7c0ab297373ced2c3eb80b54" ;;
-        windows_amd64) echo "e83e3ffbe2971a0762d5ab7d6b3325719f388ccb2d1755923830fca2dab10c71" ;;
+        darwin_amd64)  echo "1848b378705140f3b4cc31d9ba3a899fd618a69ed3f458c3e1f2fce15c56e297" ;;
+        darwin_arm64)  echo "95e841e152dbcbd790e79f1c80fd049bfdf0afeb847ec545f129b6e51d28757e" ;;
+        linux_amd64)   echo "ebab6f4d3dce4f0af7731374994b752a2b5728e4b4c902326e100c3f6ad2b2be" ;;
+        linux_arm64)   echo "929621e87885c47e66c61a0eac36e796a6ebcbb347f50a76c87520addeee299b" ;;
+        windows_amd64) echo "37879e79d42a15cb4d4ec7f019c0d3c059288805ff4b0afee43938f125b6f2b4" ;;
+        windows_arm64) echo "f2bad8e17e83ddfacad408a6ef3a270ead67bedca0b267c9fe7bfe33435e30c1" ;;
     esac
 }
 
@@ -134,7 +135,7 @@ fi
 rm -f "$ARCHIVE_PATH"
 
 # Verify extraction
-if [ "$PLATFORM" = "windows_amd64" ]; then
+if [ "$GOOS" = "windows" ]; then
     BINARY="$BIN_DIR/$PLATFORM/ffmpeg.exe"
     PROBE_BINARY="$BIN_DIR/$PLATFORM/ffprobe.exe"
 else
