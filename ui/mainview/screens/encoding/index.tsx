@@ -14,6 +14,7 @@ import {
 } from "@/lib/daemon"
 import { platformDisplayName } from "@/data/supported-platforms"
 import { canPlayVODs, playVOD } from "@/lib/play-vod"
+import { recordingName } from "@/screens/vod-archive/format"
 import {
   AlertTriangle,
   ChevronDown,
@@ -253,7 +254,7 @@ export default function Encoding() {
                             size="icon"
                             className="h-6 w-6"
                             title="Watch"
-                            onClick={() => playVOD(j.dir, j.output)}
+                            onClick={() => playVOD(j.dir, j.output, { title: recordingName(j), subtitle: j.output })}
                           >
                             <Play className="h-4 w-4" />
                           </Button>

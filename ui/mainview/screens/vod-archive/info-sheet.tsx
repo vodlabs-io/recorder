@@ -36,6 +36,7 @@ import {
   gapSec,
   moveReasonDetail,
   moveReasonLabel,
+  playerTitles,
   sessionTime,
   spanSec,
 } from "./format"
@@ -239,7 +240,7 @@ function InfoBody({
 
         <div className="flex flex-wrap gap-2">
           {playable && (
-            <Button onClick={() => playVOD(s.dir, files[0].name)}>
+            <Button onClick={() => playVOD(s.dir, files[0].name, playerTitles(s, files[0].name))}>
               <Clapperboard className="h-4 w-4" />
               Play{files.length > 1 && player === "os" ? " part 1" : ""}
             </Button>
@@ -352,7 +353,7 @@ function InfoBody({
                   <button
                     type="button"
                     disabled={!openable}
-                    onClick={() => playVOD(s.dir, f.name)}
+                    onClick={() => playVOD(s.dir, f.name, playerTitles(s, f.name))}
                     className={cn(
                       "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left text-xs",
                       openable && "cursor-pointer hover:bg-accent",

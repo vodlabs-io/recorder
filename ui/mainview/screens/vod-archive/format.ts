@@ -1,4 +1,5 @@
 import type { MoveFailureReason, VOD } from "@/lib/daemon"
+import { platformDisplayName } from "@/data/supported-platforms"
 
 // zero is what a missing or zero size renders as. It defaults to an em dash
 // because a card's size is unknown rather than empty, but a running total
@@ -202,3 +203,39 @@ export function moveReasonDetail(reason?: MoveFailureReason): string | undefined
   }
 }
 
+
+// streamTitle is the title the stream ran under when file began: the last one
+// the recorder had seen by then, or the first when none dates that early.
+// undefined when the platform reported none.
+export function streamTitle(s: VOD, file?: string): string | undefined {
+  const titles = (s.titles ?? []).filter((t) => t.text.trim() !== "")
+  if (titles.length === 0) return undefined
+  const start = s.files?.find((f) => f.name === file)?.start
+  const at = start ? new Date(start).getTime() : NaN
+  let pick = titles[0]
+  for (const t of titles) {
+    const when = t.at ? new Date(t.at).getTime() : NaN
+    if (!isNaN(at) && !isNaN(when) && when <= at) pick = t
+  }
+  return pick.text
+}
+
+// recordingName names a recording by who and when, for where it has no
+// stream title.
+export function recordingName(
+  s: { display_name?: string; username?: string; platform?: string },
+  iso?: string,
+): string {
+  const parts = [s.display_name || s.username || "Unknown streamer"]
+  if (s.platform) parts.push(platformDisplayName(s.platform))
+  if (iso) parts.push(formatDate(iso))
+  return parts.join(" · ")
+}
+
+// playerTitles is what the player shows above a recording's file: its stream
+// title over who and when, or who and when alone.
+export function playerTitles(s: VOD, file: string): { title: string; subtitle?: string } {
+  const name = recordingName(s, sessionTime(s))
+  const title = streamTitle(s, file)
+  return title ? { title, subtitle: name } : { title: name }
+}
