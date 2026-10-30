@@ -178,25 +178,30 @@ it), and a real QR sign-in completed with the account showing Active.
 
 ### The built artefact
 
-`desktop/native/win-x64/libNativeWrapper.dll` is the patched build, committed
-deliberately (`.gitignore` has an exception for it) because a Windows build
-without it silently ships a sign-in flow that cannot finish.
-`scripts/vendor-native.ts` copies it over the stock library in the assembled
-bundle during Electrobun's `postBuild` hook, and fails the build rather than
-falling back. `desktop/native/win-x64/ELECTROBUN_VERSION` names the release it
-was built from; the native ABI changes between releases, so the hook also fails
+`desktop/native/win-x64/libNativeWrapper.dll` and
+`desktop/native/win-arm64/libNativeWrapper.dll` are the patched builds, committed
+deliberately (`.gitignore` has exceptions for them) because a Windows build
+without one silently ships a sign-in flow that cannot finish.
+`scripts/vendor-native.ts` copies the one for the build's architecture over the stock
+library in the assembled bundle during Electrobun's `postBuild` hook, and fails
+the build rather than falling back. `ELECTROBUN_VERSION` beside each names the
+release it was built from; the native ABI changes between releases, so the hook also fails
 when that is not the release being built.
 
-The committed copy is the `v2.0.5` build (SHA-256
-`045686cfb40c7a5566378b3bb95c2046797db222ef930cfb0005dbf05ac580d5`, from
-`d06abc9edf0b4e55116129cabbfe17bf89e11791`), built by workflow run 40791385661.
+The committed copies are `v2.0.5` builds, from
+`d06abc9edf0b4e55116129cabbfe17bf89e11791`:
+
+- x64: SHA-256 `045686cfb40c7a5566378b3bb95c2046797db222ef930cfb0005dbf05ac580d5`,
+  built by workflow run 40791385661.
+- arm64: SHA-256 `46dcb8370b98cc6929e361b2922db7b876f574d69dd6a1c902104bcc2b515f2b`, built by workflow run 41021555771.
 
 ### Rebuilding
 
 `.github/workflows/electrobun-native-win.yml` checks out the pinned electrobun
 tag, applies `electrobun-<version>-win-cookie-api.patch`, and builds with Hutch
-the way upstream's release workflow does. Run it from the Actions tab, then
-commit the artifact to `desktop/native/win-x64/`. It sets `timeout-minutes`
+the way upstream's release workflow does, natively on an x64 and an ARM64
+runner. Run it from the Actions tab, then commit each artifact to
+`desktop/native/win-<arch>/`. It sets `timeout-minutes`
 because a run once stalled for 2+ hours at the CEF extraction step, which
 normally takes ~15s.
 
@@ -214,6 +219,7 @@ and Hutch (`irm https://hutch.blackboard.sh/hutch/install.ps1 | iex`).
     cd package
     hutch run install
     call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+    rem on Windows on Arm: vcvarsall.bat arm64, and set ELECTROBUN_BUILD_ARCH=arm64
     hutch build.ts --release --core-only
 
 `dist\libNativeWrapper.dll` is the result. A local build embeds that
