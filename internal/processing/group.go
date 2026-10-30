@@ -59,6 +59,18 @@ func (j *job) processGroupJob(ctx context.Context, logger *slog.Logger, s *Servi
 			logger.Warn("Failed to generate thumbnail", "output", j.groupOutput, "error", err)
 		}
 	}
+	// Previews come from the same local copy. A portrait video's thumbnail
+	// becomes three frames side by side, so it is cached after this.
+	hdr := PreviewHeader{Platform: j.vod.Platform, Username: j.vod.Username}
+	if len(j.vod.Parts) > 0 {
+		hdr.Start = j.vod.Parts[0].StartTime
+	}
+	if _, err := WritePreviews(ctx, logger, j.vod.BaseOutDir, j.vod.BaseOutDir, j.groupOutput, hdr); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		logger.Warn("Failed to generate previews", "output", j.groupOutput, "error", err)
+	}
 	// Copy it somewhere local before the move puts it out of easy reach.
 	if _, err := os.Stat(thumbPath); err == nil {
 		s.thumbnailCached(j.vod.SessionID, j.groupOutput, thumbPath)

@@ -644,18 +644,24 @@ func (s *Service) deliverOutput(ctx context.Context, job *Job, stagedOut, outMer
 // best-effort: the merged file is already in place, so failures only degrade
 // metadata (logged, never fatal).
 func (s *Service) finalizeMerge(ctx context.Context, logger *slog.Logger, job *Job, plan *mergePlan, outFinal string) {
-	// Thumbnail for the merged file (best-effort, like the group job's).
+	// Thumbnail and previews for the merged file (best-effort, like the
+	// group job's).
 	thumbPath := filepath.Join(job.Dir, processing.ThumbnailName(job.Output))
-	if err := processing.GenerateThumbnail(ctx, logger, outFinal, thumbPath); err != nil {
-		logger.Warn("Failed to generate merged thumbnail", "error", err)
+	thumbErr := processing.GenerateThumbnail(ctx, logger, outFinal, thumbPath)
+	if _, err := processing.WritePreviews(ctx, logger, job.Dir, job.Dir, job.Output,
+		processing.PreviewHeader{Platform: job.Platform, Username: job.Username}); err != nil {
+		logger.Warn("Failed to generate merged previews", "error", err)
+	}
+	if thumbErr != nil {
+		logger.Warn("Failed to generate merged thumbnail", "error", thumbErr)
 	} else if s.cacheThumbnail != nil {
 		// job.Dir may be on slow archive storage, so cache the screenshot while
 		// it is known to be readable.
 		s.cacheThumbnail(job.SessionID, job.Output, thumbPath)
 	}
 
-	// Originals: delete, or hide as .bak. Their sidecar thumbnails are
-	// orphaned either way.
+	// Originals: delete, or hide as .bak. Their sidecar thumbnails and
+	// previews are orphaned either way.
 	for _, p := range plan.parts {
 		if job.DeleteParts {
 			if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
@@ -672,6 +678,7 @@ func (s *Service) finalizeMerge(ctx context.Context, logger *slog.Logger, job *J
 		if err := os.Remove(thumb); err != nil && !os.IsNotExist(err) {
 			logger.Warn("Failed to remove part thumbnail", "part", p.name, "error", err)
 		}
+		processing.RemovePreviews(job.Dir, p.name)
 		if s.forgetThumbnail != nil {
 			s.forgetThumbnail(job.SessionID, p.name)
 		}
