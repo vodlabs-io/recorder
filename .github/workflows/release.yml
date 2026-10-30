@@ -196,6 +196,10 @@ jobs:
             name: win-x64
             installer: '*win-x64*Setup*.zip'
             friendly: VodLabs-Recorder-Windows-x64-Setup.zip
+          - runner: windows-11-arm
+            name: win-arm64
+            installer: '*win-arm64*Setup*.zip'
+            friendly: VodLabs-Recorder-Windows-arm64-Setup.zip
           - runner: ubuntu-latest
             name: linux-x64
             installer: '*linux-x64*-Setup.tar.gz'
