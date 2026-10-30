@@ -3,7 +3,8 @@
 # Upstream's Session cookie API is a no-op on Windows, which blocks desktop
 # platform login there; patches/electrobun-<version>-win-cookie-api.patch fixes
 # it. This mirrors the Windows leg of electrobun's own release workflow closely
-# enough to produce the one artefact we need: libNativeWrapper.dll.
+# enough to produce the one artefact we need: libNativeWrapper.dll, for x64 and
+# ARM64.
 #
 # Manual only — it is slow (it vendors CEF) and only needs re-running when the
 # patch or the pinned electrobun version changes. See patches/README.md.
@@ -19,9 +20,20 @@ on:
 
 jobs:
   build:
-    # Upstream's own Windows runner. Its build uses NMake under the MSVC
-    # developer prompt, so the image's Visual Studio version does not matter.
-    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        # Upstream's own Windows runners, each compiling natively. The build
+        # uses NMake under the MSVC developer prompt, so the image's Visual
+        # Studio version does not matter.
+        include:
+          - runner: windows-2025
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      ELECTROBUN_BUILD_ARCH: ${{ matrix.arch }}
     # A hung runner otherwise burns hours silently (GitHub's own default is 6h)
     # before anyone notices.
     timeout-minutes: 45
@@ -65,7 +77,7 @@ jobs:
       - name: Setup MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: x64
+          arch: ${{ matrix.arch }}
 
       - name: Get CEF version for cache key
         id: cef-version
@@ -79,7 +91,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: electrobun/package/vendors/cef
-          key: cef-win-x64-${{ steps.cef-version.outputs.version }}
+          key: cef-win-${{ matrix.arch }}-${{ steps.cef-version.outputs.version }}
 
       - name: Build
         run: hutch build.ts --release --core-only
@@ -88,6 +100,6 @@ jobs:
       - name: Upload libNativeWrapper.dll
         uses: actions/upload-artifact@v7
         with:
-          name: libNativeWrapper-win-x64
+          name: libNativeWrapper-win-${{ matrix.arch }}
           path: electrobun/package/dist/libNativeWrapper.dll
           if-no-files-found: error
