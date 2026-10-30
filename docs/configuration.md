@@ -48,6 +48,7 @@ with `vod config edit`. The main settings:
 | `processing.encoder` | `auto` | The video encoder for merges: `auto` picks a working hardware encoder, `software` uses x264. |
 | `processing.low_space_warn_gb` | `20` | Warn when a recording folder has less free space than this, in GiB. |
 | `logger.level` | `info` | How much to log: `debug`, `info`, `warn` or `error`. |
+| `error_reports.enabled` | not set (off) | Send error reports to VodLabs. The app asks once; change it in Settings › General or with `vod config error-reports on\|off`. See [What the recorder sends](data.md#error-reports-and-bug-reports). |
 
 Environment variables override the file, for the daemon and for `vod` alike:
 `VLREC_DOWNLOAD_DIR`, `VLREC_ARCHIVE_DIR`, `VLREC_OUTPUT_TEMPLATE`,
