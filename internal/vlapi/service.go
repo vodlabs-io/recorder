@@ -65,6 +65,9 @@ type Service struct {
 	// after startup rather than passed to Init, since only the daemon can
 	// resolve per-streamer archive folders. nil omits the numbers from info.
 	diskRoots func(context.Context) []diskspace.Root
+	// reportCtl handles error and bug reports. Installed by the daemon after
+	// startup; nil answers reports.* with an internal error.
+	reportCtl reportController
 }
 
 // SetDiskStatusProvider installs the function that reports free space per
@@ -168,5 +171,10 @@ func Init(
 	loginGroup.AddEndpoint("remove", micro.HandlerFunc(vs.handlePlatformLoginRemove))
 	loginGroup.AddEndpoint("list", micro.HandlerFunc(vs.handlePlatformLoginList))
 	loginGroup.AddEndpoint("health", micro.HandlerFunc(vs.handlePlatformLoginHealth))
+	// Error and bug reports. Local-only, like platformlogin.*.
+	reportsGroup := ms.AddGroup("reports")
+	reportsGroup.AddEndpoint("get", micro.HandlerFunc(vs.handleGetErrorReports))
+	reportsGroup.AddEndpoint("set", micro.HandlerFunc(vs.handleSetErrorReports))
+	reportsGroup.AddEndpoint("bug", micro.HandlerFunc(vs.handleSendBugReport))
 	return vs, nil
 }
