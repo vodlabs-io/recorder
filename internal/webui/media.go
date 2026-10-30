@@ -39,6 +39,7 @@ var mediaTypes = map[string]string{
 	".jpeg": "image/jpeg",
 	".png":  "image/png",
 	".json": "application/json",
+	".vtt":  "text/vtt; charset=utf-8",
 	".txt":  "text/plain; charset=utf-8",
 }
 

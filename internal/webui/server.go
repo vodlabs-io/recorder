@@ -198,6 +198,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /nats", s.requireSession(s.handleBridge))
 	mux.HandleFunc("GET /api/vods/file", s.requireSession(s.handleVODFile))
 	mux.HandleFunc("HEAD /api/vods/file", s.requireSession(s.handleVODFile))
+	mux.HandleFunc("GET /api/vods/preview", s.requireSession(s.handleVODPreview))
 	mux.HandleFunc("GET /{$}", s.requirePage(s.serveIndex))
 	mux.HandleFunc("GET /assets/", s.requirePage(s.serveAsset))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
