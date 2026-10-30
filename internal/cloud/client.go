@@ -229,3 +229,11 @@ func (c *Client) Close() {
 	c.closeConnection()
 	c.logger.Close()
 }
+
+// ClientID is the public key that identifies this recorder to the service,
+// or "" before it has registered.
+func (c *Client) ClientID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.clientID
+}
