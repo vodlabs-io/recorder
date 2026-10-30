@@ -109,6 +109,7 @@ const electrobunClient: DaemonClient = {
   signOut: () => Promise.resolve(),
   mediaUrl: () => "",
   previewTrackUrl: () => "",
+  recordingStreamUrls: () => null,
 
   // Platform logins run in the bun process (only it can open a webview and read
   // its cookie store). PRIVACY: cookies are captured in bun and handed to the

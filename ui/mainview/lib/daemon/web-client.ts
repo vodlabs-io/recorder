@@ -32,7 +32,7 @@ import type {
   BugReportRequest,
   BugReportResult,
 } from "@shared/types"
-import type { DaemonClient } from "./client"
+import type { DaemonClient, RecordingStreamUrls } from "./client"
 
 // A few requests make the daemon wait on a remote answer before it can reply,
 // so they need a ceiling above the daemon's own. Time out below it and the user
@@ -63,6 +63,7 @@ export type WebUrls = {
   signin: string
   media: (dir: string, file: string, download?: boolean) => string
   previewTrack: (dir: string, file: string) => string
+  stream: (dir: string, start: string) => RecordingStreamUrls
 }
 
 export function webUrls(base: string): WebUrls {
@@ -87,6 +88,20 @@ export function webUrls(base: string): WebUrls {
       u.searchParams.set("file", file)
       u.searchParams.set("kind", "vtt")
       return u.href
+    },
+    stream: (dir, start) => {
+      const route = (name: string) => {
+        const u = at("api/vods/hls/" + name)
+        u.searchParams.set("dir", dir)
+        return u
+      }
+      const playlist = route("index.m3u8")
+      playlist.searchParams.set("start", start)
+      return {
+        playlist: playlist.href,
+        chapters: route("chapters.vtt").href,
+        thumbnails: route("thumbs.vtt").href,
+      }
     },
   }
 }
@@ -396,6 +411,7 @@ export class WebDaemonClient implements DaemonClient {
   mediaUrl = (dir: string, file: string, download = false) =>
     this.urls.media(dir, file, download)
   previewTrackUrl = (dir: string, file: string) => this.urls.previewTrack(dir, file)
+  recordingStreamUrls = (dir: string, start: string) => this.urls.stream(dir, start)
 
   // Signs this browser out: the daemon revokes the session and closes its
   // sockets, so the page goes to the sign-in page whatever the answer.

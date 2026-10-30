@@ -115,6 +115,15 @@ export type DaemonCapabilities = {
   browserMedia: boolean;
 };
 
+// RecordingStreamUrls play a whole recording in the page: an HLS playlist of
+// all its files, a chapters track marking each file, and a timeline-preview
+// track across them.
+export type RecordingStreamUrls = {
+  playlist: string;
+  chapters: string;
+  thumbnails: string;
+};
+
 export interface DaemonClient {
   readonly capabilities: DaemonCapabilities;
 
@@ -249,6 +258,11 @@ export interface DaemonClient {
   // URL of one file's timeline-preview track (WebVTT) for a player's seek
   // bar. "" unless capabilities.browserMedia.
   previewTrackUrl(dir: string, file: string): string;
+  // URLs that play every file of a finished recording as one HLS stream,
+  // starting at file start, with a chapter per file and the files' timeline
+  // previews on the stream's timeline. The playlist is 404 when a file can't
+  // be streamed that way (WebM). null unless capabilities.browserMedia.
+  recordingStreamUrls(dir: string, start: string): RecordingStreamUrls | null;
 
   // Ends this browser's Web UI session and goes to the sign-in page. Only
   // meaningful when capabilities.webSession.

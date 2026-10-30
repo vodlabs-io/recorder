@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/vodlabs-io/recorder/internal/vodhls"
 )
 
 // Config configures a Server.
@@ -50,6 +52,7 @@ type Server struct {
 	limit   *limiter
 	revoked *revocations
 	bridges *bridges
+	hls     *vodhls.Cache
 	now     func() time.Time
 	srv     *http.Server
 	ln      net.Listener
@@ -103,6 +106,7 @@ func newServer(cfg Config) (*Server, error) {
 		limit:   newLimiter(),
 		revoked: loadRevocations(cfg.Dir),
 		bridges: newBridges(),
+		hls:     vodhls.NewCache(hlsCacheSamples),
 		now:     time.Now,
 		stop:    make(chan struct{}),
 	}
@@ -199,6 +203,11 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /api/vods/file", s.requireSession(s.handleVODFile))
 	mux.HandleFunc("HEAD /api/vods/file", s.requireSession(s.handleVODFile))
 	mux.HandleFunc("GET /api/vods/preview", s.requireSession(s.handleVODPreview))
+	mux.HandleFunc("GET /api/vods/hls/index.m3u8", s.requireSession(s.handleHLSPlaylist))
+	mux.HandleFunc("GET /api/vods/hls/init.mp4", s.requireSession(s.handleHLSInit))
+	mux.HandleFunc("GET /api/vods/hls/seg.m4s", s.requireSession(s.handleHLSSegment))
+	mux.HandleFunc("GET /api/vods/hls/chapters.vtt", s.requireSession(s.handleHLSChapters))
+	mux.HandleFunc("GET /api/vods/hls/thumbs.vtt", s.requireSession(s.handleHLSThumbnails))
 	mux.HandleFunc("GET /{$}", s.requirePage(s.serveIndex))
 	mux.HandleFunc("GET /assets/", s.requirePage(s.serveAsset))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

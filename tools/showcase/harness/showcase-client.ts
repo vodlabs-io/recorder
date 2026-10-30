@@ -277,6 +277,7 @@ export class ShowcaseDaemonClient implements DaemonClient {
   signOut = () => Promise.resolve()
   mediaUrl = () => ""
   previewTrackUrl = () => ""
+  recordingStreamUrls = () => null
   getFolderSuggestions = () => Promise.resolve([])
 
   getQuitPrompt = () => Promise.resolve<QuitPrompt | null>(null)
