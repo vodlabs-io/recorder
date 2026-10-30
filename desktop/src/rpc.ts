@@ -113,7 +113,7 @@ export type AppRPCType = {
         response: VODPreviews;
       };
       getContactSheet: {
-        params: { dir: string; file: string };
+        params: { dir: string };
         response: string;
       };
       deleteVOD: { params: { dir: string }; response: string };

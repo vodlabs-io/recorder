@@ -342,10 +342,10 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
           { dir, file },
           VODS_PREVIEWS_TIMEOUT_MS,
         ),
-      getContactSheet: async ({ dir, file }) => {
+      getContactSheet: async ({ dir }) => {
         const res = await session.request<{ jpeg_b64: string }>(
           Subjects.vodsContactSheet,
-          { dir, file },
+          { dir },
           VODS_PREVIEWS_TIMEOUT_MS,
         );
         return res.jpeg_b64;

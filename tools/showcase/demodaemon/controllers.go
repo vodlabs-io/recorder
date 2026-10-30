@@ -161,7 +161,7 @@ func (a *archive) VODPreviews(_ context.Context, dir, file string) (processing.P
 }
 
 // VODContactSheet has nothing to show, like VODPreviews.
-func (a *archive) VODContactSheet(_ context.Context, dir, file string) ([]byte, error) {
+func (a *archive) VODContactSheet(_ context.Context, dir string) ([]byte, error) {
 	return nil, fmt.Errorf("%w: demo VODs have no contact sheet", vlapi.ErrNotFound)
 }
 

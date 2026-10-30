@@ -270,10 +270,10 @@ export class WebDaemonClient implements DaemonClient {
       { dir, file },
       VODS_PREVIEWS_TIMEOUT_MS,
     )
-  getContactSheet = async (dir: string, file: string) => {
+  getContactSheet = async (dir: string) => {
     const res = await this.session.request<{ jpeg_b64: string }>(
       Subjects.vodsContactSheet,
-      { dir, file },
+      { dir },
       VODS_PREVIEWS_TIMEOUT_MS,
     )
     return res.jpeg_b64

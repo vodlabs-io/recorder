@@ -176,11 +176,12 @@ export interface DaemonClient {
   // (capability-gated: desktop only).
   listVodsPage(offset: number, limit: number, rescan?: boolean): Promise<VODListPage>;
   getRecordingThumbnail(dir: string, file: string): Promise<string>;
-  // getVodPreviews resolves to one file's preview layout and hover strip,
-  // getContactSheet to its contact sheet as base64 JPEG bytes. Both are
-  // generated on first request.
+  // getVodPreviews resolves to one file's preview layout and hover strip;
+  // getContactSheet to the VOD's contact sheet, one across all its files, as
+  // base64 JPEG bytes (built on first request). Both reject for a VOD
+  // recorded before previews existed.
   getVodPreviews(dir: string, file: string): Promise<VODPreviews>;
-  getContactSheet(dir: string, file: string): Promise<string>;
+  getContactSheet(dir: string): Promise<string>;
   deleteVOD(dir: string): Promise<string>;
   // deleteVODs removes a selection in one call. Not a loop over deleteVOD:
   // each single delete bumps the archive rev (refetching the list underneath
