@@ -23,8 +23,10 @@ The app is signed and notarized by Apple, so it opens without a warning.
 
 Requires 64-bit Windows 11. Windows 10 should also work, with the Microsoft
 Edge WebView2 runtime installed, but is not yet tested. Extract
-`VodLabs-Recorder-Windows-x64-Setup.zip` and run the Setup program inside it;
-it needs the `.installer` folder next to it.
+`VodLabs-Recorder-Windows-x64-Setup.zip` (or
+`VodLabs-Recorder-Windows-arm64-Setup.zip` on Windows on Arm, such as
+Snapdragon laptops) and run the Setup program inside it; it needs the
+`.installer` folder next to it.
 
 The installer is not yet code-signed, so Windows SmartScreen may show
 "Windows protected your PC". Click **More info**, then **Run anyway**.
