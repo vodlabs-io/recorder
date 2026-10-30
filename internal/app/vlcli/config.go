@@ -10,6 +10,7 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"github.com/urfave/cli/v3"
+	"github.com/vodlabs-io/recorder/internal/errreport"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 )
 
@@ -53,6 +54,13 @@ func (a *App) LoadConfig(ctx context.Context, cmd *cli.Command) (context.Context
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 	a.natsURL = fmt.Sprintf("nats://%s:%d", a.cfg.Host, a.cfg.Port)
+
+	// Only a panic is reported from vod; its errors are printed instead.
+	var reports vlconfig.ErrorReportsConfig
+	if err := k.Unmarshal("error_reports", &reports); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+	a.flushReports = errreport.Init(errreport.Options{Component: "cli", Enabled: reports.Enabled})
 
 	return ctx, nil
 }

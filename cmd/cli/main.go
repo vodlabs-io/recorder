@@ -9,11 +9,15 @@ import (
 
 	"github.com/urfave/cli/v3"
 	"github.com/vodlabs-io/recorder/internal/app/vlcli"
+	"github.com/vodlabs-io/recorder/internal/errreport"
 	"github.com/vodlabs-io/recorder/internal/version"
 )
 
 func main() {
 	log.SetFlags(0) // Disable timestamps in log messages
+	// Reports a panic if the user turned error reports on; LoadConfig reads
+	// their answer.
+	defer errreport.Recover()
 
 	app := &vlcli.App{}
 
