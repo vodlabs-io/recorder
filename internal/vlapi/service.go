@@ -148,6 +148,8 @@ func Init(
 	vodsGroup := ms.AddGroup("vods")
 	vodsGroup.AddEndpoint("list", micro.HandlerFunc(vs.handleListVODs))
 	vodsGroup.AddEndpoint("thumbnail", micro.HandlerFunc(vs.handleVODThumbnail))
+	vodsGroup.AddEndpoint("previews", micro.HandlerFunc(vs.handleVODPreviews))
+	vodsGroup.AddEndpoint("contact_sheet", micro.HandlerFunc(vs.handleVODContactSheet))
 	vodsGroup.AddEndpoint("delete", micro.HandlerFunc(vs.handleDeleteVOD))
 	vodsGroup.AddEndpoint("delete_many", micro.HandlerFunc(vs.handleDeleteManyVODs))
 	vodsGroup.AddEndpoint("cancel_moves", micro.HandlerFunc(vs.handleCancelMoves))

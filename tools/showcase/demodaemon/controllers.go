@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/vodlabs-io/recorder/internal/encoding"
+	"github.com/vodlabs-io/recorder/internal/processing"
 	"github.com/vodlabs-io/recorder/internal/streamer"
 	"github.com/vodlabs-io/recorder/internal/vlapi"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
@@ -151,6 +152,17 @@ func (a *archive) VODThumbnail(_ context.Context, dir, file string) ([]byte, err
 		}
 	}
 	return nil, fmt.Errorf("%w: %s has no %s", vlapi.ErrNotFound, dir, file)
+}
+
+// VODPreviews has nothing to show: demo VODs carry a screenshot, not a video
+// to preview, so the archive falls back to the plain thumbnail.
+func (a *archive) VODPreviews(_ context.Context, dir, file string) (processing.PreviewsManifest, []byte, error) {
+	return processing.PreviewsManifest{}, nil, fmt.Errorf("%w: demo VODs have no previews", vlapi.ErrNotFound)
+}
+
+// VODContactSheet has nothing to show, like VODPreviews.
+func (a *archive) VODContactSheet(_ context.Context, dir, file string) ([]byte, error) {
+	return nil, fmt.Errorf("%w: demo VODs have no contact sheet", vlapi.ErrNotFound)
 }
 
 // DeleteVOD drops the VOD from the listing, so a walkthrough can show a delete.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/micro"
+	"github.com/vodlabs-io/recorder/internal/processing"
 	"github.com/vodlabs-io/recorder/internal/streamer"
 	"github.com/vodlabs-io/recorder/internal/vodindex"
 )
@@ -30,6 +31,12 @@ type VODController interface {
 	// VODThumbnail returns the JPEG screenshot for one file of a listed VOD,
 	// generating and caching it when missing.
 	VODThumbnail(ctx context.Context, dir, file string) ([]byte, error)
+	// VODPreviews returns the layout of a VOD file's timeline previews and
+	// its hover strip, generating them on first request.
+	VODPreviews(ctx context.Context, dir, file string) (processing.PreviewsManifest, []byte, error)
+	// VODContactSheet returns a VOD file's contact sheet, generating it on
+	// first request.
+	VODContactSheet(ctx context.Context, dir, file string) ([]byte, error)
 	// DeleteVOD removes a listed VOD's folder from disk.
 	DeleteVOD(ctx context.Context, dir string) error
 	// CancelMoves retires pending moves and returns how many it retired. A nil
@@ -87,6 +94,12 @@ type vodThumbnailResponse struct {
 	// JPEG bytes, base64-encoded inside the JSON envelope. Thumbnails are
 	// small (~10-50 KB), so the base64 overhead is fine.
 	JpegB64 string `json:"jpeg_b64"`
+}
+
+// vodPreviewsResponse is a VOD file's preview layout and its hover strip.
+type vodPreviewsResponse struct {
+	processing.PreviewsManifest
+	ScrubB64 string `json:"scrub_b64"`
 }
 
 type vodDeleteRequest struct {
@@ -210,6 +223,59 @@ func (s *Service) handleVODThumbnail(req micro.Request) {
 		return
 	}
 	respond(req, OK(vodThumbnailResponse{JpegB64: base64.StdEncoding.EncodeToString(jpeg)}))
+}
+
+// vodPreviewsTimeout bounds on-demand preview generation. Like thumbnails it
+// sits under the client's timeout.
+const vodPreviewsTimeout = 55 * time.Second
+
+// handleVODPreviews returns (generating on demand) one file's preview layout
+// and hover strip.
+func (s *Service) handleVODPreviews(req micro.Request) {
+	r, ok := s.vodFileRequest(req)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), vodPreviewsTimeout)
+	defer cancel()
+	m, strip, err := s.vodsCtl.VODPreviews(ctx, r.Dir, r.File)
+	if err != nil {
+		respondVODError(req, err, "previews unavailable")
+		return
+	}
+	respond(req, OK(vodPreviewsResponse{PreviewsManifest: m, ScrubB64: base64.StdEncoding.EncodeToString(strip)}))
+}
+
+// handleVODContactSheet returns (generating on demand) one file's contact
+// sheet. Sheets are capped well under the message size once base64-encoded.
+func (s *Service) handleVODContactSheet(req micro.Request) {
+	r, ok := s.vodFileRequest(req)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), vodPreviewsTimeout)
+	defer cancel()
+	jpeg, err := s.vodsCtl.VODContactSheet(ctx, r.Dir, r.File)
+	if err != nil {
+		respondVODError(req, err, "contact sheet unavailable")
+		return
+	}
+	respond(req, OK(vodThumbnailResponse{JpegB64: base64.StdEncoding.EncodeToString(jpeg)}))
+}
+
+// vodFileRequest parses a {dir, file} request, answering it itself when it
+// can't be served.
+func (s *Service) vodFileRequest(req micro.Request) (vodThumbnailRequest, bool) {
+	var r vodThumbnailRequest
+	if s.vodsCtl == nil {
+		respond(req, fail(errInternal, "vod controller unavailable"))
+		return r, false
+	}
+	if err := json.Unmarshal(req.Data(), &r); err != nil || r.Dir == "" || r.File == "" {
+		respond(req, fail(errInvalidArg, "dir and file are required"))
+		return r, false
+	}
+	return r, true
 }
 
 // handleDeleteVOD removes a whole VOD folder.

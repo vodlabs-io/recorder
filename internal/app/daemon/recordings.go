@@ -317,7 +317,7 @@ func (a *App) VODThumbnail(ctx context.Context, dir, file string) ([]byte, error
 	// volume, which is exactly what the cache exists to avoid.
 	key := thumbCacheKey(session)
 	if jpeg, ok := a.thumbCache.Get(key, file); ok {
-		return jpeg, nil
+		return a.upgradeThumbnail(ctx, dir, file, jpeg), nil
 	}
 
 	thumbPath := filepath.Join(session.Dir, processing.ThumbnailName(file))
@@ -332,7 +332,11 @@ func (a *App) VODThumbnail(ctx context.Context, dir, file string) ([]byte, error
 		// after an eviction, against never scattering sidecars into a folder the
 		// user asked us only to read.
 		if a.isReadOnlyVODRoot(session.Root) {
-			return a.thumbnailWithoutSidecar(ctx, key, file, videoPath)
+			jpeg, err := a.thumbnailWithoutSidecar(ctx, key, file, videoPath)
+			if err != nil {
+				return nil, err
+			}
+			return a.upgradeThumbnail(ctx, dir, file, jpeg), nil
 		}
 		if err := processing.GenerateThumbnail(ctx, a.log.With("service", "recordings"), videoPath, thumbPath); err != nil {
 			return nil, err
@@ -345,7 +349,25 @@ func (a *App) VODThumbnail(ctx context.Context, dir, file string) ([]byte, error
 	if err := a.thumbCache.Put(key, file, jpeg); err != nil {
 		a.log.Debug("Failed to cache thumbnail", "session", key, "file", file, "error", err)
 	}
-	return jpeg, nil
+	return a.upgradeThumbnail(ctx, dir, file, jpeg), nil
+}
+
+// upgradeThumbnail turns a portrait screenshot into the three-up thumbnail
+// that previews generation writes, generating previews on this first view.
+// Any failure keeps the screenshot it was given.
+func (a *App) upgradeThumbnail(ctx context.Context, dir, file string, jpeg []byte) []byte {
+	if !portraitJPEG(jpeg) {
+		return jpeg
+	}
+	_, out, err := a.ensurePreviews(ctx, dir, file)
+	if err != nil {
+		a.log.Debug("Could not upgrade portrait thumbnail", "dir", dir, "file", file, "error", err)
+		return jpeg
+	}
+	if b, err := os.ReadFile(filepath.Join(out, processing.ThumbnailName(file))); err == nil && completeJPEG(b) && !portraitJPEG(b) {
+		return b
+	}
+	return jpeg
 }
 
 // thumbnailWithoutSidecar generates one thumbnail for a VOD on a read-only scan
