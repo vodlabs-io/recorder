@@ -29,6 +29,7 @@ export const Subjects = {
   vodsThumbnail: "vods.thumbnail",
   vodsPreviews: "vods.previews",
   vodsContactSheet: "vods.contact_sheet",
+  vodsMediaBase: "vods.media_base",
   vodsDelete: "vods.delete",
   vodsDeleteMany: "vods.delete_many",
   vodsCancelMoves: "vods.cancel_moves",

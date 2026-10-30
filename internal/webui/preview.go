@@ -27,8 +27,8 @@ var sheetRef = regexp.MustCompile(`(?m)^[^\s#]+\.thumbs\.(\d{3})\.jpg(#xywh=)`)
 // seek bar. The track names its sheets relative to itself on disk; here each
 // becomes a request to this route, which a browser resolves against the
 // track's own URL.
-func (s *Server) handleVODPreview(w http.ResponseWriter, r *http.Request) {
-	po, ok := s.cfg.Files.(PreviewOpener)
+func (m *media) handleVODPreview(w http.ResponseWriter, r *http.Request) {
+	po, ok := m.files.(PreviewOpener)
 	if !ok {
 		http.NotFound(w, r)
 		return

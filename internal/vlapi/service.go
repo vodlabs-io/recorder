@@ -150,6 +150,7 @@ func Init(
 	vodsGroup.AddEndpoint("thumbnail", micro.HandlerFunc(vs.handleVODThumbnail))
 	vodsGroup.AddEndpoint("previews", micro.HandlerFunc(vs.handleVODPreviews))
 	vodsGroup.AddEndpoint("contact_sheet", micro.HandlerFunc(vs.handleVODContactSheet))
+	vodsGroup.AddEndpoint("media_base", micro.HandlerFunc(vs.handleVODMediaBase))
 	vodsGroup.AddEndpoint("delete", micro.HandlerFunc(vs.handleDeleteVOD))
 	vodsGroup.AddEndpoint("delete_many", micro.HandlerFunc(vs.handleDeleteManyVODs))
 	vodsGroup.AddEndpoint("cancel_moves", micro.HandlerFunc(vs.handleCancelMoves))

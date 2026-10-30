@@ -53,6 +53,8 @@ type App struct {
 	cloudClient *cloud.Client
 	pages       *webpage.Resolver // finds what plays on pages no platform claims, on this machine
 	webSrv      *webui.Server     // Web UI listener, when [web] is enabled
+	mediaMu     sync.Mutex        // Guards localMedia
+	localMedia  *webui.LocalMedia // Desktop player's loopback listener, once asked for
 	sessionReg  *session.Registry
 	strFile     *vlconfig.StreamersFile // streamers.toml
 	cookieStore *platformauth.Store     // Local, encrypted third-party platform logins
@@ -103,6 +105,11 @@ func (a *App) cleanup() {
 	if a.webSrv != nil {
 		a.webSrv.Close()
 	}
+	a.mediaMu.Lock()
+	if a.localMedia != nil {
+		a.localMedia.Close()
+	}
+	a.mediaMu.Unlock()
 	if a.sessionReg != nil {
 		a.sessionReg.Close()
 	}

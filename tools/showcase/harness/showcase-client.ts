@@ -55,6 +55,7 @@ export class ShowcaseDaemonClient implements DaemonClient {
     webviewLogin: true,
     webSession: false,
     browserMedia: false,
+    inPagePlayer: false,
   }
 
   private readonly session: DaemonSession
@@ -278,6 +279,7 @@ export class ShowcaseDaemonClient implements DaemonClient {
   mediaUrl = () => ""
   previewTrackUrl = () => ""
   recordingStreamUrls = () => null
+  prepareMedia = () => Promise.resolve(false)
   getFolderSuggestions = () => Promise.resolve([])
 
   getQuitPrompt = () => Promise.resolve<QuitPrompt | null>(null)

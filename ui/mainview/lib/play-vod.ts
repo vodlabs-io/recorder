@@ -1,9 +1,10 @@
 import { create } from "zustand"
 import { getDaemonClient } from "@/lib/daemon"
 import { joinPath } from "@/lib/utils"
+import { appStore } from "@/state/app-state"
 
-// Playing a recording means the OS video player on the desktop and an
-// in-page <video> in the Web UI; this module picks the one the host has.
+// Playing a recording means the app's own player, or on the desktop the OS
+// video player when the user prefers it; this module picks between them.
 
 // The file the in-page player shows, or null when it is closed.
 export const playerStore = create<{
@@ -12,10 +13,34 @@ export const playerStore = create<{
   open: boolean
 }>(() => ({ dir: "", file: "", open: false }))
 
+// Player is where a recording plays: the app's own player, or the OS one.
+export type Player = "app" | "os"
+
 // canPlayVODs reports whether this host can play a recording at all.
 export function canPlayVODs(): boolean {
   const c = getDaemonClient().capabilities
-  return c.openPath || c.browserMedia
+  return c.openPath || c.inPagePlayer
+}
+
+// hasPlayerChoice reports whether this host has both players (the desktop
+// app), so the user can pick a default and reach the other.
+export function hasPlayerChoice(): boolean {
+  const c = getDaemonClient().capabilities
+  return c.openPath && c.inPagePlayer
+}
+
+// defaultPlayer is where a recording plays unless asked otherwise: the
+// user's choice where there is one, else whichever player the host has.
+export function defaultPlayer(): Player {
+  if (hasPlayerChoice()) return appStore.getState().prefs.player ?? "app"
+  return getDaemonClient().capabilities.inPagePlayer ? "app" : "os"
+}
+
+// useDefaultPlayer is defaultPlayer, re-rendering when the user changes it.
+export function useDefaultPlayer(): Player {
+  const pref = appStore((s) => s.prefs.player)
+  if (hasPlayerChoice()) return pref ?? "app"
+  return getDaemonClient().capabilities.inPagePlayer ? "app" : "os"
 }
 
 // canDownloadVODs reports whether recordings can be saved from this host,
@@ -24,15 +49,20 @@ export function canDownloadVODs(): boolean {
   return getDaemonClient().capabilities.browserMedia
 }
 
-export function playVOD(dir: string, file: string): void {
+// playVOD plays one file of a recording in player. The app's player plays
+// the whole recording from that file on; if it can't be reached, the OS
+// player takes over where there is one.
+export function playVOD(dir: string, file: string, player: Player = defaultPlayer()): void {
   const client = getDaemonClient()
-  if (client.capabilities.openPath) {
+  if (player === "os" && client.capabilities.openPath) {
     void client.openPath(joinPath(dir, file))
     return
   }
-  if (client.capabilities.browserMedia) {
-    playerStore.setState({ dir, file, open: true })
-  }
+  if (!client.capabilities.inPagePlayer) return
+  void client.prepareMedia().then((ok) => {
+    if (ok) playerStore.setState({ dir, file, open: true })
+    else if (client.capabilities.openPath) void client.openPath(joinPath(dir, file))
+  })
 }
 
 export function downloadVOD(dir: string, file: string): void {

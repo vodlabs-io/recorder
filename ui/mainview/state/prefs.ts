@@ -26,6 +26,7 @@ export const DEFAULT_PREFS: Partial<Preferences> = {
     dashboard_column_visibility: DEFAULT_COLUMN_VIS,
     dashboard_page_size: DEFAULT_PAGE_SIZE,
     welcome_seen: false,
+    player: 'app',
 }
 
 export const createPreferenceSlice = (set: any, get: any): PreferenceSlice => ({

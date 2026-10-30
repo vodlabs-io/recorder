@@ -110,9 +110,12 @@ export type DaemonCapabilities = {
   // Signed in to the daemon with its sign-in token (the Web UI), so the UI
   // offers Sign out.
   webSession: boolean;
-  // Recordings play and download in the page through mediaUrl, for hosts
-  // whose recordings live on another machine (the Web UI).
+  // Recordings download through mediaUrl, for hosts whose recordings live on
+  // another machine (the Web UI).
   browserMedia: boolean;
+  // Recordings play in the page, through the URLs below once prepareMedia
+  // resolves.
+  inPagePlayer: boolean;
 };
 
 // RecordingStreamUrls play a whole recording in the page: an HLS playlist of
@@ -252,16 +255,19 @@ export interface DaemonClient {
   getStartAtLogin(): Promise<StartAtLogin>;
   setStartAtLogin(enabled: boolean): Promise<StartAtLogin>;
 
+  // prepareMedia readies the URLs below, resolving whether they work: the
+  // desktop app first asks the daemon where its player listener is.
+  prepareMedia(): Promise<boolean>;
   // URL that plays (or, with download, saves) one file of a finished
-  // recording. "" unless capabilities.browserMedia.
+  // recording. "" until prepareMedia resolves true.
   mediaUrl(dir: string, file: string, download?: boolean): string;
   // URL of one file's timeline-preview track (WebVTT) for a player's seek
-  // bar. "" unless capabilities.browserMedia.
+  // bar. "" until prepareMedia resolves true.
   previewTrackUrl(dir: string, file: string): string;
   // URLs that play every file of a finished recording as one HLS stream,
   // starting at file start, with a chapter per file and the files' timeline
   // previews on the stream's timeline. The playlist is 404 when a file can't
-  // be streamed that way (WebM). null unless capabilities.browserMedia.
+  // be streamed that way (WebM). null until prepareMedia resolves true.
   recordingStreamUrls(dir: string, start: string): RecordingStreamUrls | null;
 
   // Ends this browser's Web UI session and goes to the sign-in page. Only

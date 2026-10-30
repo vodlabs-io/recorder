@@ -350,6 +350,10 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
         );
         return res.jpeg_b64;
       },
+      getVodMediaBase: async () => {
+        const res = await session.request<{ url: string }>(Subjects.vodsMediaBase, {});
+        return res.url;
+      },
       deleteVOD: ({ dir }) =>
         session.request<string>(Subjects.vodsDelete, { dir }),
       deleteVODs: ({ dirs }) =>

@@ -56,13 +56,13 @@ func contentType(name string) string {
 
 // handleVODFile serves a recording's file with Range support, so a <video>
 // can seek. download=1 asks the browser to save it instead.
-func (s *Server) handleVODFile(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.Files == nil {
+func (m *media) handleVODFile(w http.ResponseWriter, r *http.Request) {
+	if m.files == nil {
 		http.NotFound(w, r)
 		return
 	}
 	q := r.URL.Query()
-	f, err := s.cfg.Files.OpenVODFile(r.Context(), q.Get("dir"), q.Get("file"))
+	f, err := m.files.OpenVODFile(r.Context(), q.Get("dir"), q.Get("file"))
 	switch {
 	case errors.Is(err, ErrNotReady):
 		w.Header().Set("Retry-After", "5")

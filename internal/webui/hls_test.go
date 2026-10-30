@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -107,5 +108,35 @@ func TestHLSFallsBackForNonMP4(t *testing.T) {
 	h.signIn(c, testToken)
 	if code := h.do(c, "GET", "api/vods/hls/index.m3u8?dir="+url.QueryEscape(dir), "").StatusCode; code != 404 {
 		t.Fatalf("playlist with a WebM file = %d", code)
+	}
+}
+
+func TestLocalMediaNeedsItsPrefix(t *testing.T) {
+	dir := t.TempDir()
+	recordPart(t, dir, "vod1.mp4", 2)
+	l, err := StartLocalMedia(sessionFiles{dir, []string{"vod1.mp4"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	get := func(u string) *http.Response {
+		t.Helper()
+		res, err := http.Get(u)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res
+	}
+	q := "api/vods/hls/index.m3u8?dir=" + url.QueryEscape(dir)
+	if res := get(l.Base() + q); res.StatusCode != 200 || res.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("with the prefix = %d %v", res.StatusCode, res.Header)
+	}
+	u, _ := url.Parse(l.Base())
+	if res := get("http://" + u.Host + "/" + q); res.StatusCode != 404 {
+		t.Fatalf("without the prefix = %d", res.StatusCode)
+	}
+	if res := get("http://" + u.Host + "/0123456789abcdef0123456789abcdef0123456789abcdef/" + q); res.StatusCode != 404 {
+		t.Fatalf("with a wrong prefix = %d", res.StatusCode)
 	}
 }
