@@ -9,6 +9,7 @@ export type {
   ConnectionState,
   DaemonCapabilities,
   DaemonClient,
+  RecordingStreamUrls,
   DaemonInfo,
   DaemonMeta,
   DiskStatus,
