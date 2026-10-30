@@ -17,11 +17,11 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// Contact sheet geometry, after vcsi's defaults: a 1500 px sheet, 5 px
-// between frames, a 10 px margin round the header, 16 px header text and
+// Contact sheet geometry, after vcsi's defaults: 1500 px wide (callers
+// building from smaller frames pick narrower), 5 px between frames, a 10 px margin round the header, 16 px header text and
 // 12 px timestamps in a translucent box 5 px from each frame's corner.
 const (
-	contactWidth     = 1500
+	ContactWidth     = 1500
 	contactSpacing   = 5
 	contactMargin    = 10
 	headerFontSize   = 16
@@ -43,10 +43,10 @@ func ContactGrid(info Info) (cols, rows int) {
 	return 4, 4
 }
 
-// ContactTile is the size each frame is decoded at.
-func ContactTile(info Info) Tile {
+// ContactTile is the size each frame of a sheet width px wide is drawn at.
+func ContactTile(info Info, width int) Tile {
 	cols, _ := ContactGrid(info)
-	w := (contactWidth - (cols-1)*contactSpacing) / cols
+	w := (width - (cols-1)*contactSpacing) / cols
 	h := w * 9 / 16
 	if info.Width > 0 && info.Height > 0 {
 		h = w * info.Height / info.Width
@@ -68,22 +68,23 @@ type Shot struct {
 	Img image.Image
 }
 
-// ContactSheet renders a vcsi-style sheet: header lines (the first is
-// usually the file name) over a grid of shots, each stamped with its time.
-// The JPEG is re-encoded at lower quality until it fits the size cap.
-func ContactSheet(info Info, header []string, shots []Shot) ([]byte, error) {
+// ContactSheet renders a vcsi-style sheet width px wide: header lines (the
+// first is usually the file name) over a grid of shots, each stamped with
+// its time. The JPEG is re-encoded at lower quality until it fits the size
+// cap.
+func ContactSheet(info Info, width int, header []string, shots []Shot) ([]byte, error) {
 	if len(shots) == 0 {
 		return nil, errors.New("preview: no shots for a contact sheet")
 	}
 	cols, rows := ContactGrid(info)
-	tile := ContactTile(info)
+	tile := ContactTile(info, width)
 	hf, sf, err := faces()
 	if err != nil {
 		return nil, err
 	}
 	lineH := headerFontSize * 12 / 10
 	headerH := 2*contactMargin + len(header)*lineH
-	width := cols*(tile.W+contactSpacing) - contactSpacing
+	width = cols*(tile.W+contactSpacing) - contactSpacing
 	usedRows := min(rows, (len(shots)+cols-1)/cols)
 	height := headerH + usedRows*(tile.H+contactSpacing)
 

@@ -155,7 +155,7 @@ func GeneratePreviews(ctx context.Context, logger *slog.Logger, videoPath, thumb
 		return PreviewsManifest{}, errors.New("previews: no frames decoded")
 	}
 
-	sw := preview.NewSheetWriter(tile, StoryboardSheetPrefix(file), write)
+	sw := preview.NewSheetWriter(tile, preview.SheetCols, preview.SheetRows, StoryboardSheetPrefix(file), write)
 	for i, f := range frames {
 		if err := sw.Add(times[i], f); err != nil {
 			return PreviewsManifest{}, err
@@ -186,7 +186,7 @@ func GeneratePreviews(ctx context.Context, logger *slog.Logger, videoPath, thumb
 		return PreviewsManifest{}, fmt.Errorf("previews: contact sheet: %w", err)
 	}
 	stat, _ := os.Stat(videoPath)
-	sheet, err := preview.ContactSheet(info, contactHeader(file, stat, info, hdr), shots)
+	sheet, err := preview.ContactSheet(info, preview.ContactWidth, contactHeader(file, stat, info, hdr), shots)
 	if err != nil {
 		return PreviewsManifest{}, err
 	}
@@ -310,7 +310,7 @@ func decodePicked(ctx context.Context, dec *preview.Decoder, src *preview.MP4, t
 // sharper, so a fade or placeholder doesn't take a slot.
 func contactShots(ctx context.Context, dec *preview.Decoder, src *preview.MP4, path string, info preview.Info) ([]preview.Shot, error) {
 	targets := preview.ContactTargets(info)
-	tile := preview.ContactTile(info)
+	tile := preview.ContactTile(info, preview.ContactWidth)
 	box := preview.Box{W: tile.W, H: tile.H}
 	var cand []preview.Shot
 	if src != nil {

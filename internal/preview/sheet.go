@@ -42,8 +42,9 @@ func even(n int) int {
 	return n
 }
 
-// SheetCols and SheetRows lay out each sprite sheet: 64 previews, about
-// 150-250 KB as a JPEG.
+// SheetCols and SheetRows lay out a finished file's sprite sheets: 64
+// previews, about 150-250 KB as a JPEG. A live recording publishes smaller
+// sheets, since only full ones are published.
 const (
 	SheetCols = 8
 	SheetRows = 8
@@ -57,26 +58,39 @@ type Cue struct {
 	X, Y, W, H int
 }
 
-// SheetWriter packs timeline previews into sprite sheets as they arrive,
-// holding one sheet's canvas in memory. Sheets are named prefix000.jpg,
+// SheetWriter packs timeline previews into sprite sheets as they arrive.
+// It holds only the open sheet's tiles, as the small JPEGs they arrived in,
+// and composes a sheet when it fills. Sheets are named prefix000.jpg,
 // prefix001.jpg, … and written through write.
 type SheetWriter struct {
-	tile    Tile
-	prefix  string
-	quality int
-	write   func(name string, data []byte) error
+	tile       Tile
+	cols, rows int
+	prefix     string
+	quality    int
+	write      func(name string, data []byte) error
 
-	canvas  *image.YCbCr
-	sheet   int
-	inSheet int
-	done    []Cue // cues of written sheets
-	open    []Cue // cues of the sheet being filled
-	tiles   [][]byte
+	sheet int
+	done  []Cue // cues of written sheets
+	open  []Cue // cues of the sheet being filled
+	tiles [][]byte
 }
 
-// NewSheetWriter starts a storyboard of tile-sized previews.
-func NewSheetWriter(tile Tile, prefix string, write func(name string, data []byte) error) *SheetWriter {
-	return &SheetWriter{tile: tile, prefix: prefix, quality: 70, write: write}
+// NewSheetWriter starts a storyboard of tile-sized previews, cols x rows to
+// a sheet.
+func NewSheetWriter(tile Tile, cols, rows int, prefix string, write func(name string, data []byte) error) *SheetWriter {
+	return &SheetWriter{tile: tile, cols: max(1, cols), rows: max(1, rows), prefix: prefix, quality: 70, write: write}
+}
+
+// Resume continues a storyboard whose sheets up to the one cues end in were
+// already written.
+func (s *SheetWriter) Resume(cues []Cue) {
+	s.done = append([]Cue(nil), cues...)
+	for _, c := range cues {
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimPrefix(c.Image, s.prefix), "%03d.jpg", &n); err == nil && n >= s.sheet {
+			s.sheet = n + 1
+		}
+	}
 }
 
 // SheetName is the file name of sheet n.
@@ -85,22 +99,17 @@ func (s *SheetWriter) SheetName(n int) string { return fmt.Sprintf("%s%03d.jpg",
 // Add places the preview shown from at onward. Previews must arrive in time
 // order. A full sheet is encoded and written before Add returns.
 func (s *SheetWriter) Add(at time.Duration, frame []byte) error {
-	img, err := jpeg.Decode(bytes.NewReader(frame))
-	if err != nil {
+	if _, err := jpeg.DecodeConfig(bytes.NewReader(frame)); err != nil {
 		return fmt.Errorf("preview: decode frame: %w", err)
 	}
-	if s.canvas == nil {
-		s.canvas = blackYCbCr(SheetCols*s.tile.W, SheetRows*s.tile.H)
-	}
-	x := (s.inSheet % SheetCols) * s.tile.W
-	y := (s.inSheet / SheetCols) * s.tile.H
-	placeFit(s.canvas, image.Rect(x, y, x+s.tile.W, y+s.tile.H), img)
+	i := len(s.open)
+	x := (i % s.cols) * s.tile.W
+	y := (i / s.cols) * s.tile.H
 	s.closeLast(at)
 	s.open = append(s.open, Cue{Start: at, End: at, Image: s.SheetName(s.sheet), X: x, Y: y, W: s.tile.W, H: s.tile.H})
 	s.tiles = append(s.tiles, frame)
-	s.inSheet++
-	if s.inSheet == SheetCols*SheetRows {
-		return s.flush(false)
+	if len(s.open) == s.cols*s.rows {
+		return s.Flush()
 	}
 	return nil
 }
@@ -108,25 +117,31 @@ func (s *SheetWriter) Add(at time.Duration, frame []byte) error {
 func (s *SheetWriter) closeLast(at time.Duration) {
 	if n := len(s.open); n > 0 {
 		s.open[n-1].End = at
-	} else if n := len(s.done); n > 0 {
+	} else if n := len(s.done); n > 0 && s.done[n-1].End < at {
 		s.done[n-1].End = at
 	}
 }
 
-// flush writes the sheet being filled. A partial sheet keeps only the rows
-// it uses.
-func (s *SheetWriter) flush(partial bool) error {
-	if s.inSheet == 0 {
+// Flush writes the sheet being filled, keeping only the rows it uses, and
+// starts the next one.
+func (s *SheetWriter) Flush() error {
+	n := len(s.open)
+	if n == 0 {
 		return nil
 	}
-	img := s.canvas
-	if partial {
-		rows := (s.inSheet + SheetCols - 1) / SheetCols
-		cols := min(s.inSheet, SheetCols)
-		img = img.SubImage(image.Rect(0, 0, cols*s.tile.W, rows*s.tile.H)).(*image.YCbCr)
+	rows := (n + s.cols - 1) / s.cols
+	cols := min(n, s.cols)
+	canvas := blackYCbCr(cols*s.tile.W, rows*s.tile.H)
+	for i, t := range s.tiles {
+		img, err := jpeg.Decode(bytes.NewReader(t))
+		if err != nil {
+			return fmt.Errorf("preview: decode frame: %w", err)
+		}
+		c := s.open[i]
+		placeFit(canvas, image.Rect(c.X, c.Y, c.X+c.W, c.Y+c.H), img)
 	}
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: s.quality}); err != nil {
+	if err := jpeg.Encode(&buf, canvas, &jpeg.Options{Quality: s.quality}); err != nil {
 		return err
 	}
 	if err := s.write(s.SheetName(s.sheet), buf.Bytes()); err != nil {
@@ -135,14 +150,11 @@ func (s *SheetWriter) flush(partial bool) error {
 	s.done = append(s.done, s.open...)
 	s.open, s.tiles = nil, nil
 	s.sheet++
-	s.inSheet = 0
-	s.canvas = nil
 	return nil
 }
 
-// Pending lists the previews not yet in a written sheet, with each one's own
-// JPEG, so a live storyboard can publish them loose until their sheet fills.
-func (s *SheetWriter) Pending() ([]Cue, [][]byte) { return s.open, s.tiles }
+// Pending lists the previews not yet in a written sheet.
+func (s *SheetWriter) Pending() int { return len(s.open) }
 
 // Cues lists the previews in written sheets.
 func (s *SheetWriter) Cues() []Cue { return s.done }
@@ -150,7 +162,7 @@ func (s *SheetWriter) Cues() []Cue { return s.done }
 // Close writes the last, partial sheet and ends the last preview at end.
 func (s *SheetWriter) Close(end time.Duration) ([]Cue, error) {
 	s.closeLast(end)
-	if err := s.flush(true); err != nil {
+	if err := s.Flush(); err != nil {
 		return nil, err
 	}
 	return s.done, nil
@@ -175,6 +187,45 @@ func WriteVTT(w io.Writer, cues []Cue) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+// ParseVTT reads a thumbnails track back, as WriteVTT writes it.
+func ParseVTT(data []byte) ([]Cue, error) {
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	if !strings.HasPrefix(text, "WEBVTT") {
+		return nil, fmt.Errorf("preview: not a WebVTT track")
+	}
+	var cues []Cue
+	for _, block := range strings.Split(text, "\n\n")[1:] {
+		lines := strings.Split(strings.TrimSpace(block), "\n")
+		if len(lines) < 2 {
+			continue
+		}
+		from, to, ok := strings.Cut(lines[0], " --> ")
+		if !ok {
+			continue
+		}
+		start, err1 := parseVTTTime(from)
+		end, err2 := parseVTTTime(to)
+		if err1 != nil || err2 != nil {
+			return nil, fmt.Errorf("preview: bad cue timing %q", lines[0])
+		}
+		c := Cue{Start: start, End: end, Image: lines[1]}
+		if img, frag, ok := strings.Cut(lines[1], "#xywh="); ok {
+			c.Image = img
+			fmt.Sscanf(frag, "%d,%d,%d,%d", &c.X, &c.Y, &c.W, &c.H)
+		}
+		cues = append(cues, c)
+	}
+	return cues, nil
+}
+
+func parseVTTTime(s string) (time.Duration, error) {
+	var h, m, sec, ms int
+	if _, err := fmt.Sscanf(strings.TrimSpace(s), "%d:%d:%d.%d", &h, &m, &sec, &ms); err != nil {
+		return 0, err
+	}
+	return time.Duration(h)*time.Hour + time.Duration(m)*time.Minute + time.Duration(sec)*time.Second + time.Duration(ms)*time.Millisecond, nil
 }
 
 func vttTime(d time.Duration) string {
