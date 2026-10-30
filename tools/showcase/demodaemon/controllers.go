@@ -165,6 +165,11 @@ func (a *archive) VODContactSheet(_ context.Context, dir string) ([]byte, error)
 	return nil, fmt.Errorf("%w: demo VODs have no contact sheet", vlapi.ErrNotFound)
 }
 
+// VODMediaBase has nothing to serve: demo VODs have no video.
+func (a *archive) VODMediaBase(context.Context) (string, error) {
+	return "", fmt.Errorf("%w: demo VODs have no video", vlapi.ErrNotFound)
+}
+
 // DeleteVOD drops the VOD from the listing, so a walkthrough can show a delete.
 func (a *archive) DeleteVOD(_ context.Context, dir string) error {
 	a.mu.Lock()

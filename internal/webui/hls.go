@@ -39,8 +39,8 @@ type hlsPart struct {
 
 // hlsParts plans every file of the recording in dir. Any file that can't be
 // segmented fails the lot, so the player falls back to one file at a time.
-func (s *Server) hlsParts(ctx context.Context, dir string) ([]hlsPart, error) {
-	sl, ok := s.cfg.Files.(SessionLister)
+func (m *media) hlsParts(ctx context.Context, dir string) ([]hlsPart, error) {
+	sl, ok := m.files.(SessionLister)
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -54,7 +54,7 @@ func (s *Server) hlsParts(ctx context.Context, dir string) ([]hlsPart, error) {
 	parts := make([]hlsPart, 0, len(names))
 	var offset float64
 	for _, name := range names {
-		f, p, err := s.openPlan(ctx, dir, name)
+		f, p, err := m.openPlan(ctx, dir, name)
 		if err != nil {
 			return nil, err
 		}
@@ -68,8 +68,8 @@ func (s *Server) hlsParts(ctx context.Context, dir string) ([]hlsPart, error) {
 
 // openPlan opens one file of a recording and plans it. The caller closes
 // the file.
-func (s *Server) openPlan(ctx context.Context, dir, name string) (*os.File, hlsPart, error) {
-	f, err := s.cfg.Files.OpenVODFile(ctx, dir, name)
+func (m *media) openPlan(ctx context.Context, dir, name string) (*os.File, hlsPart, error) {
+	f, err := m.files.OpenVODFile(ctx, dir, name)
 	if err != nil {
 		return nil, hlsPart{}, err
 	}
@@ -79,7 +79,7 @@ func (s *Server) openPlan(ctx context.Context, dir, name string) (*os.File, hlsP
 		return nil, hlsPart{}, ErrNotFound
 	}
 	key := dir + "\x00" + name + "\x00" + strconv.FormatInt(info.Size(), 10) + "\x00" + strconv.FormatInt(info.ModTime().UnixNano(), 10)
-	plan, err := s.hls.Plan(key, f)
+	plan, err := m.hls.Plan(key, f)
 	if err != nil {
 		f.Close()
 		return nil, hlsPart{}, err
@@ -106,10 +106,10 @@ func hlsHeaders(w http.ResponseWriter, contentType string) {
 
 // handleHLSPlaylist serves a recording's files as one VOD playlist, a
 // discontinuity at each file boundary. start names the file to start at.
-func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
+func (m *media) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	dir := q.Get("dir")
-	parts, err := s.hlsParts(r.Context(), dir)
+	parts, err := m.hlsParts(r.Context(), dir)
 	if err != nil {
 		hlsError(w, r, err)
 		return
@@ -144,9 +144,9 @@ func (s *Server) handleHLSPlaylist(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHLSInit serves one file's initialization segment.
-func (s *Server) handleHLSInit(w http.ResponseWriter, r *http.Request) {
+func (m *media) handleHLSInit(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	f, p, err := s.openPlan(r.Context(), q.Get("dir"), q.Get("file"))
+	f, p, err := m.openPlan(r.Context(), q.Get("dir"), q.Get("file"))
 	if err != nil {
 		hlsError(w, r, err)
 		return
@@ -157,14 +157,14 @@ func (s *Server) handleHLSInit(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleHLSSegment cuts one segment out of a file.
-func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
+func (m *media) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	n, err := strconv.Atoi(q.Get("n"))
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	f, p, err := s.openPlan(r.Context(), q.Get("dir"), q.Get("file"))
+	f, p, err := m.openPlan(r.Context(), q.Get("dir"), q.Get("file"))
 	if err != nil {
 		hlsError(w, r, err)
 		return
@@ -172,7 +172,7 @@ func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	var buf bytes.Buffer
 	if err := p.plan.WriteSegment(&buf, f, n); err != nil {
-		s.log.Debug("HLS segment failed", "file", q.Get("file"), "n", n, "error", err)
+		m.log.Debug("HLS segment failed", "file", q.Get("file"), "n", n, "error", err)
 		http.NotFound(w, r)
 		return
 	}
@@ -182,8 +182,8 @@ func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 
 // handleHLSChapters serves a chapter per file, so the seek bar shows where
 // each one starts.
-func (s *Server) handleHLSChapters(w http.ResponseWriter, r *http.Request) {
-	parts, err := s.hlsParts(r.Context(), r.URL.Query().Get("dir"))
+func (m *media) handleHLSChapters(w http.ResponseWriter, r *http.Request) {
+	parts, err := m.hlsParts(r.Context(), r.URL.Query().Get("dir"))
 	if err != nil {
 		hlsError(w, r, err)
 		return
@@ -204,14 +204,14 @@ func (s *Server) handleHLSChapters(w http.ResponseWriter, r *http.Request) {
 // handleHLSThumbnails joins the files' timeline-preview tracks onto the
 // stream's timeline. Cue images point at the preview route, relative to
 // this one.
-func (s *Server) handleHLSThumbnails(w http.ResponseWriter, r *http.Request) {
+func (m *media) handleHLSThumbnails(w http.ResponseWriter, r *http.Request) {
 	dir := r.URL.Query().Get("dir")
-	parts, err := s.hlsParts(r.Context(), dir)
+	parts, err := m.hlsParts(r.Context(), dir)
 	if err != nil {
 		hlsError(w, r, err)
 		return
 	}
-	po, _ := s.cfg.Files.(PreviewOpener)
+	po, _ := m.files.(PreviewOpener)
 	var cues []preview.Cue
 	for _, p := range parts {
 		if po == nil {

@@ -7,10 +7,12 @@ import { useTheme, Theme } from "@/components/theme-provider"
 import { getDaemonClient } from "@/lib/daemon"
 import { refreshErrorReports, setErrorReports, useErrorReports } from "@/lib/error-reports"
 import { PrivacyLink } from "@/components/error-reports-banner"
+import { hasPlayerChoice, useDefaultPlayer, type Player } from "@/lib/play-vod"
 import { appStore } from "../state/app-state"
 
 function SettingsGeneral() {
   const { theme, setTheme } = useTheme()
+  const player = useDefaultPlayer()
   // Read from the OS, not from a setting of ours: the user can turn this off
   // in their system settings, and the switch has to show what will happen
   // rather than what was last asked for. null until the first read answers.
@@ -72,6 +74,33 @@ function SettingsGeneral() {
             >
               <SettingsHint>System will follow your OS preferences.</SettingsHint>
             </SettingsRow>
+
+            {hasPlayerChoice() && (
+              <SettingsRow
+                label="Play recordings in"
+                control={
+                  <Select<Player>
+                    value={player}
+                    onValueChange={(value) => value && appStore.getState().persistPrefs({ player: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue>
+                        {(value: Player) => (value === "os" ? "System player" : "VodLabs Recorder")}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="app">VodLabs Recorder</SelectItem>
+                      <SelectItem value="os">System player</SelectItem>
+                    </SelectContent>
+                  </Select>
+                }
+              >
+                <SettingsHint>
+                  VodLabs Recorder plays all of a recording's parts on one timeline. System player opens one part
+                  at a time in your default video app. A recording's menu offers the other one.
+                </SettingsHint>
+              </SettingsRow>
+            )}
 
             {supported && (
               <SettingsRow

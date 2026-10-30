@@ -41,7 +41,7 @@ import {
 } from "./format"
 import { ContactSheet } from "./contact-sheet"
 import { LazyThumb } from "./lazy-thumb"
-import { canDownloadVODs, canPlayVODs, downloadVOD, playVOD } from "@/lib/play-vod"
+import { canDownloadVODs, canPlayVODs, downloadVOD, playVOD, useDefaultPlayer } from "@/lib/play-vod"
 
 type Props = {
   // The session to describe, or null when the sheet is closed. Held by the
@@ -194,6 +194,7 @@ function InfoBody({
   const files = s.files ?? []
   const busy = s.state !== "ready"
   const canPlay = canPlayVODs()
+  const player = useDefaultPlayer()
   const canDownload = canDownloadVODs()
   const playable = canPlay && !busy && files.length > 0
   const channelURL = s.username ? streamerChannelURL(s.platform, s.username) : null
@@ -240,7 +241,7 @@ function InfoBody({
           {playable && (
             <Button onClick={() => playVOD(s.dir, files[0].name)}>
               <Clapperboard className="h-4 w-4" />
-              Play{files.length > 1 ? " part 1" : ""}
+              Play{files.length > 1 && player === "os" ? " part 1" : ""}
             </Button>
           )}
           {canDownload && !busy && files.length > 0 && (

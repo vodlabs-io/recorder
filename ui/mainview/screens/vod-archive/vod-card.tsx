@@ -21,6 +21,7 @@ import {
   Copy,
   Download,
   EllipsisVertical,
+  ExternalLink,
   Film,
   FolderOpen,
   Info,
@@ -41,7 +42,14 @@ import {
 } from "./format"
 import { LazyThumb } from "./lazy-thumb"
 import { scrubFiles } from "./scrub-overlay"
-import { canDownloadVODs, canPlayVODs, downloadVOD, playVOD } from "@/lib/play-vod"
+import {
+  canDownloadVODs,
+  canPlayVODs,
+  downloadVOD,
+  hasPlayerChoice,
+  playVOD,
+  useDefaultPlayer,
+} from "@/lib/play-vod"
 
 type Props = {
   session: VOD
@@ -127,8 +135,12 @@ export const VodCard = React.memo(function VodCard({
 
   const files = s.files ?? []
   const busy = s.state !== "ready"
-  // Playing goes to the OS player where there is one, else to the page.
+  // Playing goes to the default player; the menu offers the other one where
+  // the host has both.
   const canPlay = canPlayVODs()
+  const player = useDefaultPlayer()
+  const other = player === "app" ? "os" : "app"
+  const firstPart = files.length > 1 ? " first part" : ""
   const canDownload = canDownloadVODs()
   const clickable = !busy && files.length > 0 && (canPlay || files.length > 1)
   const recordedTime = formatRecordedTime(sessionTime(s))
@@ -164,8 +176,8 @@ export const VodCard = React.memo(function VodCard({
           !clickable
             ? undefined
             : files.length === 1
-              ? canOpen
-                ? "Open in video player"
+              ? player === "os"
+                ? "Open in system player"
                 : "Play"
               : "Show parts"
         }
@@ -281,8 +293,21 @@ export const VodCard = React.memo(function VodCard({
                 </DropdownMenuItem>
                 {canPlay && files.length > 0 && !busy && (
                   <DropdownMenuItem onClick={() => openFile(s, files[0].name)}>
-                    <Clapperboard className="h-4 w-4" /> {canOpen ? "Open" : "Play"}
-                    {files.length > 1 ? " first part" : ""}
+                    <Clapperboard className="h-4 w-4" />
+                    {player === "app" ? "Play" : `Open${firstPart}`}
+                  </DropdownMenuItem>
+                )}
+                {hasPlayerChoice() && files.length > 0 && !busy && (
+                  <DropdownMenuItem onClick={() => playVOD(s.dir, files[0].name, other)}>
+                    {other === "app" ? (
+                      <>
+                        <Clapperboard className="h-4 w-4" /> Play in app
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="h-4 w-4" /> Open{firstPart} in system player
+                      </>
+                    )}
                   </DropdownMenuItem>
                 )}
                 {canDownload && files.length > 0 && !busy && (
@@ -381,8 +406,8 @@ export const VodCard = React.memo(function VodCard({
                       canPlay && !busy && "cursor-pointer hover:bg-accent",
                     )}
                     title={
-                      canOpen
-                        ? `Open in video player (${f.name})`
+                      canPlay && player === "os"
+                        ? `Open in system player (${f.name})`
                         : canPlay
                           ? `Play ${f.name}`
                           : f.name

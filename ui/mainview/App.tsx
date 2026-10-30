@@ -100,7 +100,7 @@ function App() {
             (desktop); the Web UI just closes its tab. */}
         {getDaemonClient().capabilities.quit && <QuitDialog />}
         <WelcomeDialog />
-        {getDaemonClient().capabilities.browserMedia && <VideoPlayerDialog />}
+        {getDaemonClient().capabilities.inPagePlayer && <VideoPlayerDialog />}
         <SidebarProvider>
           <AppSidebar />
           <SidebarInset>

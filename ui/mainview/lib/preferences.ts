@@ -8,6 +8,9 @@ export interface Preferences {
   // than in the daemon's config: it is about this front end having explained
   // itself, and a second machine's app should explain itself too.
   welcome_seen: boolean
+  // Where recordings play by default on a host that has both: the app's own
+  // player, or the OS default video player.
+  player: "app" | "os"
 }
 
 const PREFS_KEY = "vodlabs-recorder-preferences"

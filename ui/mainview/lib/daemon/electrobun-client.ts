@@ -10,6 +10,7 @@ import type {
 } from "@shared/types"
 import type { DaemonClient } from "./client"
 import { setDaemonClient } from "./registry"
+import { mediaUrls, type MediaUrls } from "./media-urls"
 
 // The webview's single set of push listeners. Populated by the message handlers
 // below and fanned out to UI subscribers via on*Changed().
@@ -70,6 +71,10 @@ function reportVisibility(): void {
 document.addEventListener("visibilitychange", reportVisibility)
 reportVisibility()
 
+// The daemon's player listener, once prepareMedia has asked for it. It lives
+// as long as the daemon, so it is asked for again only after a failure.
+let media: MediaUrls | null = null
+
 const electrobunClient: DaemonClient = {
   // The desktop host supports everything: native dialogs, file manager,
   // daemon lifecycle (quit flow), and Electrobun self-update.
@@ -82,8 +87,10 @@ const electrobunClient: DaemonClient = {
     webviewLogin: true,
     // The desktop app reaches its own daemon with no sign-in.
     webSession: false,
-    // Recordings are on this machine; the OS player opens them.
+    // Recordings are on this machine: nothing to download, and the daemon
+    // serves them to the in-page player over loopback.
     browserMedia: false,
+    inPagePlayer: true,
   },
 
   getConnection: () => req.getConnection({}),
@@ -107,9 +114,16 @@ const electrobunClient: DaemonClient = {
   getStartAtLogin: () => req.getStartAtLogin({}),
   setStartAtLogin: (enabled) => req.setStartAtLogin({ enabled }),
   signOut: () => Promise.resolve(),
-  mediaUrl: () => "",
-  previewTrackUrl: () => "",
-  recordingStreamUrls: () => null,
+  prepareMedia: async () => {
+    if (!media) {
+      const base = await req.getVodMediaBase({}).catch(() => "")
+      if (base) media = mediaUrls(base)
+    }
+    return media != null
+  },
+  mediaUrl: (dir, file, download) => media?.media(dir, file, download) ?? "",
+  previewTrackUrl: (dir, file) => media?.previewTrack(dir, file) ?? "",
+  recordingStreamUrls: (dir, start) => media?.stream(dir, start) ?? null,
 
   // Platform logins run in the bun process (only it can open a webview and read
   // its cookie store). PRIVACY: cookies are captured in bun and handed to the

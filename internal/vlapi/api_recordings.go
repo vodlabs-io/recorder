@@ -37,6 +37,9 @@ type VODController interface {
 	// VODContactSheet returns the contact sheet across all of a VOD's files,
 	// building it on first request.
 	VODContactSheet(ctx context.Context, dir string) ([]byte, error)
+	// VODMediaBase returns the loopback URL the desktop app's player loads
+	// recordings from, starting its listener on first request.
+	VODMediaBase(ctx context.Context) (string, error)
 	// DeleteVOD removes a listed VOD's folder from disk.
 	DeleteVOD(ctx context.Context, dir string) error
 	// CancelMoves retires pending moves and returns how many it retired. A nil
@@ -280,6 +283,26 @@ func (s *Service) vodFileRequest(req micro.Request) (vodThumbnailRequest, bool) 
 		return r, false
 	}
 	return r, true
+}
+
+// vodMediaBaseResponse is where the desktop app's player loads recordings.
+type vodMediaBaseResponse struct {
+	URL string `json:"url"`
+}
+
+// handleVODMediaBase answers the desktop app's player with the loopback URL
+// it loads recordings from.
+func (s *Service) handleVODMediaBase(req micro.Request) {
+	if s.vodsCtl == nil {
+		respond(req, fail(errInternal, "vod controller unavailable"))
+		return
+	}
+	u, err := s.vodsCtl.VODMediaBase(context.Background())
+	if err != nil {
+		respondVODError(req, err, "media unavailable")
+		return
+	}
+	respond(req, OK(vodMediaBaseResponse{URL: u}))
 }
 
 // handleDeleteVOD removes a whole VOD folder.

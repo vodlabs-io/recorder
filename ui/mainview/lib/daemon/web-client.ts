@@ -32,7 +32,8 @@ import type {
   BugReportRequest,
   BugReportResult,
 } from "@shared/types"
-import type { DaemonClient, RecordingStreamUrls } from "./client"
+import type { DaemonClient } from "./client"
+import { mediaUrls, type MediaUrls } from "./media-urls"
 
 // A few requests make the daemon wait on a remote answer before it can reply,
 // so they need a ceiling above the daemon's own. Time out below it and the user
@@ -56,14 +57,11 @@ export interface WebDaemonClientOptions {
 }
 
 // WebUrls are the daemon routes the Web UI uses, resolved against the page.
-export type WebUrls = {
+export type WebUrls = MediaUrls & {
   nats: string
   session: string
   signout: string
   signin: string
-  media: (dir: string, file: string, download?: boolean) => string
-  previewTrack: (dir: string, file: string) => string
-  stream: (dir: string, start: string) => RecordingStreamUrls
 }
 
 export function webUrls(base: string): WebUrls {
@@ -71,38 +69,11 @@ export function webUrls(base: string): WebUrls {
   const nats = at("nats")
   nats.protocol = nats.protocol === "https:" ? "wss:" : "ws:"
   return {
+    ...mediaUrls(base),
     nats: nats.href,
     session: at("api/session").href,
     signout: at("api/signout").href,
     signin: at("signin").href,
-    media: (dir, file, download = false) => {
-      const u = at("api/vods/file")
-      u.searchParams.set("dir", dir)
-      u.searchParams.set("file", file)
-      if (download) u.searchParams.set("download", "1")
-      return u.href
-    },
-    previewTrack: (dir, file) => {
-      const u = at("api/vods/preview")
-      u.searchParams.set("dir", dir)
-      u.searchParams.set("file", file)
-      u.searchParams.set("kind", "vtt")
-      return u.href
-    },
-    stream: (dir, start) => {
-      const route = (name: string) => {
-        const u = at("api/vods/hls/" + name)
-        u.searchParams.set("dir", dir)
-        return u
-      }
-      const playlist = route("index.m3u8")
-      playlist.searchParams.set("start", start)
-      return {
-        playlist: playlist.href,
-        chapters: route("chapters.vtt").href,
-        thumbnails: route("thumbs.vtt").href,
-      }
-    },
   }
 }
 
@@ -149,6 +120,7 @@ export class WebDaemonClient implements DaemonClient {
     webSession: true,
     // Recordings live on the daemon's machine; the daemon serves them.
     browserMedia: true,
+    inPagePlayer: true,
   }
 
   private readonly session: DaemonSession
@@ -410,6 +382,7 @@ export class WebDaemonClient implements DaemonClient {
 
   mediaUrl = (dir: string, file: string, download = false) =>
     this.urls.media(dir, file, download)
+  prepareMedia = () => Promise.resolve(true)
   previewTrackUrl = (dir: string, file: string) => this.urls.previewTrack(dir, file)
   recordingStreamUrls = (dir: string, start: string) => this.urls.stream(dir, start)
 

@@ -10,9 +10,11 @@ export function absolutizeCues(vtt: string, trackUrl: string): string {
   })
 }
 
-// useThumbnailsTrack loads a timeline-previews track as a same-origin blob
-// URL with absolute cue images. A missing or empty track yields undefined.
-export function useThumbnailsTrack(url: string | undefined): string | undefined {
+// useTrackBlob loads a WebVTT track as a same-origin blob URL, with any cue
+// images made absolute: a <track> from another origin (the desktop player's
+// loopback listener) would otherwise be refused. A missing track, or one
+// with no cues, yields undefined.
+export function useTrackBlob(url: string | undefined): string | undefined {
   const [blobUrl, setBlobUrl] = useState<string>()
   useEffect(() => {
     if (!url) return

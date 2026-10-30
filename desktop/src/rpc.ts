@@ -116,6 +116,7 @@ export type AppRPCType = {
         params: { dir: string };
         response: string;
       };
+      getVodMediaBase: { params: {}; response: string };
       deleteVOD: { params: { dir: string }; response: string };
       deleteVODs: {
         params: { dirs: string[] };

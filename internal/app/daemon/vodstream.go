@@ -24,5 +24,20 @@ func (a *App) VODFiles(ctx context.Context, dir string) ([]string, error) {
 	return names, nil
 }
 
+// VODMediaBase implements vlapi.VODController: the loopback listener the
+// desktop app's player loads recordings from, started on first request.
+func (a *App) VODMediaBase(context.Context) (string, error) {
+	a.mediaMu.Lock()
+	defer a.mediaMu.Unlock()
+	if a.localMedia == nil {
+		l, err := webui.StartLocalMedia(a, a.log.With("component", "media"))
+		if err != nil {
+			return "", err
+		}
+		a.localMedia = l
+	}
+	return a.localMedia.Base(), nil
+}
+
 // Compile-time check that App plays whole recordings in the Web UI.
 var _ webui.SessionLister = (*App)(nil)
