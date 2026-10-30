@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react"
 import { getDaemonClient, type VODFile, type VODPreviews } from "@/lib/daemon"
-import { frameAt, locate, panelAt, panelBox, spriteStyle, type ScrubFile } from "./scrub"
+import { coverBox, frameAt, locate, panelAt, panelBox, spriteStyle, type ScrubFile } from "./scrub"
 
 type Loaded = { previews: VODPreviews; url: string }
 
@@ -87,13 +87,16 @@ export function ScrubOverlay({ dir, files }: { dir: string; files: ScrubFile[] }
     const style = spriteStyle(strip.previews, frameAt(strip.previews, at.ms), strip.url)
     if (first.previews.portrait) {
       const box = panelBox(panelAt(fraction))
-      const [tw, th] = strip.previews.tile
+      const cover = coverBox(...strip.previews.tile)
       frame = (
         <div
-          className="absolute inset-y-0 flex justify-center bg-black"
+          className="absolute inset-y-0 overflow-hidden bg-black"
           style={{ left: `${box.left}%`, width: `${box.width}%` }}
         >
-          <div className="h-full bg-no-repeat" style={{ ...style, aspectRatio: `${tw} / ${th}` }} />
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-no-repeat"
+            style={{ ...style, width: `${cover.width}%`, height: `${cover.height}%` }}
+          />
         </div>
       )
     } else {

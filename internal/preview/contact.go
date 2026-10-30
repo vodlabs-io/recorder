@@ -189,6 +189,20 @@ func drawFit(dst draw.Image, r image.Rectangle, src image.Image) {
 	draw.CatmullRom.Scale(dst, at, src, sb, draw.Src, nil)
 }
 
+// drawFill scales src to cover r, centred, cropping whatever overflows.
+func drawFill(dst draw.Image, r image.Rectangle, src image.Image) {
+	sb := src.Bounds()
+	w, h := sb.Dx(), sb.Dy()
+	if w*r.Dy() > h*r.Dx() {
+		w = max(1, h*r.Dx()/r.Dy())
+	} else {
+		h = max(1, w*r.Dy()/r.Dx())
+	}
+	min := image.Pt(sb.Min.X+(sb.Dx()-w)/2, sb.Min.Y+(sb.Dy()-h)/2)
+	crop := image.Rectangle{Min: min, Max: min.Add(image.Pt(w, h))}
+	draw.CatmullRom.Scale(dst, r, src, crop, draw.Src, nil)
+}
+
 // Sharpness scores how much detail a frame holds (the variance of its
 // luma's Laplacian): black, faded and blurred frames score low.
 func Sharpness(img image.Image) float64 {
@@ -216,12 +230,11 @@ func Sharpness(img image.Image) float64 {
 	return sq/float64(n) - mean*mean
 }
 
-// Triptych sizes. A portrait thumbnail shows three frames side by side in
+// Triptych sizes. A portrait thumbnail shows three frames edge to edge in
 // the same 16:9 box a landscape one fills.
 const (
 	thumbW       = 480
 	thumbH       = 270
-	triptychGap  = 3
 	thumbQuality = 85
 )
 
@@ -234,20 +247,19 @@ func TriptychTargets(d time.Duration) []time.Duration {
 
 // TriptychTile is the size each panel's frame is decoded at.
 func TriptychTile() Tile {
-	return Tile{even((thumbW - 2*triptychGap) / 3), thumbH}
+	return Tile{even(thumbW / 3), thumbH}
 }
 
-// Triptych composes three portrait frames into one landscape thumbnail.
+// Triptych composes three portrait frames into one landscape thumbnail,
+// each cropped to fill its third.
 func Triptych(frames []image.Image) ([]byte, error) {
 	if len(frames) != 3 {
 		return nil, fmt.Errorf("preview: triptych needs 3 frames, got %d", len(frames))
 	}
 	img := image.NewRGBA(image.Rect(0, 0, thumbW, thumbH))
-	draw.Draw(img, img.Bounds(), image.Black, image.Point{}, draw.Src)
-	pw := (thumbW - 2*triptychGap) / 3
+	pw := thumbW / 3
 	for i, f := range frames {
-		x := i * (pw + triptychGap)
-		drawFit(img, image.Rect(x, 0, x+pw, thumbH), f)
+		drawFill(img, image.Rect(i*pw, 0, (i+1)*pw, thumbH), f)
 	}
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: thumbQuality}); err != nil {
