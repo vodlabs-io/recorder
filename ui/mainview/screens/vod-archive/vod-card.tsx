@@ -148,12 +148,14 @@ export const VodCard = React.memo(function VodCard({
   const onCardClick = useCallback(() => {
     const files = s.files ?? []
     if (s.state !== "ready" || files.length === 0) return
-    if (files.length === 1 && canPlay) {
+    // The app's player plays every part from the first; the system player
+    // takes one file, so a multi-file session pops open its part list
+    // instead (as it does on hosts that can't play at all).
+    if (canPlay && (files.length === 1 || player === "app")) {
       openFile(s, files[0].name)
       return
     }
-    // Multi-file sessions pop open their part list (and on hosts that can't
-    // open files, that's all a click can usefully do). If this card's popover
+    // If this card's popover
     // was just dismissed by the pointerdown that began this click, don't
     // re-open it — the click was a toggle-off.
     if (Date.now() - lastDismissAt.current < 350) {
@@ -161,7 +163,7 @@ export const VodCard = React.memo(function VodCard({
       return
     }
     onExpandedChange(expanded ? null : sessionKey(s))
-  }, [s, canPlay, expanded, onExpandedChange])
+  }, [s, canPlay, player, expanded, onExpandedChange])
 
   return (
     <Card ref={cardRef} className="group relative overflow-hidden py-0 gap-0">
@@ -175,11 +177,11 @@ export const VodCard = React.memo(function VodCard({
         title={
           !clickable
             ? undefined
-            : files.length === 1
-              ? player === "os"
+            : player === "app" && canPlay
+              ? "Play"
+              : files.length === 1
                 ? "Open in system player"
-                : "Play"
-              : "Show parts"
+                : "Show parts"
         }
       >
         {/* A busy session with nothing produced yet asks for any screenshot
