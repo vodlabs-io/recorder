@@ -65,6 +65,8 @@ Every command that takes `<url>` also accepts `<platform> <username>`.
 | Command | What it does |
 | --- | --- |
 | `vod config path`<br>`vod config edit` | Print or edit the config file. Alias: `cfg`. |
+| `vod config error-reports [on\|off]` | Show, or turn on or off, sending error reports to VodLabs. See [error reports](data.md#error-reports-and-bug-reports). |
+| `vod report [--logs] <what went wrong>` | Send a bug report to VodLabs. `--logs` attaches the end of each log file. Prints a report ID to quote in a GitHub issue. |
 | `vod info` | Print the daemon's settings and the paths of its files and logs. |
 | `vod health` | Exit with 0 if the daemon is running and answering, 1 if not. Never starts a daemon. For scripts and container health checks. |
 | `vod web url`<br>`vod web token [--rotate]` | Print a sign-in link for the [Web UI](docker.md#signing-in), or its token. `--rotate` replaces the token and signs every browser out. |

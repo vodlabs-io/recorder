@@ -30,7 +30,8 @@ accounts, retention, your rights and everything else.
   machine, but it does not protect against someone who can run programs as
   you. ([internal/platformauth/store.go](../internal/platformauth/store.go))
 - **Your settings, disk usage and logs.** The logs stay in your cache folder
-  until you send them to someone yourself.
+  until you send them yourself, by email or with a
+  [bug report](#error-reports-and-bug-reports).
 
 ## What the service receives from your recorder
 
@@ -57,6 +58,43 @@ platform.
   broadcast as a guest viewer, from your IP address.
 - **GitHub**, to download the recorder daemon and updates.
 - **VodLabs' image server**, for streamers' profile pictures.
+- **Sentry**, which VodLabs uses to collect error reports, only if you turn
+  them on, and bug reports, only when you send one (below).
+
+## Error reports and bug reports
+
+**Error reports** are off until you turn them on. The app asks once, and you
+can change your answer in Settings › General or with
+`vod config error-reports on|off`. While they are on, the daemon, `vod` and
+the app send a report to VodLabs' [Sentry](https://sentry.io) project when they
+log an error or crash; a crash is sent the next time the program starts. A
+report holds:
+
+- what failed and where in the code, with the log lines just before it;
+- the recorder's version, your operating system and CPU type, and what
+  started the daemon;
+- your IP address, which Sentry records from the connection;
+- whatever the error names, such as a streamer or a folder.
+
+The daemon and app remove before sending: your user name in folder paths,
+your computer's name, email addresses, sign-in tokens, and the query part of
+web addresses (where stream links keep their signatures). Your platform
+logins are never in a report. Each place that logs an error sends at most one
+report an hour. ([internal/errreport](../internal/errreport),
+[desktop/src/bun/error-reports.ts](../desktop/src/bun/error-reports.ts),
+[ui/mainview/lib/error-reports.ts](../ui/mainview/lib/error-reports.ts))
+
+**Bug reports** are sent only when you send one, from the About screen or with
+`vod report`, whether or not error reports are on. A bug report holds what you
+write, your recorder's client ID (so it can be matched to the service's
+records of your recorder), its version, your operating system and CPU type,
+and your IP address. If you leave "Attach recent logs" ticked, or pass
+`--logs`, it also holds the end of each log file, up to 1 MB each, with the
+same things removed as above. Logs can name the streamers you follow, your
+folders and the addresses the recorder connected to.
+([internal/app/daemon/reports.go](../internal/app/daemon/reports.go))
+
+Both kinds are kept for up to 90 days. Development builds send neither.
 
 ## Requests your recorder makes for the service
 
