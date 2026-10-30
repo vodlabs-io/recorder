@@ -17,8 +17,12 @@ import (
 
 func previewFixture(t *testing.T, w, h int, dur time.Duration, gop int) string {
 	t.Helper()
-	dir := t.TempDir()
-	out := filepath.Join(dir, "vod.mp4")
+	return previewFixtureAt(t, t.TempDir(), "vod.mp4", w, h, dur, gop)
+}
+
+func previewFixtureAt(t *testing.T, dir, name string, w, h int, dur time.Duration, gop int) string {
+	t.Helper()
+	out := filepath.Join(dir, name)
 	cmd, err := ffmpeg.Command(context.Background(), slog.Default(),
 		"-hide_banner", "-loglevel", "error",
 		"-f", "lavfi", "-i", "testsrc=size="+strconv.Itoa(w)+"x"+strconv.Itoa(h)+":rate=30:duration="+strconv.Itoa(int(dur.Seconds())),
@@ -66,9 +70,6 @@ func TestGeneratePreviewsLandscape(t *testing.T) {
 	if sheet != [2]int{2048, 1152} {
 		t.Fatalf("sheet 0 is %v", sheet)
 	}
-	if cs := decodeSize(t, files["vod.sheet.jpg"]); cs[0] != 1495 || cs[1] < 900 || len(files["vod.sheet.jpg"]) > 700<<10 {
-		t.Fatalf("contact sheet %v, %d bytes", cs, len(files["vod.sheet.jpg"]))
-	}
 	if _, ok := files["vod.jpg"]; ok {
 		t.Fatal("landscape video got a triptych thumbnail")
 	}
@@ -87,11 +88,58 @@ func TestGeneratePreviewsPortraitSparseKeys(t *testing.T) {
 	if !m.Portrait || m.Tile != [2]int{144, 256} || m.Frames != 60 {
 		t.Fatalf("manifest = %+v", m)
 	}
-	if got := decodeSize(t, files["vod.jpg"]); got != [2]int{480, 270} {
-		t.Fatalf("triptych is %v", got)
+	img, err := jpeg.Decode(bytes.NewReader(files["vod.jpg"]))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if cs := decodeSize(t, files["vod.sheet.jpg"]); cs[0] < cs[1] {
-		t.Fatalf("portrait contact sheet is taller than wide: %v", cs)
+	if b := img.Bounds(); b.Dx() != 480 || b.Dy() != 270 {
+		t.Fatalf("triptych is %v", b)
+	}
+	// Panels meet edge to edge: no all-black bar at or beside a seam.
+	for _, x := range []int{0, 159, 160, 319, 320, 479} {
+		black := true
+		for y := range 270 {
+			if r, g, b, _ := img.At(x, y).RGBA(); r+g+b > 3*0x1000 {
+				black = false
+				break
+			}
+		}
+		if black {
+			t.Fatalf("column %d is a black bar", x)
+		}
+	}
+}
+
+func TestSessionSheetSpansFiles(t *testing.T) {
+	dir := t.TempDir()
+	var files []SheetFile
+	for i, d := range []time.Duration{20 * time.Second, 5 * time.Second, 40 * time.Second} {
+		name := "vod" + strconv.Itoa(i+1) + ".mp4"
+		video := previewFixtureAt(t, dir, name, 1280, 720, d, 1)
+		if i != 1 { // a file without previews still counts
+			if _, err := WritePreviews(context.Background(), slog.Default(), dir, dir, name, PreviewHeader{}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		st, err := os.Stat(video)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, SheetFile{Name: name, Bytes: st.Size()})
+	}
+	hdr := PreviewHeader{Platform: "tiktok", Username: "someone", Start: time.Date(2026, 10, 28, 22, 32, 0, 0, time.UTC)}
+	sheet, err := WriteSessionSheet(context.Background(), slog.Default(), dir, dir, files, hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cs := decodeSize(t, sheet); cs[0] != 1495 || cs[1] < 900 || len(sheet) > 700<<10 {
+		t.Fatalf("contact sheet %v, %d bytes", cs, len(sheet))
+	}
+	if !SessionSheetCurrent(dir, files) {
+		t.Fatal("sheet not current for the files it was built from")
+	}
+	if SessionSheetCurrent(dir, files[:2]) {
+		t.Fatal("sheet still current after a file went away")
 	}
 }
 

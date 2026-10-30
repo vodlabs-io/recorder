@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
-
 	"github.com/vodlabs-io/recorder/internal/ffmpeg"
 	"github.com/vodlabs-io/recorder/internal/preview"
 	"github.com/vodlabs-io/recorder/internal/provenance"
@@ -27,8 +25,9 @@ import (
 //	vod1.thumbs.vtt              timeline previews (WebVTT, sprite cues)
 //	vod1.thumbs.000.jpg, …       their sprite sheets
 //	vod1.scrub.jpg               the archive card's hover strip
-//	vod1.sheet.jpg               the contact sheet
 //	vod1.previews.json           what the UI needs to lay them out
+//
+// The session's contact sheet spans all its files (see sessionsheet.go).
 func stem(vodFile string) string {
 	if i := strings.LastIndex(vodFile, "."); i > 0 {
 		return vodFile[:i]
@@ -42,19 +41,19 @@ func StoryboardName(vodFile string) string { return stem(vodFile) + ".thumbs.vtt
 // StoryboardSheetPrefix starts the names of a VOD file's sprite sheets.
 func StoryboardSheetPrefix(vodFile string) string { return stem(vodFile) + ".thumbs." }
 
-// ContactSheetName is the contact sheet of a VOD file.
-func ContactSheetName(vodFile string) string { return stem(vodFile) + ".sheet.jpg" }
-
 // ScrubStripName is the hover strip of a VOD file.
 func ScrubStripName(vodFile string) string { return stem(vodFile) + ".scrub.jpg" }
 
 // PreviewsManifestName describes a VOD file's previews.
 func PreviewsManifestName(vodFile string) string { return stem(vodFile) + ".previews.json" }
 
-// IsPreviewSidecar reports whether name is one of a VOD file's preview
+// IsPreviewSidecar reports whether name is one of a session's preview
 // sidecars rather than a video or its thumbnail.
 func IsPreviewSidecar(name string) bool {
-	for _, suffix := range []string{".thumbs.vtt", ".scrub.jpg", ".sheet.jpg", ".previews.json"} {
+	if name == SessionSheetName || name == sessionSheetKeyName {
+		return true
+	}
+	for _, suffix := range []string{".thumbs.vtt", ".scrub.jpg", ".previews.json"} {
 		if strings.HasSuffix(name, suffix) {
 			return true
 		}
@@ -109,8 +108,8 @@ var previewDecoder = preview.NewDecoder(ffmpeg.Path, 1)
 func PreviewDecoder() *preview.Decoder { return previewDecoder }
 
 // GeneratePreviews builds every preview of one VOD file — timeline previews,
-// hover strip, contact sheet and, for a portrait video, a three-up thumbnail
-// over thumbPath — and writes them through write. Keyframes are read straight
+// hover strip and, for a portrait video, a three-up thumbnail over thumbPath —
+// and writes them through write. Keyframes are read straight
 // from an MP4's index; other containers, and short videos whose keyframes are
 // too sparse for a preview a second, are decoded front to back instead.
 func GeneratePreviews(ctx context.Context, logger *slog.Logger, videoPath, thumbName string, hdr PreviewHeader, write func(name string, data []byte) error) (PreviewsManifest, error) {
@@ -181,23 +180,15 @@ func GeneratePreviews(ctx context.Context, logger *slog.Logger, videoPath, thumb
 		return PreviewsManifest{}, err
 	}
 
-	shots, err := contactShots(ctx, dec, src, videoPath, info)
-	if err != nil {
-		return PreviewsManifest{}, fmt.Errorf("previews: contact sheet: %w", err)
-	}
-	stat, _ := os.Stat(videoPath)
-	sheet, err := preview.ContactSheet(info, preview.ContactWidth, contactHeader(file, stat, info, hdr), shots)
-	if err != nil {
-		return PreviewsManifest{}, err
-	}
-	if err := write(ContactSheetName(file), stamped(logger, sheet, "contact-sheet", file)); err != nil {
-		return PreviewsManifest{}, err
-	}
-
 	if info.Portrait() && thumbName != "" {
+		targets := preview.TriptychTargets(info.Duration)
+		shots, err := contactShots(ctx, dec, src, videoPath, info, targets, preview.TriptychTile())
+		if err != nil {
+			return PreviewsManifest{}, fmt.Errorf("previews: thumbnail: %w", err)
+		}
 		var picks []image.Image
-		for _, t := range preview.TriptychTargets(info.Duration) {
-			picks = append(picks, nearestShot(shots, t).Img)
+		for _, s := range shots {
+			picks = append(picks, s.Img)
 		}
 		thumb, err := preview.Triptych(picks)
 		if err != nil {
@@ -306,11 +297,19 @@ func decodePicked(ctx context.Context, dec *preview.Decoder, src *preview.MP4, t
 	return times, out, nil
 }
 
-// contactShots decodes two candidates per contact sheet slot and keeps the
-// sharper, so a fade or placeholder doesn't take a slot.
-func contactShots(ctx context.Context, dec *preview.Decoder, src *preview.MP4, path string, info preview.Info) ([]preview.Shot, error) {
-	targets := preview.ContactTargets(info)
-	tile := preview.ContactTile(info, preview.ContactWidth)
+// contactShots decodes two candidates per target time and keeps the sharper,
+// so a fade or placeholder doesn't take a slot.
+func contactShots(ctx context.Context, dec *preview.Decoder, src *preview.MP4, path string, info preview.Info, targets []time.Duration, tile preview.Tile) ([]preview.Shot, error) {
+	cand, err := contactCandidates(ctx, dec, src, path, info, targets, tile)
+	if err != nil {
+		return nil, err
+	}
+	return pickSharper(cand, targets), nil
+}
+
+// contactCandidates decodes the keyframe nearest each target and the one
+// after it, in time order.
+func contactCandidates(ctx context.Context, dec *preview.Decoder, src *preview.MP4, path string, info preview.Info, targets []time.Duration, tile preview.Tile) ([]preview.Shot, error) {
 	box := preview.Box{W: tile.W, H: tile.H}
 	var cand []preview.Shot
 	if src != nil {
@@ -358,6 +357,12 @@ func contactShots(ctx context.Context, dec *preview.Decoder, src *preview.MP4, p
 	if len(cand) == 0 {
 		return nil, errors.New("no frames")
 	}
+	return cand, nil
+}
+
+// pickSharper fills each target with the nearer of its two candidates, or
+// the next one when that is clearly sharper.
+func pickSharper(cand []preview.Shot, targets []time.Duration) []preview.Shot {
 	shots := make([]preview.Shot, 0, len(targets))
 	for _, t := range targets {
 		a, b := nearestTwo(cand, t)
@@ -367,7 +372,7 @@ func contactShots(ctx context.Context, dec *preview.Decoder, src *preview.MP4, p
 		}
 		shots = append(shots, preview.Shot{At: best.At, Img: best.Img})
 	}
-	return shots, nil
+	return shots
 }
 
 // nearestTwo returns the candidate closest to t and the one after it.
@@ -384,48 +389,11 @@ func nearestTwo(cand []preview.Shot, t time.Duration) (*preview.Shot, *preview.S
 	return &cand[best], nil
 }
 
-func nearestShot(shots []preview.Shot, t time.Duration) preview.Shot {
-	s, _ := nearestTwo(shots, t)
-	return *s
-}
-
 func absDur(d time.Duration) time.Duration {
 	if d < 0 {
 		return -d
 	}
 	return d
-}
-
-// contactHeader is the sheet's header, vcsi's lines first.
-func contactHeader(file string, stat os.FileInfo, info preview.Info, hdr PreviewHeader) []string {
-	lines := []string{file}
-	size := "File size: unknown"
-	if stat != nil {
-		size = "File size: " + humanize.IBytes(uint64(stat.Size()))
-	}
-	lines = append(lines, size, "Duration: "+preview.Clock(info.Duration))
-	dims := fmt.Sprintf("Dimensions: %dx%d", info.Width, info.Height)
-	if info.Codec != "" {
-		dims += "  ·  " + info.Codec
-	}
-	if info.FrameRate > 0 {
-		dims += fmt.Sprintf("  ·  %.4g fps", info.FrameRate)
-	}
-	lines = append(lines, dims)
-	var who []string
-	if hdr.Username != "" {
-		who = append(who, hdr.Username)
-	}
-	if hdr.Platform != "" {
-		who = append(who, hdr.Platform)
-	}
-	if !hdr.Start.IsZero() {
-		who = append(who, hdr.Start.Format("2006-01-02 15:04 MST"))
-	}
-	if len(who) > 0 {
-		lines = append(lines, strings.Join(who, "  ·  "))
-	}
-	return lines
 }
 
 // stamped records what produced an image, as thumbnails do. A failure keeps
@@ -478,7 +446,7 @@ func WritePreviews(ctx context.Context, logger *slog.Logger, videoDir, outDir, v
 // RemovePreviews deletes vodFile's preview sidecars from dir (not its
 // thumbnail).
 func RemovePreviews(dir, vodFile string) {
-	names := []string{StoryboardName(vodFile), ContactSheetName(vodFile), ScrubStripName(vodFile), PreviewsManifestName(vodFile)}
+	names := []string{StoryboardName(vodFile), ScrubStripName(vodFile), PreviewsManifestName(vodFile)}
 	sheets, _ := filepath.Glob(filepath.Join(dir, globEscape(StoryboardSheetPrefix(vodFile))+"[0-9][0-9][0-9].jpg"))
 	for _, n := range names {
 		os.Remove(filepath.Join(dir, n))

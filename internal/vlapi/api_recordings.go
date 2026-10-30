@@ -32,11 +32,11 @@ type VODController interface {
 	// generating and caching it when missing.
 	VODThumbnail(ctx context.Context, dir, file string) ([]byte, error)
 	// VODPreviews returns the layout of a VOD file's timeline previews and
-	// its hover strip, generating them on first request.
+	// its hover strip.
 	VODPreviews(ctx context.Context, dir, file string) (processing.PreviewsManifest, []byte, error)
-	// VODContactSheet returns a VOD file's contact sheet, generating it on
-	// first request.
-	VODContactSheet(ctx context.Context, dir, file string) ([]byte, error)
+	// VODContactSheet returns the contact sheet across all of a VOD's files,
+	// building it on first request.
+	VODContactSheet(ctx context.Context, dir string) ([]byte, error)
 	// DeleteVOD removes a listed VOD's folder from disk.
 	DeleteVOD(ctx context.Context, dir string) error
 	// CancelMoves retires pending moves and returns how many it retired. A nil
@@ -225,12 +225,11 @@ func (s *Service) handleVODThumbnail(req micro.Request) {
 	respond(req, OK(vodThumbnailResponse{JpegB64: base64.StdEncoding.EncodeToString(jpeg)}))
 }
 
-// vodPreviewsTimeout bounds on-demand preview generation. Like thumbnails it
-// sits under the client's timeout.
+// vodPreviewsTimeout bounds building a contact sheet. Like thumbnails it sits
+// under the client's timeout.
 const vodPreviewsTimeout = 55 * time.Second
 
-// handleVODPreviews returns (generating on demand) one file's preview layout
-// and hover strip.
+// handleVODPreviews returns one file's preview layout and hover strip.
 func (s *Service) handleVODPreviews(req micro.Request) {
 	r, ok := s.vodFileRequest(req)
 	if !ok {
@@ -246,16 +245,21 @@ func (s *Service) handleVODPreviews(req micro.Request) {
 	respond(req, OK(vodPreviewsResponse{PreviewsManifest: m, ScrubB64: base64.StdEncoding.EncodeToString(strip)}))
 }
 
-// handleVODContactSheet returns (generating on demand) one file's contact
-// sheet. Sheets are capped well under the message size once base64-encoded.
+// handleVODContactSheet returns (building on demand) a VOD's contact sheet.
+// Sheets are capped well under the message size once base64-encoded.
 func (s *Service) handleVODContactSheet(req micro.Request) {
-	r, ok := s.vodFileRequest(req)
-	if !ok {
+	if s.vodsCtl == nil {
+		respond(req, fail(errInternal, "vod controller unavailable"))
+		return
+	}
+	var r vodDeleteRequest
+	if err := json.Unmarshal(req.Data(), &r); err != nil || r.Dir == "" {
+		respond(req, fail(errInvalidArg, "dir is required"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), vodPreviewsTimeout)
 	defer cancel()
-	jpeg, err := s.vodsCtl.VODContactSheet(ctx, r.Dir, r.File)
+	jpeg, err := s.vodsCtl.VODContactSheet(ctx, r.Dir)
 	if err != nil {
 		respondVODError(req, err, "contact sheet unavailable")
 		return

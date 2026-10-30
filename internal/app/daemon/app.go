@@ -49,7 +49,7 @@ type App struct {
 	revPending  int64             // Newest rev not yet published, 0 = none
 	revSentAt   time.Time         // When a rev was last published
 	thumbCache  *thumbcache.Cache // VOD screenshots, kept off the archive volume
-	previews    previewFlight     // one on-demand preview generation per VOD file
+	sheets      sheetFlight       // one contact sheet build per session
 	cloudClient *cloud.Client
 	pages       *webpage.Resolver // finds what plays on pages no platform claims, on this machine
 	webSrv      *webui.Server     // Web UI listener, when [web] is enabled

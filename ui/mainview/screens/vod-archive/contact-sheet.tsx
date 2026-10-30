@@ -1,28 +1,26 @@
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { getDaemonClient, type VODFile } from "@/lib/daemon"
+import { getDaemonClient } from "@/lib/daemon"
 import { LazyThumb } from "./lazy-thumb"
 
 // Contact sheets are ~200-700 KB each; keep the last few opened.
 const SHEET_CACHE_MAX = 6
 const sheets = new Map<string, Promise<string | null>>()
 
-function loadSheet(dir: string, file: string): Promise<string | null> {
-  const key = `${dir}|${file}`
-  let p = sheets.get(key)
+function loadSheet(dir: string): Promise<string | null> {
+  let p = sheets.get(dir)
   if (!p) {
     p = getDaemonClient()
-      .getContactSheet(dir, file)
+      .getContactSheet(dir)
       .then((b64) => `data:image/jpeg;base64,${b64}`)
       .catch(() => {
-        sheets.delete(key)
+        sheets.delete(dir)
         return null
       })
   }
-  sheets.delete(key)
-  sheets.set(key, p)
+  sheets.delete(dir)
+  sheets.set(dir, p)
   for (const k of sheets.keys()) {
     if (sheets.size <= SHEET_CACHE_MAX) break
     sheets.delete(k)
@@ -30,22 +28,20 @@ function loadSheet(dir: string, file: string): Promise<string | null> {
   return p
 }
 
-// ContactSheet shows a finished VOD's contact sheet in its info panel, one
-// file at a time, and opens it full size on click. Until the sheet arrives
-// (the daemon generates a missing one on first view) the thumbnail stands in.
-export function ContactSheet({ dir, files }: { dir: string; files: VODFile[] }) {
-  const [index, setIndex] = useState(0)
+// ContactSheet shows a finished VOD's contact sheet, one across all its
+// files, in its info panel and opens it full size on click. The thumbnail
+// stands in while the sheet loads, and for VODs recorded before contact
+// sheets existed, which have none.
+export function ContactSheet({ dir, thumbFile }: { dir: string; thumbFile: string | null }) {
   const [url, setUrl] = useState<string | null>(null)
   const [state, setState] = useState<"loading" | "ready" | "failed">("loading")
   const [open, setOpen] = useState(false)
-  const file = files[Math.min(index, files.length - 1)]?.name
 
   useEffect(() => {
-    if (!file) return
     let alive = true
     setState("loading")
     setUrl(null)
-    void loadSheet(dir, file).then((u) => {
+    void loadSheet(dir).then((u) => {
       if (!alive) return
       setUrl(u)
       setState(u ? "ready" : "failed")
@@ -53,50 +49,48 @@ export function ContactSheet({ dir, files }: { dir: string; files: VODFile[] }) 
     return () => {
       alive = false
     }
-  }, [dir, file])
+  }, [dir])
 
   return (
-    <div className="flex shrink-0 flex-col gap-2">
-      {files.length > 1 && (
-        <div className="flex flex-wrap gap-1">
-          {files.map((f, i) => (
-            <Button
-              key={f.name}
-              size="xs"
-              variant={i === index ? "secondary" : "ghost"}
-              onClick={() => setIndex(i)}
-            >
-              Part {i + 1}
-            </Button>
-          ))}
-        </div>
+    <div className="relative shrink-0 overflow-hidden rounded-lg border bg-black">
+      {url ? (
+        <button
+          type="button"
+          className="block w-full cursor-zoom-in"
+          onClick={() => setOpen(true)}
+          title="Show full size"
+        >
+          <img src={url} alt="Contact sheet" className="h-auto w-full" draggable={false} />
+        </button>
+      ) : (
+        <>
+          <LazyThumb dir={dir} file={thumbFile} />
+          {state === "loading" && (
+            <div className="absolute right-2 bottom-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1 text-xs text-white">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Contact sheet
+            </div>
+          )}
+        </>
       )}
-      <div className="relative overflow-hidden rounded-lg border bg-black">
-        {url ? (
-          <button
-            type="button"
-            className="block w-full cursor-zoom-in"
-            onClick={() => setOpen(true)}
-            title="Show full size"
-          >
-            <img src={url} alt={`Contact sheet of ${file}`} className="h-auto w-full" draggable={false} />
-          </button>
-        ) : (
-          <>
-            <LazyThumb dir={dir} file={file ?? null} />
-            {state === "loading" && (
-              <div className="absolute right-2 bottom-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1 text-xs text-white">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Contact sheet
-              </div>
-            )}
-          </>
-        )}
-      </div>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[95vh] overflow-auto p-2 sm:max-w-[min(95vw,1600px)]">
-          <DialogTitle className="sr-only">Contact sheet of {file}</DialogTitle>
-          {url && <img src={url} alt="" className="h-auto w-full rounded-md" draggable={false} />}
+        {/* Fills the viewport so a click anywhere off the sheet closes it. */}
+        <DialogContent
+          showCloseButton={false}
+          className="inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center rounded-none bg-transparent p-4 ring-0 sm:max-w-none"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setOpen(false)
+          }}
+        >
+          <DialogTitle className="sr-only">Contact sheet</DialogTitle>
+          {url && (
+            <img
+              src={url}
+              alt=""
+              className="max-h-full max-w-full rounded-md object-contain"
+              draggable={false}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

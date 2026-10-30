@@ -125,7 +125,7 @@ const electrobunClient: DaemonClient = {
     req.listVodsPage({ offset, limit, rescan }),
   getRecordingThumbnail: (dir, file) => req.getRecordingThumbnail({ dir, file }),
   getVodPreviews: (dir, file) => req.getVodPreviews({ dir, file }),
-  getContactSheet: (dir, file) => req.getContactSheet({ dir, file }),
+  getContactSheet: (dir) => req.getContactSheet({ dir }),
   deleteVOD: (dir) => req.deleteVOD({ dir }),
   deleteVODs: (dirs) => req.deleteVODs({ dirs }),
   cancelMoves: (key) => req.cancelMoves(key ?? {}),

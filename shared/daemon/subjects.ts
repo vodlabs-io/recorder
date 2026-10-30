@@ -106,8 +106,8 @@ export const VODS_DELETE_TIMEOUT_MS = 120_000;
 // tighter (vodThumbnailTimeout), so a stuck generation reports an error.
 export const VODS_THUMBNAIL_TIMEOUT_MS = 60_000;
 
-// Previews (timeline sprites, hover strip, contact sheet) are generated on
-// first request like thumbnails, so they share the same ceiling.
+// A contact sheet is built on first request like a thumbnail, so previews
+// share the same ceiling.
 export const VODS_PREVIEWS_TIMEOUT_MS = VODS_THUMBNAIL_TIMEOUT_MS;
 
 // The KV key holding free space per Storage root (DiskStatus JSON). Rides the
