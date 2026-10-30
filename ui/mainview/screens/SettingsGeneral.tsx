@@ -5,6 +5,8 @@ import { Switch } from "@/components/ui/switch"
 import { SettingsRow, SettingsHint } from "@/components/settings-row"
 import { useTheme, Theme } from "@/components/theme-provider"
 import { getDaemonClient } from "@/lib/daemon"
+import { refreshErrorReports, setErrorReports, useErrorReports } from "@/lib/error-reports"
+import { PrivacyLink } from "@/components/error-reports-banner"
 import { appStore } from "../state/app-state"
 
 function SettingsGeneral() {
@@ -15,6 +17,8 @@ function SettingsGeneral() {
   const [startAtLogin, setStartAtLogin] = useState<boolean | null>(null)
   const [supported, setSupported] = useState(false)
   const [busy, setBusy] = useState(false)
+  // The daemon's answer to sending error reports; null until it has been read.
+  const reports = useErrorReports()
 
   useEffect(() => {
     getDaemonClient()
@@ -24,6 +28,7 @@ function SettingsGeneral() {
         setStartAtLogin(s.enabled)
       })
       .catch(() => setSupported(false))
+    void refreshErrorReports()
   }, [])
 
   function handleChangeTheme(theme: Theme) {
@@ -81,6 +86,24 @@ function SettingsGeneral() {
               >
                 <SettingsHint>
                   Launches VodLabs Recorder minimized to the system tray when you log in to your computer.
+                </SettingsHint>
+              </SettingsRow>
+            )}
+
+            {reports?.available && (
+              <SettingsRow
+                label="Send error reports"
+                control={
+                  <Switch
+                    checked={reports.enabled === true}
+                    onCheckedChange={(on) => void setErrorReports(on)}
+                  />
+                }
+              >
+                <SettingsHint>
+                  Tells VodLabs when the recorder hits an error or crashes, so it can be
+                  fixed. Reports can name streamers and folders, never your logins.{" "}
+                  <PrivacyLink />
                 </SettingsHint>
               </SettingsRow>
             )}

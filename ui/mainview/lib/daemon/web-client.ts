@@ -2,6 +2,7 @@ import { wsconnect } from "@nats-io/nats-core"
 import { DaemonSession } from "@shared/daemon/session"
 import {
   Subjects,
+  BUG_REPORT_TIMEOUT_MS,
   VODS_DELETE_TIMEOUT_MS,
   VODS_REV_KEY,
   VODS_THUMBNAIL_TIMEOUT_MS,
@@ -25,6 +26,9 @@ import type {
   StreamersSnapshot,
   UpdateState,
   UserConfig,
+  ErrorReportsState,
+  BugReportRequest,
+  BugReportResult,
 } from "@shared/types"
 import type { DaemonClient } from "./client"
 
@@ -211,6 +215,13 @@ export class WebDaemonClient implements DaemonClient {
     this.session.request<UserConfig>(Subjects.configSet, cfg)
   getFolderSuggestions = () =>
     this.session.request<FolderSuggestion[]>(Subjects.configFolders)
+
+  getErrorReports = () =>
+    this.session.request<ErrorReportsState>(Subjects.reportsGet)
+  setErrorReports = (enabled: boolean) =>
+    this.session.request<ErrorReportsState>(Subjects.reportsSet, { enabled })
+  sendBugReport = (req: BugReportRequest) =>
+    this.session.request<BugReportResult>(Subjects.reportsBug, req, BUG_REPORT_TIMEOUT_MS)
 
   // Platform logins. The browser can't open a native webview to read another
   // site's cookies (webviewLogin capability is false), so platformLogin is

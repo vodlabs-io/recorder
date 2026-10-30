@@ -97,6 +97,9 @@ const electrobunClient: DaemonClient = {
   installUpdates: () => req.installUpdates({}),
   getConfig: () => req.getConfig({}),
   setConfig: (cfg) => req.setConfig(cfg),
+  getErrorReports: () => req.getErrorReports({}),
+  setErrorReports: (enabled) => req.setErrorReports({ enabled }),
+  sendBugReport: (r) => req.sendBugReport(r),
   // The desktop's daemon runs on this machine, with a folder picker.
   getFolderSuggestions: () => Promise.resolve([]),
   retryConnect: () => req.retryConnect({}),

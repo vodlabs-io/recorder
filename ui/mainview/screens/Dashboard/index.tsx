@@ -50,6 +50,7 @@ import {
 import { TablePagination } from "@/components/table-pagination"
 import { ConnectionBanner } from "@/components/connection-banner"
 import { RegistrationBanner } from "@/components/registration-banner"
+import { ErrorReportsBanner } from "@/components/error-reports-banner"
 import { ServiceBanner } from "@/components/service-banner"
 import { UpdateRequiredBanner } from "@/components/update-required-banner"
 import { StreamerOptionsDialog } from "@/components/streamer-options-dialog"
@@ -286,6 +287,7 @@ function Dashboard() {
       <UpdateRequiredBanner />
       <ServiceBanner />
       <RegistrationBanner />
+      <ErrorReportsBanner />
       {!disabled && streamerList.length === 0 && <DashboardEmpty />}
       {!disabled && streamerList.length > 0 && (
         <>

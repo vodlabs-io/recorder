@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
+  Bug,
   Check,
   ClipboardCopy,
   ExternalLink,
@@ -10,6 +11,8 @@ import {
   Share2,
 } from "lucide-react"
 import { ConnectionBanner } from "@/components/connection-banner"
+import { BugReportDialog } from "@/components/bug-report-dialog"
+import { refreshErrorReports } from "@/lib/error-reports"
 import { PollingIntervals } from "@/components/polling-intervals"
 import { appStore } from "@/state/app-state"
 import { getDaemonClient, type DaemonInfo } from "@/lib/daemon"
@@ -121,6 +124,7 @@ export function About() {
   const [vodTotal, setVodTotal] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [desktopLog, setDesktopLog] = useState("")
+  const [bugOpen, setBugOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -148,16 +152,22 @@ export function About() {
   }, [])
 
   useEffect(() => {
+    if (connected) void refreshErrorReports()
+  }, [connected])
+
+  useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), uptimeTickMs)
     return () => clearInterval(id)
   }, [])
 
   // A bug report needs the build and the machine, and asking a user to find
   // them is how reports arrive without them. Nothing is uploaded: this opens
-  // the bug report form with its versions field filled in, which the user
-  // reads before posting.
-  const reportBug = () => {
+  // the GitHub bug form with its versions field filled in, which the user
+  // reads before posting. reportId names a report already sent from the bug
+  // report dialog, so the two can be matched.
+  const openIssue = (reportId?: string) => {
     const details = [
+      ...(reportId ? [`Report ID: ${reportId}`] : []),
       `App: ${appVersion ?? "—"}`,
       `Daemon: ${info?.version ?? daemon.version ?? "—"}${info?.commit ? ` (${info.commit.slice(0, 12)})` : ""}`,
       `System: ${info ? `${info.os}/${info.arch}` : "—"}`,
@@ -200,6 +210,12 @@ export function About() {
 
   return (
     <>
+      <BugReportDialog
+        open={bugOpen}
+        onOpenChange={setBugOpen}
+        appVersion={appVersion ?? undefined}
+        openIssue={openIssue}
+      />
       <ConnectionBanner />
       <div className="mx-auto my-4 flex w-full max-w-table flex-col gap-4 px-4">
         <Card>
@@ -235,9 +251,9 @@ export function About() {
               </LinkOut>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={reportBug}>
+              <Button size="sm" variant="outline" onClick={() => setBugOpen(true)}>
+                <Bug className="mr-1 h-3 w-3" />
                 Report a bug
-                <ExternalLink className="ml-1 h-3 w-3" />
               </Button>
               <Button size="sm" variant="outline" onClick={copyDiagnostics}>
                 {copied ? (

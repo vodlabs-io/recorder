@@ -41,6 +41,9 @@ export type {
   UpdateResult,
   UpdateState,
   UserConfig,
+  ErrorReportsState,
+  BugReportRequest,
+  BugReportResult,
   VODFile,
   VODListPage,
   RecordingListResult,
@@ -72,6 +75,9 @@ import type {
   StreamersSnapshot,
   UpdateState,
   UserConfig,
+  ErrorReportsState,
+  BugReportRequest,
+  BugReportResult,
   VODListPage,
 } from "@shared/types";
 
@@ -131,6 +137,12 @@ export interface DaemonClient {
 
   getConfig(): Promise<UserConfig>;
   setConfig(cfg: UserConfig): Promise<UserConfig>;
+
+  // Error reports (off until the user turns them on) and bug reports (sent
+  // only when the user sends one). Both go from the daemon to Sentry.
+  getErrorReports(): Promise<ErrorReportsState>;
+  setErrorReports(enabled: boolean): Promise<ErrorReportsState>;
+  sendBugReport(req: BugReportRequest): Promise<BugReportResult>;
   // Folders mounted into a container daemon, offered as suggestions in the
   // folder settings. Empty for any other daemon.
   getFolderSuggestions(): Promise<FolderSuggestion[]>;

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { appStore } from "@/state/app-state"
 import { getDaemonClient } from "@/lib/daemon"
+import { refreshErrorReports, setErrorReports, useErrorReports } from "@/lib/error-reports"
 
 // WelcomeDialog is the app's one chance to say what it does before a user
 // starts using it: where recordings land, that it has to keep running to catch
@@ -34,6 +35,9 @@ export function WelcomeDialog() {
   const [downloadDir, setDownloadDir] = useState<string>("")
   const [startAtLogin, setStartAtLogin] = useState<boolean | null>(null)
   const [loginSupported, setLoginSupported] = useState(false)
+  const reports = useErrorReports()
+  // Off unless the user turns it on here; recorded when the dialog closes.
+  const [sendReports, setSendReports] = useState(false)
 
   const open = prefsHydrated && !seen && connected
 
@@ -50,10 +54,15 @@ export function WelcomeDialog() {
         setStartAtLogin(s.enabled)
       })
       .catch(() => setLoginSupported(false))
+    void refreshErrorReports()
   }, [open])
 
   const finish = () => {
     appStore.getState().persistPrefs({ welcome_seen: true })
+    // Closing the dialog is the answer, so the banner doesn't ask again.
+    if (reports?.available && reports.enabled === null) {
+      void setErrorReports(sendReports).catch(() => {})
+    }
   }
 
   const chooseFolder = async () => {
@@ -103,6 +112,19 @@ export function WelcomeDialog() {
                   <ExternalLink className="ml-1 h-3 w-3" />
                 </Button>
               </p>
+              {reports?.available && reports.enabled === null && (
+                <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">Send error reports</p>
+                    <p>
+                      When the recorder hits an error or crashes, it tells VodLabs what went
+                      wrong so it can be fixed. Reports can name streamers and folders, never
+                      your logins. You can change this later in Settings.
+                    </p>
+                  </div>
+                  <Switch checked={sendReports} onCheckedChange={setSendReports} />
+                </div>
+              )}
             </div>
           </>
         )}
