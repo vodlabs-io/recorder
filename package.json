@@ -9,6 +9,7 @@
 		"daemon": "bun run scripts/dev-daemon.mjs",
 		"start": "electrobun prepare && vite build && electrobun dev",
 		"dev": "electrobun dev --watch",
+		"dev:all": "bun run scripts/quit-installed-app.mjs && concurrently -k -n daemon,app -c blue,green \"bun run daemon --logger.mode console\" \"bun run dev:hmr\"",
 		"dev:hmr": "concurrently --kill-others-on-fail \"bun run hmr\" \"bun run start\"",
 		"hmr": "electrobun prepare && vite --port 5173",
 		"web": "vite --config web/vite.config.ts",

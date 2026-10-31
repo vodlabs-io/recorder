@@ -1,3 +1,4 @@
+import { devBuildMessage } from "./dev-build";
 import type { DaemonUpdateStatus } from "../../../shared/types";
 import {
   DEFAULT_BIN_REPO,
@@ -64,6 +65,8 @@ export type DaemonHost = {
    * and we'd download a binary it can never run.
    */
   infoReady(): boolean;
+  /** Commit the running daemon was built from (DaemonInfo.commit). */
+  commit(): string | null;
   /** Binary the running daemon was launched from (DaemonInfo.executable_path). */
   executablePath(): string | null;
   /** Ask the daemon to stop; resolves once the request is away, not on exit. */
@@ -178,7 +181,7 @@ export class DaemonUpdater {
         phase: "disabled",
         availableVersion: null,
         progress: null,
-        message: "Development build; updates are off.",
+        message: devBuildMessage(this.host.commit()?.slice(0, 7) ?? null),
       });
       return this.status;
     }

@@ -27,6 +27,7 @@ const EMPTY_UPDATE_STATE: UpdateState = {
     availableVersion: null,
     progress: null,
     message: null,
+    build: null,
   },
   daemon: {
     phase: "idle",

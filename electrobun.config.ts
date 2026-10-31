@@ -1,12 +1,30 @@
+import { execFileSync } from "node:child_process";
 import type { ElectrobunConfig } from "electrobun";
+
+// latestReleaseTag versions a local build as the newest release tag it builds
+// on (sans "v"), as scripts/build.sh does for the daemon.
+function latestReleaseTag(): string {
+	try {
+		return execFileSync(
+			"git",
+			["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+			{ encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+		)
+			.trim()
+			.replace(/^v/, "");
+	} catch {
+		return "0.0.1";
+	}
+}
 
 export default {
 	app: {
 		name: "VodLabs Recorder",
 		identifier: "com.vodlabs.recorder",
 		// Release builds inject the git tag (sans "v") via ELECTROBUN_APP_VERSION
-		// in CI (see .github/workflows/release.yml); local builds fall back here.
-		version: process.env.ELECTROBUN_APP_VERSION ?? "0.0.1",
+		// in CI (see .github/workflows/release.yml); local builds use the newest
+		// release tag in their history.
+		version: process.env.ELECTROBUN_APP_VERSION ?? latestReleaseTag(),
 	},
 	build: {
 		mainProcess: "bun",

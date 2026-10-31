@@ -102,6 +102,7 @@ const APP_UPDATE_UNAVAILABLE: UpdateState["app"] = {
   availableVersion: null,
   progress: null,
   message: null,
+  build: null,
 }
 
 export class WebDaemonClient implements DaemonClient {
