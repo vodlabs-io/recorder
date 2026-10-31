@@ -6,19 +6,19 @@ import (
 )
 
 // tiers maps a length of video to its timeline-preview interval: a short
-// video is previewed every second, a long one sparsely enough to stay near a
-// thousand frames, which is still finer than a seek bar's pixels.
+// video is previewed every second, a long one sparsely enough to stay within
+// a few hundred frames, about as many as a seek bar has pixels.
 var tiers = []struct {
 	upTo     time.Duration
 	interval time.Duration
 }{
-	{10 * time.Minute, time.Second},
-	{20 * time.Minute, 2 * time.Second},
-	{time.Hour, 5 * time.Second},
-	{2 * time.Hour, 10 * time.Second},
-	{4 * time.Hour, 20 * time.Second},
-	{8 * time.Hour, 30 * time.Second},
-	{16 * time.Hour, time.Minute},
+	{5 * time.Minute, time.Second},
+	{10 * time.Minute, 2 * time.Second},
+	{30 * time.Minute, 5 * time.Second},
+	{time.Hour, 10 * time.Second},
+	{2 * time.Hour, 20 * time.Second},
+	{4 * time.Hour, 30 * time.Second},
+	{8 * time.Hour, time.Minute},
 }
 
 // Interval is the timeline-preview spacing for a video of length d. A
