@@ -48,26 +48,35 @@ released app. Please be gentle with it: no load tests or scripted floods.
 
 A development build of the app never starts a daemon itself. It waits,
 showing a banner, until one is running, so you always test the daemon you
-built. In one terminal:
+built. To run both from the current checkout:
+
+```sh
+bun run dev:all             # quits the installed app, then runs the daemon and dev:hmr
+```
+
+Ctrl-C stops both. Restart it after changing Go code. To run them separately,
+use one terminal for the daemon:
 
 ```sh
 bun run daemon --logger.mode console   # rebuilds, then runs ./vlrecd, logging here
 ```
 
-and in another:
+and another for the app:
 
 ```sh
 bun run dev:hmr             # the app; interface changes appear instantly
 bun run start               # a one-off build and launch, no watching
-bun run dev                 # rebuilds and relaunches on changes to desktop/src/bun
+bun run dev                 # relaunches on changes to desktop/src/bun, with the last interface build
 bun run build:stable        # a release build, in ./artifacts
 ```
 
 `bun run dev:hmr` serves the interface from Vite on `http://127.0.0.1:5173`,
 and the app window loads it from there instead of from the bundle.
 
-Only one daemon can run at a time, so quit the installed app first. The
-daemon you build uses your normal settings, streamers and recordings. To keep
+Only one daemon can run at a time. If the installed app is running, the
+development app connects to its daemon instead, so quit it first (`dev:all`
+does this for you on macOS). The daemon you build uses your normal settings,
+streamers and recordings. To keep
 them apart, point it at other folders:
 
 ```sh

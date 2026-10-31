@@ -75,7 +75,7 @@ git clone https://github.com/vodlabs-io/recorder.git
 cd recorder
 ./scripts/build.sh    # downloads the pinned FFmpeg, then builds ./vlrecd and ./vod
 bun install
-bun run dev:hmr       # the desktop app, reloading as you edit the UI
+bun run dev:all       # the daemon and the desktop app, reloading as you edit the UI
 ```
 
 Builds from source use the same VodLabs service as the released app.
