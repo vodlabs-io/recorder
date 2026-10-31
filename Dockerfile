@@ -18,7 +18,7 @@ COPY . .
 RUN bun run web:build
 
 # Cross-compiles natively on the build platform; the binaries are pure Go.
-FROM --platform=$BUILDPLATFORM golang:1.26.10-trixie@sha256:909771fef53e3dcb0950255f0c9a8b4728c3b841e61509c7b29b098de7ee02d4 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-trixie@sha256:c65ecfe613b539ac74c62a4c3b2c27e8f8a6076384c8f27e8a3c0f3be17cc385 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=docker
