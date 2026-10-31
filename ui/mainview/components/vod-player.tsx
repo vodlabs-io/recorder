@@ -56,30 +56,46 @@ export default function VodPlayer({
 // useDecodeRecovery returns refs for an HlsJsVideo that rebuild hls.js's
 // MediaSource when the browser fails to decode the stream, resuming where it
 // stopped. WebKit fails a seek this way when it lands in a file encoded at
-// another H.264 level than the one just played. A failure before playback
-// gets past the position it resumed from is left to the player's error
-// dialog.
+// another H.264 level than the one just played; hls.js then also reports its
+// next append, against the closed MediaSource, as a fatal error. Both reach
+// the player through the adapter's dispatchEvent, so the hook holds back
+// decode errors there until the rebuilt MediaSource is attached. A failure
+// before playback gets past the position it resumed from goes on to the
+// player's error dialog.
 function useDecodeRecovery() {
-  const adapter = useRef<HlsJsAdapter | null>(null)
-  const video = useCallback((el: HTMLVideoElement | null) => {
-    if (!el) return
+  const el = useRef<HTMLVideoElement | null>(null)
+  const video = useCallback((node: HTMLVideoElement | null) => {
+    el.current = node
+  }, [])
+  const adapter = useCallback((media: HlsJsAdapter | null) => {
+    if (!media) return
+    const dispatch = media.dispatchEvent.bind(media)
     let resumedAt: number | null = null
-    const onError = () => {
-      const engine = adapter.current?.engine
-      if (el.error?.code !== MediaError.MEDIA_ERR_DECODE || !engine || resumedAt !== null) return
-      resumedAt = el.currentTime
-      const resume = !el.paused
+    let reattaching = false
+    const isDecodeError = (event: Event) =>
+      (event as ErrorEvent).error?.code === MediaError.MEDIA_ERR_DECODE ||
+      el.current?.error?.code === MediaError.MEDIA_ERR_DECODE
+    media.dispatchEvent = (event: Event) => {
+      const v = el.current
+      if (event.type === "timeupdate" && v && resumedAt !== null && Math.abs(v.currentTime - resumedAt) > 1) {
+        resumedAt = null
+      }
+      if (event.type !== "error" || !isDecodeError(event)) return dispatch(event)
+      if (reattaching) return true
+      const engine = media.engine
+      if (!engine || !v || resumedAt !== null) return dispatch(event)
+      resumedAt = v.currentTime
+      reattaching = true
+      const resume = !v.paused
+      engine.once("hlsMediaAttached" as Parameters<typeof engine.once>[0], () => {
+        reattaching = false
+        if (resume) void v.play().catch(() => {})
+      })
       engine.recoverMediaError()
-      if (resume) void el.play().catch(() => {})
+      return true
     }
-    const onTimeUpdate = () => {
-      if (resumedAt !== null && Math.abs(el.currentTime - resumedAt) > 1) resumedAt = null
-    }
-    el.addEventListener("error", onError)
-    el.addEventListener("timeupdate", onTimeUpdate)
     return () => {
-      el.removeEventListener("error", onError)
-      el.removeEventListener("timeupdate", onTimeUpdate)
+      media.dispatchEvent = dispatch
     }
   }, [])
   return { video, adapter }
