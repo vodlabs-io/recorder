@@ -154,6 +154,11 @@ func (a *archive) VODThumbnail(_ context.Context, dir, file string) ([]byte, err
 	return nil, fmt.Errorf("%w: %s has no %s", vlapi.ErrNotFound, dir, file)
 }
 
+// VODSessionThumbnail is a demo VOD's first screenshot.
+func (a *archive) VODSessionThumbnail(ctx context.Context, dir string) ([]byte, error) {
+	return a.VODThumbnail(ctx, dir, "")
+}
+
 // VODPreviews has nothing to show: demo VODs carry a screenshot, not a video
 // to preview, so the archive falls back to the plain thumbnail.
 func (a *archive) VODPreviews(_ context.Context, dir, file string) (processing.PreviewsManifest, []byte, error) {

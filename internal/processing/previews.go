@@ -19,15 +19,20 @@ import (
 	"github.com/vodlabs-io/recorder/internal/provenance"
 )
 
-// Previews are sidecars of a VOD file, next to it like its thumbnail so the
-// folder sweep carries them along. For vod1.mp4:
+// A session folder keeps its videos, their manifest and logs, and the
+// contact sheet at the top, and everything else made from the videos under
+// previews/, so the move sweep carries it along. For vod1.mp4:
 //
-//	vod1.thumbs.vtt              timeline previews (WebVTT, sprite cues)
-//	vod1.thumbs.000.jpg, …       their sprite sheets
-//	vod1.scrub.jpg               the archive card's hover strip
-//	vod1.previews.json           what the UI needs to lay them out
+//	previews/vod1/thumbnail.jpg      the archive card's screenshot
+//	previews/vod1/thumbs.vtt         timeline previews (WebVTT, sprite cues)
+//	previews/vod1/thumbs.000.jpg, …  their sprite sheets
+//	previews/vod1/scrub.jpg          the archive card's hover strip
+//	previews/vod1/previews.json      what the UI needs to lay them out
 //
-// The session's contact sheet spans all its files (see sessionsheet.go).
+// The session's contact sheet and three-up thumbnail span all its files (see
+// sessionsheet.go). Names are relative to the session folder.
+const PreviewsDir = "previews"
+
 func stem(vodFile string) string {
 	if i := strings.LastIndex(vodFile, "."); i > 0 {
 		return vodFile[:i]
@@ -35,30 +40,31 @@ func stem(vodFile string) string {
 	return vodFile
 }
 
-// StoryboardName is the WebVTT timeline-preview track of a VOD file.
-func StoryboardName(vodFile string) string { return stem(vodFile) + ".thumbs.vtt" }
+// PartPreviewsDir is the folder of a VOD file's previews.
+func PartPreviewsDir(vodFile string) string { return filepath.Join(PreviewsDir, stem(vodFile)) }
 
-// StoryboardSheetPrefix starts the names of a VOD file's sprite sheets.
-func StoryboardSheetPrefix(vodFile string) string { return stem(vodFile) + ".thumbs." }
+// StoryboardName is the WebVTT timeline-preview track of a VOD file.
+func StoryboardName(vodFile string) string {
+	return filepath.Join(PartPreviewsDir(vodFile), "thumbs.vtt")
+}
+
+// storyboardSheetPrefix starts the names of a track's sprite sheets, as its
+// cues name them.
+const storyboardSheetPrefix = "thumbs."
+
+// StoryboardSheetName is a VOD file's sprite sheet n.
+func StoryboardSheetName(vodFile string, n int) string {
+	return filepath.Join(PartPreviewsDir(vodFile), fmt.Sprintf("%s%03d.jpg", storyboardSheetPrefix, n))
+}
 
 // ScrubStripName is the hover strip of a VOD file.
-func ScrubStripName(vodFile string) string { return stem(vodFile) + ".scrub.jpg" }
+func ScrubStripName(vodFile string) string {
+	return filepath.Join(PartPreviewsDir(vodFile), "scrub.jpg")
+}
 
 // PreviewsManifestName describes a VOD file's previews.
-func PreviewsManifestName(vodFile string) string { return stem(vodFile) + ".previews.json" }
-
-// IsPreviewSidecar reports whether name is one of a session's preview
-// sidecars rather than a video or its thumbnail.
-func IsPreviewSidecar(name string) bool {
-	if name == SessionSheetName || name == sessionSheetKeyName {
-		return true
-	}
-	for _, suffix := range []string{".thumbs.vtt", ".scrub.jpg", ".previews.json"} {
-		if strings.HasSuffix(name, suffix) {
-			return true
-		}
-	}
-	return strings.Contains(name, ".thumbs.") && strings.HasSuffix(name, ".jpg")
+func PreviewsManifestName(vodFile string) string {
+	return filepath.Join(PartPreviewsDir(vodFile), "previews.json")
 }
 
 // PreviewsVersion is bumped when the layout changes, so older previews are
@@ -154,7 +160,9 @@ func GeneratePreviews(ctx context.Context, logger *slog.Logger, videoPath, thumb
 		return PreviewsManifest{}, errors.New("previews: no frames decoded")
 	}
 
-	sw := preview.NewSheetWriter(tile, preview.SheetCols, preview.SheetRows, StoryboardSheetPrefix(file), write)
+	partDir := PartPreviewsDir(file)
+	sw := preview.NewSheetWriter(tile, preview.SheetCols, preview.SheetRows, storyboardSheetPrefix,
+		func(name string, data []byte) error { return write(filepath.Join(partDir, name), data) })
 	for i, f := range frames {
 		if err := sw.Add(times[i], f); err != nil {
 			return PreviewsManifest{}, err
@@ -410,13 +418,13 @@ func stamped(logger *slog.Logger, data []byte, kind, file string) []byte {
 // HasPreviews reports whether dir holds a complete, current set of previews
 // for vodFile.
 func HasPreviews(dir, vodFile string) bool {
-	m, err := ReadPreviewsManifest(filepath.Join(dir, PreviewsManifestName(vodFile)))
+	m, err := ReadPreviewsManifest(dir, vodFile)
 	return err == nil && m.Version == PreviewsVersion
 }
 
-// ReadPreviewsManifest reads a vodN.previews.json.
-func ReadPreviewsManifest(path string) (PreviewsManifest, error) {
-	b, err := os.ReadFile(path)
+// ReadPreviewsManifest reads the previews manifest of dir/vodFile.
+func ReadPreviewsManifest(dir, vodFile string) (PreviewsManifest, error) {
+	b, err := ReadSidecar(dir, PreviewsManifestName(vodFile))
 	if err != nil {
 		return PreviewsManifest{}, err
 	}
@@ -425,8 +433,11 @@ func ReadPreviewsManifest(path string) (PreviewsManifest, error) {
 }
 
 // WriteFileAtomic writes a sidecar via a temp file and rename, so a reader
-// never sees half of one.
+// never sees half of one. Missing parent folders are created.
 func WriteFileAtomic(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
@@ -446,17 +457,13 @@ func WritePreviews(ctx context.Context, logger *slog.Logger, videoDir, outDir, v
 // RemovePreviews deletes vodFile's preview sidecars from dir (not its
 // thumbnail).
 func RemovePreviews(dir, vodFile string) {
-	names := []string{StoryboardName(vodFile), ScrubStripName(vodFile), PreviewsManifestName(vodFile)}
-	sheets, _ := filepath.Glob(filepath.Join(dir, globEscape(StoryboardSheetPrefix(vodFile))+"[0-9][0-9][0-9].jpg"))
-	for _, n := range names {
-		os.Remove(filepath.Join(dir, n))
+	part := filepath.Join(dir, PartPreviewsDir(vodFile))
+	for _, n := range []string{"thumbs.vtt", "scrub.jpg", "previews.json"} {
+		os.Remove(filepath.Join(part, n))
 	}
+	sheets, _ := filepath.Glob(filepath.Join(part, storyboardSheetPrefix+"[0-9][0-9][0-9].jpg"))
 	for _, s := range sheets {
 		os.Remove(s)
 	}
-}
-
-func globEscape(s string) string {
-	r := strings.NewReplacer(`\`, `\\`, `*`, `\*`, `?`, `\?`, `[`, `\[`)
-	return r.Replace(s)
+	os.Remove(part) // only once empty: the thumbnail may still be there
 }

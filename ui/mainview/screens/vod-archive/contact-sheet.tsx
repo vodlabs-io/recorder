@@ -32,7 +32,15 @@ function loadSheet(dir: string): Promise<string | null> {
 // files, in its info panel and opens it full size on click. The thumbnail
 // stands in while the sheet loads, and for VODs recorded before contact
 // sheets existed, which have none.
-export function ContactSheet({ dir, thumbFile }: { dir: string; thumbFile: string | null }) {
+export function ContactSheet({
+  dir,
+  thumbFile,
+  thumbSession = false,
+}: {
+  dir: string
+  thumbFile: string | null
+  thumbSession?: boolean
+}) {
   const [url, setUrl] = useState<string | null>(null)
   const [state, setState] = useState<"loading" | "ready" | "failed">("loading")
   const [open, setOpen] = useState(false)
@@ -64,7 +72,7 @@ export function ContactSheet({ dir, thumbFile }: { dir: string; thumbFile: strin
         </button>
       ) : (
         <>
-          <LazyThumb dir={dir} file={thumbFile} />
+          <LazyThumb dir={dir} file={thumbFile} session={thumbSession} />
           {state === "loading" && (
             <div className="absolute right-2 bottom-2 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1 text-xs text-white">
               <Loader2 className="h-3 w-3 animate-spin" />

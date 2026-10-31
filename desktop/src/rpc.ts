@@ -105,7 +105,7 @@ export type AppRPCType = {
         response: VODListPage;
       };
       getRecordingThumbnail: {
-        params: { dir: string; file: string };
+        params: { dir: string; file: string; session?: boolean };
         response: string;
       };
       getVodPreviews: {

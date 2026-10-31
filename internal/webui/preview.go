@@ -20,8 +20,9 @@ type PreviewOpener interface {
 	OpenVODPreview(ctx context.Context, dir, file, kind string, n int) (*os.File, error)
 }
 
-// sheetRef matches a cue's sprite sheet, as previews name them.
-var sheetRef = regexp.MustCompile(`(?m)^[^\s#]+\.thumbs\.(\d{3})\.jpg(#xywh=)`)
+// sheetRef matches a cue's sprite sheet, as previews name them: thumbs.000.jpg,
+// or vod1.thumbs.000.jpg from older recorders.
+var sheetRef = regexp.MustCompile(`(?m)^(?:[^\s#/]+\.)?thumbs\.(\d{3})\.jpg(#xywh=)`)
 
 // handleVODPreview serves a recording's timeline previews for the player's
 // seek bar. The track names its sheets relative to itself on disk; here each

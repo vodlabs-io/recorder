@@ -224,7 +224,7 @@ function InfoBody({
             height of zero, so without it a panel whose content overflows
             squashes the thumbnail to a strip instead of scrolling. */}
         {!busy && files.length > 0 ? (
-          <ContactSheet dir={s.dir} thumbFile={files[0].name} />
+          <ContactSheet dir={s.dir} thumbFile={files[0].name} thumbSession={files.length > 1} />
         ) : (
           <div className="shrink-0 overflow-hidden rounded-lg border">
             <LazyThumb dir={s.dir} file={files.length > 0 ? files[0].name : null} />

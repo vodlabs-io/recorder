@@ -68,6 +68,9 @@ type VOD struct {
 	TotalBytes  int64     `json:"total_bytes"`
 	DurationSec float64   `json:"duration_sec"`
 	State       string    `json:"state"`
+	// LegacyLayout marks a folder that still keeps sidecars flat beside its
+	// videos, as recorders up to 0.0.20 did, rather than under previews/.
+	LegacyLayout bool `json:"legacy_layout,omitempty"`
 	// Reason is why a session in the moving state is not progressing. Empty when
 	// the move is simply running.
 	Reason       string `json:"reason,omitempty"`
@@ -364,10 +367,20 @@ func sessionTime(s VOD) time.Time {
 type dirContents struct {
 	hasManifest bool
 	hasMetadata bool
+	hasPreviews bool // a previews/ folder, which holds the thumbnails
+	legacy      bool // a flat preview sidecar
 	vodFiles    []os.DirEntry
-	thumbs      map[string]bool
+	thumbs      map[string]bool // flat thumbnails, by video name sans extension
 	subdirs     []string
 }
+
+// previewsDir holds a session's thumbnails and previews, one folder per
+// video: previews/vod1/thumbnail.jpg.
+const previewsDir = "previews"
+
+// legacySidecar matches the flat preview sidecars of recorders up to
+// 0.0.20 other than thumbnails, which are vodN.jpg.
+var legacySidecar = regexp.MustCompile(`^(contact-sheet\.json|.+\.(thumbs\.vtt|scrub\.jpg|previews\.json|thumbs\.\d{3}\.jpg))$`)
 
 // readDirContents reads dir and sorts its entries into the parts the session
 // heuristic cares about: a manifest, produced vod*.mp4 files, their thumbnails,
@@ -383,7 +396,9 @@ func readDirContents(dir string) (dirContents, error) {
 		name := e.Name()
 		switch {
 		case e.IsDir():
-			if !strings.HasPrefix(name, "pt") && !strings.HasPrefix(name, ".") {
+			if name == previewsDir {
+				c.hasPreviews = true
+			} else if !strings.HasPrefix(name, "pt") && !strings.HasPrefix(name, ".") {
 				c.subdirs = append(c.subdirs, name)
 			}
 		case name == recording.ManifestName:
@@ -395,6 +410,8 @@ func readDirContents(dir string) (dirContents, error) {
 			c.hasMetadata = true
 		case vodFileRe.MatchString(name):
 			c.vodFiles = append(c.vodFiles, e)
+		case legacySidecar.MatchString(name):
+			c.legacy = true
 		case strings.HasSuffix(name, ".jpg"):
 			c.thumbs[strings.TrimSuffix(name, ".jpg")] = true
 		}
@@ -438,8 +455,20 @@ func scanDir(root, dir string, depth int, suppressed, seenDir map[string]bool, r
 // manifest and falling back to the folder layout ({platform}/{username}/
 // {datetime}) plus file stats for folders without one.
 func buildSession(root, dir string, c dirContents) VOD {
-	hasManifest, vodFiles, thumbs := c.hasManifest, c.vodFiles, c.thumbs
-	s := VOD{Dir: dir, Root: root}
+	hasManifest, vodFiles := c.hasManifest, c.vodFiles
+	s := VOD{Dir: dir, Root: root, LegacyLayout: c.legacy}
+	// thumb reports whether a video has its thumbnail, flat or in previews/.
+	thumb := func(name string) bool {
+		if c.thumbs[trimExt(name)] {
+			s.LegacyLayout = true
+			return true
+		}
+		if !c.hasPreviews {
+			return false
+		}
+		_, err := os.Stat(filepath.Join(dir, previewsDir, trimExt(name), "thumbnail.jpg"))
+		return err == nil
+	}
 	if c.hasMetadata {
 		s.Titles, s.DisplayName = readSidecar(dir)
 	}
@@ -486,7 +515,7 @@ func buildSession(root, dir string, c dirContents) VOD {
 					Start:       mf.Start,
 					End:         mf.End,
 					DurationSec: mf.DurationSec,
-					HasThumb:    thumbs[trimExt(mf.Name)],
+					HasThumb:    thumb(mf.Name),
 				}
 				if df, ok := onDisk[mf.Name]; ok && df.bytes > 0 {
 					f.Bytes = df.bytes
@@ -498,7 +527,7 @@ func buildSession(root, dir string, c dirContents) VOD {
 					s.Files = append(s.Files, File{
 						Name:     name,
 						Bytes:    df.bytes,
-						HasThumb: thumbs[trimExt(name)],
+						HasThumb: thumb(name),
 					})
 				}
 			}
@@ -527,7 +556,7 @@ func buildSession(root, dir string, c dirContents) VOD {
 		s.Files = append(s.Files, File{
 			Name:     name,
 			Bytes:    df.bytes,
-			HasThumb: thumbs[trimExt(name)],
+			HasThumb: thumb(name),
 		})
 		s.TotalBytes += df.bytes
 		if df.modTime.After(s.End) {

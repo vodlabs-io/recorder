@@ -328,10 +328,10 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
       // webview (fetchRecordings), which renders pages as they arrive.
       listVodsPage: ({ offset, limit, rescan }) =>
         session.request(Subjects.vodsList, { offset, limit, rescan }),
-      getRecordingThumbnail: async ({ dir, file }) => {
+      getRecordingThumbnail: async ({ dir, file, session: whole }) => {
         const res = await session.request<{ jpeg_b64: string }>(
           Subjects.vodsThumbnail,
-          { dir, file },
+          { dir, file, session: whole },
           VODS_THUMBNAIL_TIMEOUT_MS,
         );
         return res.jpeg_b64;

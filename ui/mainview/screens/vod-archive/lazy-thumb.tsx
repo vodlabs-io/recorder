@@ -65,11 +65,12 @@ function touch(key: string, entry: ThumbEntry): void {
   }
 }
 
-// loadThumb resolves the session file's thumbnail data URL, or null when it
-// failed (retryable until MAX_THUMB_ATTEMPTS) or is exhausted. Concurrent
-// callers for the same key share one request.
-function loadThumb(dir: string, file: string): Promise<string | null> {
-  const key = `${dir}|${file}`
+// loadThumb resolves the session file's thumbnail data URL, or with session
+// the whole session's, or null when it failed (retryable until
+// MAX_THUMB_ATTEMPTS) or is exhausted. Concurrent callers for the same key
+// share one request.
+function loadThumb(dir: string, file: string, session: boolean): Promise<string | null> {
+  const key = thumbKey(dir, file, session)
   const entry = thumbCache.get(key) ?? { attempts: 0 }
   if (entry.url) {
     touch(key, entry)
@@ -78,7 +79,7 @@ function loadThumb(dir: string, file: string): Promise<string | null> {
   if (entry.inflight) return entry.inflight
   if (entry.attempts >= MAX_THUMB_ATTEMPTS) return Promise.resolve(null)
 
-  entry.inflight = runThumb(() => getDaemonClient().getRecordingThumbnail(dir, file))
+  entry.inflight = runThumb(() => getDaemonClient().getRecordingThumbnail(dir, file, session))
     .then((b64) => {
       entry.url = `data:image/jpeg;base64,${b64}`
       return entry.url
@@ -94,8 +95,12 @@ function loadThumb(dir: string, file: string): Promise<string | null> {
   return entry.inflight
 }
 
-function thumbAttempts(dir: string, file: string): number {
-  return thumbCache.get(`${dir}|${file}`)?.attempts ?? 0
+function thumbAttempts(dir: string, file: string, session: boolean): number {
+  return thumbCache.get(thumbKey(dir, file, session))?.attempts ?? 0
+}
+
+function thumbKey(dir: string, file: string, session: boolean): string {
+  return `${dir}|${file}${session ? "|session" : ""}`
 }
 
 // Exhausted entries latch so a genuinely broken file isn't re-requested every
@@ -137,16 +142,19 @@ function subscribeGeneration(onChange: () => void): () => void {
 // re-renders anything but this one card. The daemon generates missing
 // thumbnails on demand, which can take a moment — hence the
 // per-card spinner. file "" asks for any screenshot of a session still being
-// worked on; null means there is nothing to show.
+// worked on; null means there is nothing to show. session asks for the whole
+// session's screenshot, file naming its first file.
 // scrub, when given, lets the cursor scrub through the VOD's timeline
 // previews once the thumbnail has loaded.
 export function LazyThumb({
   dir,
   file,
+  session = false,
   scrub,
 }: {
   dir: string
   file: string | null
+  session?: boolean
   scrub?: ScrubFile[]
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
@@ -182,7 +190,7 @@ export function LazyThumb({
   useEffect(() => {
     if (!visible || file == null || url) return
     let alive = true
-    void loadThumb(dir, file).then((loaded) => {
+    void loadThumb(dir, file, session).then((loaded) => {
       if (!alive) return
       if (loaded) {
         setUrl(loaded)
@@ -194,7 +202,7 @@ export function LazyThumb({
       // eventually loads even if an attempt failed (e.g. during a fast-scroll
       // request burst). Off-screen when the timer fires, the effect no-ops
       // until the card is scrolled back into view.
-      if (thumbAttempts(dir, file) < MAX_THUMB_ATTEMPTS) {
+      if (thumbAttempts(dir, file, session) < MAX_THUMB_ATTEMPTS) {
         clearTimeout(retryTimer.current)
         retryTimer.current = setTimeout(() => setRetryTick((t) => t + 1), RETRY_DELAY_MS)
       }
@@ -203,7 +211,7 @@ export function LazyThumb({
       alive = false
       clearTimeout(retryTimer.current)
     }
-  }, [visible, dir, file, url, retryTick, generation])
+  }, [visible, dir, file, session, url, retryTick, generation])
 
   return (
     <div

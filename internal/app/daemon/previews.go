@@ -81,7 +81,7 @@ func (a *App) readPreviews(ctx context.Context, dir, file string) (processing.Pr
 	if !listed {
 		return processing.PreviewsManifest{}, "", fmt.Errorf("%w: no such file in session: %s", vlapi.ErrNotFound, file)
 	}
-	m, err := processing.ReadPreviewsManifest(filepath.Join(session.Dir, processing.PreviewsManifestName(file)))
+	m, err := processing.ReadPreviewsManifest(session.Dir, file)
 	if err != nil || m.Version != processing.PreviewsVersion {
 		return m, "", fmt.Errorf("%w: no previews for %s", vlapi.ErrNotFound, file)
 	}
@@ -95,7 +95,7 @@ func (a *App) VODPreviews(ctx context.Context, dir, file string) (processing.Pre
 	if err != nil {
 		return m, nil, err
 	}
-	strip, err := os.ReadFile(filepath.Join(out, processing.ScrubStripName(file)))
+	strip, err := processing.ReadSidecar(out, processing.ScrubStripName(file))
 	return m, strip, err
 }
 
@@ -117,13 +117,9 @@ func (a *App) VODContactSheet(ctx context.Context, dir string) ([]byte, error) {
 	if !withPreviews {
 		return nil, fmt.Errorf("%w: no previews in session", vlapi.ErrNotFound)
 	}
-	out := session.Dir
-	if a.isReadOnlyVODRoot(session.Root) {
-		sum := sha256.Sum256([]byte(thumbCacheKey(session)))
-		out = filepath.Join(vlconfig.DefaultCacheFilePath("previews"), hex.EncodeToString(sum[:16]))
-		if err := os.MkdirAll(out, 0o755); err != nil {
-			return nil, err
-		}
+	out, err := a.sessionPreviewsDir(session)
+	if err != nil {
+		return nil, err
 	}
 	return a.sheets.do(out, func() ([]byte, error) {
 		if processing.SessionSheetCurrent(out, files) {
@@ -132,6 +128,77 @@ func (a *App) VODContactSheet(ctx context.Context, dir string) ([]byte, error) {
 		hdr := processing.PreviewHeader{Platform: session.Platform, Username: session.Username, Start: session.Start}
 		return processing.WriteSessionSheet(context.WithoutCancel(ctx), a.log.With("service", "previews"), session.Dir, out, files, hdr)
 	})
+}
+
+// VODSessionThumbnail implements vlapi.VODController: the thumbnail of a
+// whole VOD. A portrait VOD of several files with previews gets three frames
+// across all of them, built on first request and kept like its contact
+// sheet; any other has its first file's.
+func (a *App) VODSessionThumbnail(ctx context.Context, dir string) ([]byte, error) {
+	session, ok := a.vodIndex.Find(ctx, dir)
+	if !ok {
+		return nil, fmt.Errorf("%w: not an archived session: %s", vlapi.ErrNotFound, dir)
+	}
+	first := func() ([]byte, error) {
+		if len(session.Files) == 0 {
+			return a.VODThumbnail(ctx, dir, "")
+		}
+		return a.VODThumbnail(ctx, dir, session.Files[0].Name)
+	}
+	if session.State != vodindex.StateReady || len(session.Files) < 2 {
+		return first()
+	}
+	m, err := processing.ReadPreviewsManifest(session.Dir, session.Files[0].Name)
+	if err != nil || !m.Portrait {
+		return first()
+	}
+	var files []processing.SheetFile
+	for _, f := range session.Files {
+		files = append(files, processing.SheetFile{Name: f.Name, Bytes: f.Bytes})
+	}
+	key, file := thumbCacheKey(session), sessionThumbCacheFile(files)
+	if jpeg, ok := a.thumbCache.Get(key, file); ok {
+		return jpeg, nil
+	}
+	out, err := a.sessionPreviewsDir(session)
+	if err != nil {
+		return nil, err
+	}
+	jpeg, err := a.sheets.do(out+"\x00thumbnail", func() ([]byte, error) {
+		if processing.SessionThumbnailCurrent(out, files) {
+			return os.ReadFile(filepath.Join(out, processing.SessionThumbnailName))
+		}
+		return processing.WriteSessionThumbnail(context.WithoutCancel(ctx), a.log.With("service", "previews"), session.Dir, out, files)
+	})
+	if err != nil {
+		a.log.Debug("Falling back to the first file's thumbnail", "dir", dir, "error", err)
+		return first()
+	}
+	if err := a.thumbCache.Put(key, file, jpeg); err != nil {
+		a.log.Debug("Failed to cache thumbnail", "session", key, "file", file, "error", err)
+	}
+	return jpeg, nil
+}
+
+// sessionThumbCacheFile names a session thumbnail in the thumbnail cache,
+// apart from any one file's and from one built from other files.
+func sessionThumbCacheFile(files []processing.SheetFile) string {
+	h := sha256.New()
+	for _, f := range files {
+		fmt.Fprintf(h, "%s\x00%d\x00", f.Name, f.Bytes)
+	}
+	return processing.SessionThumbnailName + "#" + hex.EncodeToString(h.Sum(nil)[:8])
+}
+
+// sessionPreviewsDir is where a session's own previews go: its folder, or
+// for a read-only scan folder, a local cache folder.
+func (a *App) sessionPreviewsDir(session vodindex.VOD) (string, error) {
+	if !a.isReadOnlyVODRoot(session.Root) {
+		return session.Dir, nil
+	}
+	sum := sha256.Sum256([]byte(thumbCacheKey(session)))
+	out := filepath.Join(vlconfig.DefaultCacheFilePath("previews"), hex.EncodeToString(sum[:16]))
+	return out, os.MkdirAll(out, 0o755)
 }
 
 // OpenVODPreview implements webui.PreviewOpener: the timeline-preview track
@@ -152,11 +219,11 @@ func (a *App) OpenVODPreview(ctx context.Context, dir, file, kind string, n int)
 		if n < 0 || n > 999 {
 			return nil, webui.ErrNotFound
 		}
-		name = fmt.Sprintf("%s%03d.jpg", processing.StoryboardSheetPrefix(file), n)
+		name = processing.StoryboardSheetName(file, n)
 	default:
 		return nil, webui.ErrNotFound
 	}
-	f, err := os.OpenInRoot(out, name)
+	f, err := processing.OpenSidecar(out, name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", webui.ErrNotFound, err)
 	}
