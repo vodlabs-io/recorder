@@ -253,8 +253,9 @@ func (m *media) handleHLSThumbnails(w http.ResponseWriter, r *http.Request) {
 	w.Write(b.Bytes())
 }
 
-// sheetName matches a cue's sprite sheet, as previews name them.
-var sheetName = regexp.MustCompile(`\.thumbs\.(\d{3})\.jpg$`)
+// sheetName matches a cue's sprite sheet, as previews name them: thumbs.000.jpg,
+// or vod1.thumbs.000.jpg from older recorders.
+var sheetName = regexp.MustCompile(`(?:^|\.)thumbs\.(\d{3})\.jpg$`)
 
 func vttClock(d time.Duration) string {
 	ms := d.Milliseconds()

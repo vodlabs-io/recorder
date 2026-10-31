@@ -674,7 +674,7 @@ func (s *Service) finalizeMerge(ctx context.Context, logger *slog.Logger, job *J
 				logger.Warn("Failed to rename original part", "part", p.name, "error", err)
 			}
 		}
-		thumb := filepath.Join(job.Dir, processing.ThumbnailName(p.name))
+		thumb := processing.SidecarPath(job.Dir, processing.ThumbnailName(p.name))
 		if err := os.Remove(thumb); err != nil && !os.IsNotExist(err) {
 			logger.Warn("Failed to remove part thumbnail", "part", p.name, "error", err)
 		}

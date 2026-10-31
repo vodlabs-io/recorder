@@ -190,6 +190,7 @@ export const VodCard = React.memo(function VodCard({
         <LazyThumb
           dir={s.dir}
           file={files[0]?.name ?? (busy ? "" : null)}
+          session={!busy && files.length > 1}
           scrub={busy ? undefined : scrubFiles(files, s.duration_sec)}
         />
         {files.length > 1 && (

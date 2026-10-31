@@ -40,16 +40,18 @@ type App struct {
 	store       *vlstate.Store // Authoritative per-streamer view docs
 	apiSvc      *vlapi.Service
 	procSvc     *processing.Service
-	encSvc      *encoding.Service // Merge/re-encode job queue
-	streamerDB  *streamerdb.DB    // Per-streamer facts that outlive the daemon
-	vodIndex    *vodindex.Index   // Cached VOD Archive scans
-	vodReady    atomic.Bool       // vodIndex is set; the Web UI starts before it
-	revMu       sync.Mutex        // Guards the vods-rev coalescing fields below
-	revTimer    *time.Timer       // Armed to publish revPending when the window closes
-	revPending  int64             // Newest rev not yet published, 0 = none
-	revSentAt   time.Time         // When a rev was last published
-	thumbCache  *thumbcache.Cache // VOD screenshots, kept off the archive volume
-	sheets      sheetFlight       // one contact sheet build per session
+	encSvc      *encoding.Service    // Merge/re-encode job queue
+	streamerDB  *streamerdb.DB       // Per-streamer facts that outlive the daemon
+	vodIndex    *vodindex.Index      // Cached VOD Archive scans
+	vodReady    atomic.Bool          // vodIndex is set; the Web UI starts before it
+	revMu       sync.Mutex           // Guards the vods-rev coalescing fields below
+	revTimer    *time.Timer          // Armed to publish revPending when the window closes
+	revPending  int64                // Newest rev not yet published, 0 = none
+	revSentAt   time.Time            // When a rev was last published
+	thumbCache  *thumbcache.Cache    // VOD screenshots, kept off the archive volume
+	sheets      sheetFlight          // one contact sheet build per session
+	migrating   atomic.Bool          // a pass moving flat sidecars into previews/ is running
+	migrated    map[string]time.Time // folders that pass tried, by their DirMod then
 	cloudClient *cloud.Client
 	pages       *webpage.Resolver // finds what plays on pages no platform claims, on this machine
 	webSrv      *webui.Server     // Web UI listener, when [web] is enabled

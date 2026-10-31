@@ -50,8 +50,8 @@ func (j *job) processGroupJob(ctx context.Context, logger *slog.Logger, s *Servi
 
 	// Grab the screenshot while the produced file is guaranteed local — the
 	// move enqueued below may relocate it to a slow network destination. The
-	// sidecar .jpg stays in the folder for the end-of-session sweep to carry
-	// along. Best-effort: an ffmpeg without image support (older embedded
+	// screenshot stays in the session folder's previews/ for the
+	// end-of-session sweep to carry along. Best-effort: an ffmpeg without image support (older embedded
 	// builds) must never fail the group.
 	thumbPath := filepath.Join(j.vod.BaseOutDir, ThumbnailName(j.groupOutput))
 	if _, err := os.Stat(thumbPath); os.IsNotExist(err) {

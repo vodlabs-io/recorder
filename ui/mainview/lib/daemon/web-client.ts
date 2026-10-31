@@ -243,10 +243,10 @@ export class WebDaemonClient implements DaemonClient {
 
   listVodsPage = (offset: number, limit: number, rescan = false) =>
     this.session.request<VODListPage>(Subjects.vodsList, { offset, limit, rescan })
-  getRecordingThumbnail = async (dir: string, file: string) => {
+  getRecordingThumbnail = async (dir: string, file: string, session = false) => {
     const res = await this.session.request<{ jpeg_b64: string }>(
       Subjects.vodsThumbnail,
-      { dir, file },
+      { dir, file, session },
       VODS_THUMBNAIL_TIMEOUT_MS,
     )
     return res.jpeg_b64

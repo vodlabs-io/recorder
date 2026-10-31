@@ -13,14 +13,10 @@ import (
 	"github.com/vodlabs-io/recorder/internal/provenance"
 )
 
-// ThumbnailName maps a produced VOD file name to its sidecar screenshot
-// (vod1.mp4 → vod1.jpg). The screenshot lives next to the video so the move
-// sweep carries it to the destination with the rest of the session folder.
+// ThumbnailName maps a produced VOD file name to its screenshot, relative to
+// the session folder (vod1.mp4 → previews/vod1/thumbnail.jpg).
 func ThumbnailName(vodFile string) string {
-	if i := strings.LastIndex(vodFile, "."); i > 0 {
-		vodFile = vodFile[:i]
-	}
-	return vodFile + ".jpg"
+	return filepath.Join(PartPreviewsDir(vodFile), "thumbnail.jpg")
 }
 
 // thumbnailSeekOffsets are the seek positions tried in order when grabbing the
@@ -37,6 +33,9 @@ var thumbnailSeekOffsets = []string{"30", "0"}
 // embedded builds without them fail here, which callers must treat as
 // non-fatal (the VOD Archive shows placeholder art instead).
 func GenerateThumbnail(ctx context.Context, logger *slog.Logger, videoPath, outPath string) error {
+	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+		return err
+	}
 	var lastErr error
 	for _, seek := range thumbnailSeekOffsets {
 		cmd, err := ffmpeg.Command(ctx, logger, thumbnailArgs(seek, videoPath, outPath)...)

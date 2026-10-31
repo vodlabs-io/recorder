@@ -31,6 +31,9 @@ type VODController interface {
 	// VODThumbnail returns the JPEG screenshot for one file of a listed VOD,
 	// generating and caching it when missing.
 	VODThumbnail(ctx context.Context, dir, file string) ([]byte, error)
+	// VODSessionThumbnail returns the JPEG screenshot for a whole listed VOD:
+	// across all its files where that differs from its first file's.
+	VODSessionThumbnail(ctx context.Context, dir string) ([]byte, error)
 	// VODPreviews returns the layout of a VOD file's timeline previews and
 	// its hover strip.
 	VODPreviews(ctx context.Context, dir, file string) (processing.PreviewsManifest, []byte, error)
@@ -91,6 +94,9 @@ type vodListPage struct {
 type vodThumbnailRequest struct {
 	Dir  string `json:"dir"`
 	File string `json:"file"`
+	// Session asks for the whole VOD's screenshot. File names its first
+	// file, which a daemon without session screenshots answers with.
+	Session bool `json:"session,omitempty"`
 }
 
 type vodThumbnailResponse struct {
@@ -206,8 +212,9 @@ func (s *Service) handleListVODs(req micro.Request) {
 // VODS_THUMBNAIL_TIMEOUT_MS, so ffmpeg never outlives a client that gave up.
 const vodThumbnailTimeout = 55 * time.Second
 
-// handleVODThumbnail returns (generating on demand) one file's screenshot. An
-// empty file asks for any screenshot of a session still being worked on.
+// handleVODThumbnail returns (generating on demand) one file's screenshot, or
+// with session set the whole VOD's. An empty file asks for any screenshot of
+// a session still being worked on.
 func (s *Service) handleVODThumbnail(req micro.Request) {
 	if s.vodsCtl == nil {
 		respond(req, fail(errInternal, "vod controller unavailable"))
@@ -220,7 +227,13 @@ func (s *Service) handleVODThumbnail(req micro.Request) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), vodThumbnailTimeout)
 	defer cancel()
-	jpeg, err := s.vodsCtl.VODThumbnail(ctx, r.Dir, r.File)
+	var jpeg []byte
+	var err error
+	if r.Session {
+		jpeg, err = s.vodsCtl.VODSessionThumbnail(ctx, r.Dir)
+	} else {
+		jpeg, err = s.vodsCtl.VODThumbnail(ctx, r.Dir, r.File)
+	}
 	if err != nil {
 		respondVODError(req, err, "thumbnail unavailable")
 		return

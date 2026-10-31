@@ -1,0 +1,16 @@
+/* While the next sprite sheet of a timeline preview loads, keep the box at
+   the tile size the player already set inline, and keep showing the image.
+   The skin's 16:9 loading box makes WebKit ignore that size and stretch the
+   box to the whole sheet. Before the first sheet loads there is no inline
+   size, and the skin's placeholder stays. */
+.vod-player .media-slider-thumbnail[data-loading][style*="width"] {
+  aspect-ratio: auto;
+}
+
+.vod-player .media-slider-thumbnail[data-loading][style*="width"] .media-slider-thumbnail-image {
+  opacity: 1;
+}
+
+.vod-player .media-slider-thumbnail[data-loading][style*="width"] .media-slider-thumbnail-spinner-icon {
+  opacity: 0;
+}

@@ -79,7 +79,10 @@ func (a *App) initVODIndex() {
 	// Content changes and scan completions announce themselves so clients
 	// re-check the listing. Its own context, since it can fire long after the
 	// triggering request has returned.
-	a.vodIndex.SetOnChanged(func(rev int64) { a.putVODsRev(context.Background(), rev) })
+	a.vodIndex.SetOnChanged(func(rev int64) {
+		a.putVODsRev(context.Background(), rev)
+		a.migrateLayouts()
+	})
 	// Moves are the work that competes with a walk: both read and write the
 	// archive volume. Recordings write to the download folder instead, so they
 	// do not postpone a reconcile.
@@ -102,6 +105,49 @@ func (a *App) initVODIndex() {
 	}
 	a.procSvc.SetVODsChangedNotifier(vodsChanged)
 	a.encSvc.SetVODsChangedNotifier(vodsChanged)
+}
+
+// migrateLayouts moves the flat sidecars of finished sessions the last scan
+// found into previews/, in the background, one pass at a time. Scan-only
+// folders are left as they are, and a folder is tried again only once it
+// changes. Each moved session is re-read, so a pass that moved anything
+// announces itself like any other change.
+func (a *App) migrateLayouts() {
+	if !a.migrating.CompareAndSwap(false, true) {
+		return
+	}
+	go func() {
+		defer a.migrating.Store(false)
+		ctx := context.Background()
+		if a.migrated == nil {
+			a.migrated = map[string]time.Time{}
+		}
+		var moved []string
+		for _, s := range a.vodIndex.List(ctx).Sessions {
+			if !s.LegacyLayout || s.State != vodindex.StateReady || a.isReadOnlyVODRoot(s.Root) {
+				continue
+			}
+			if at, ok := a.migrated[s.Dir]; ok && at.Equal(s.DirMod) {
+				continue
+			}
+			a.migrated[s.Dir] = s.DirMod
+			names := make([]string, 0, len(s.Files))
+			for _, f := range s.Files {
+				names = append(names, f.Name)
+			}
+			n, err := processing.MigrateLayout(s.Dir, names)
+			if err != nil {
+				a.log.Warn("Failed to move a VOD's previews into previews/", "dir", s.Dir, "error", err)
+			}
+			if n > 0 {
+				moved = append(moved, s.Dir)
+			}
+		}
+		if len(moved) > 0 {
+			a.log.Info("Moved VOD previews into previews/ folders", "sessions", len(moved))
+			a.vodIndex.Learn(moved...)
+		}
+	}()
 }
 
 // vodsRevCoalesce bounds how often the archive rev is republished. The index
@@ -320,7 +366,7 @@ func (a *App) VODThumbnail(ctx context.Context, dir, file string) ([]byte, error
 		return jpeg, nil
 	}
 
-	thumbPath := filepath.Join(session.Dir, processing.ThumbnailName(file))
+	thumbPath := processing.SidecarPath(session.Dir, processing.ThumbnailName(file))
 	if _, err := os.Stat(thumbPath); os.IsNotExist(err) {
 		videoPath := filepath.Join(session.Dir, file)
 		if _, err := os.Stat(videoPath); err != nil {
@@ -410,7 +456,7 @@ func (a *App) busyVODThumbnail(ctx context.Context, session vodindex.VOD, file s
 			return jpeg, nil
 		}
 		// A sidecar processing is still writing is skipped until it is whole.
-		jpeg, err := os.ReadFile(filepath.Join(session.Dir, processing.ThumbnailName(name)))
+		jpeg, err := processing.ReadSidecar(session.Dir, processing.ThumbnailName(name))
 		if err == nil && completeJPEG(jpeg) {
 			return jpeg, nil
 		}

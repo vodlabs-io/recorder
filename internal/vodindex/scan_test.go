@@ -599,3 +599,40 @@ func TestScanIgnoresSidecarOnlyFolder(t *testing.T) {
 		t.Errorf("got %d sessions, want 0: %+v", len(res.Sessions), res.Sessions)
 	}
 }
+
+func TestScanFindsThumbnailsInPreviews(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "tiktok", "amy", "2026-10-31_10-03-50-0700")
+	writeFile(t, filepath.Join(dir, "vod1.mp4"), 10)
+	writeFile(t, filepath.Join(dir, "vod2.mp4"), 10)
+	writeFile(t, filepath.Join(dir, "previews", "vod1", "thumbnail.jpg"), 10)
+	writeFile(t, filepath.Join(dir, "contact-sheet.jpg"), 10)
+
+	s := sessionByDir(t, Scan(context.Background(), []string{root}, nil), dir)
+	if len(s.Files) != 2 || !s.Files[0].HasThumb || s.Files[1].HasThumb {
+		t.Fatalf("files: %+v", s.Files)
+	}
+	if s.LegacyLayout {
+		t.Fatal("previews/ layout marked legacy")
+	}
+}
+
+func TestScanMarksFlatLayouts(t *testing.T) {
+	for name, sidecar := range map[string]string{
+		"thumbnail": "vod1.jpg",
+		"track":     "vod1.thumbs.vtt",
+		"sheet":     "vod1.thumbs.000.jpg",
+		"key":       "contact-sheet.json",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			dir := filepath.Join(root, "tiktok", "amy", "2026-10-31_10-03-50-0700")
+			writeFile(t, filepath.Join(dir, "vod1.mp4"), 10)
+			writeFile(t, filepath.Join(dir, sidecar), 10)
+			s := sessionByDir(t, Scan(context.Background(), []string{root}, nil), dir)
+			if !s.LegacyLayout {
+				t.Fatalf("%s not marked legacy", sidecar)
+			}
+		})
+	}
+}
