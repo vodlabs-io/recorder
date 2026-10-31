@@ -149,6 +149,8 @@ let daemonContainer = false;
 // endpoint. Kept so an update restart can put the previous version back if the
 // new one doesn't come up.
 let daemonExePath: string | null = null;
+// The commit the connected daemon was built from, for the Update tab.
+let daemonCommit: string | null = null;
 // Whether the info endpoint above has answered for the current connection. The
 // KV snapshot arrives first, so the update check waits on this rather than
 // judging a containerized daemon by a not-yet-known flag.
@@ -575,6 +577,7 @@ function daemonHost(): DaemonHost {
     // deliberately old daemon and watch the real download → restart run.
     devBuild: () => appChannel === "dev" && !process.env.VLREC_DEV_UPDATES,
     infoReady: () => daemonInfoReady,
+    commit: () => daemonCommit,
     executablePath: () => daemonExePath,
     shutdown: async () => {
       // Non-force: recording stops at once, post-processing drains. Latch
@@ -754,6 +757,7 @@ async function ensureConnected(): Promise<void> {
 async function onConnected(info: DaemonInfo): Promise<void> {
   daemonContainer = info.container;
   daemonExePath = info.executable_path || null;
+  daemonCommit = info.commit || null;
   daemonInfoReady = true;
   await session.start();
   void daemonUpdater.check();

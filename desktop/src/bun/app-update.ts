@@ -1,5 +1,6 @@
 import { Updater } from "electrobun/main";
 import type { AppUpdateStatus } from "../../../shared/types";
+import { devBuildInfo, devBuildMessage } from "./dev-build";
 import { notifyOnce } from "./update-notify";
 
 // MARK: App self-update
@@ -29,6 +30,7 @@ function emptyStatus(): AppUpdateStatus {
     availableVersion: null,
     progress: null,
     message: null,
+    build: null,
   };
 }
 
@@ -64,6 +66,13 @@ export class AppUpdater {
     }
   }
 
+  // setDevBuild reads the checkout again on every check, so the Update tab
+  // follows commits made while the app runs.
+  private setDevBuild(): void {
+    const build = devBuildInfo();
+    this.set({ phase: "disabled", build, message: devBuildMessage(build) });
+  }
+
   // start primes the local version/channel, wires Electrobun's status stream for
   // download progress, and — unless this is a dev build (updates disabled) —
   // schedules the first check and the periodic loop.
@@ -92,7 +101,7 @@ export class AppUpdater {
     });
 
     if (local.channel === "dev") {
-      this.set({ phase: "disabled" });
+      this.setDevBuild();
       return;
     }
 
@@ -112,7 +121,7 @@ export class AppUpdater {
 
   private async runCheck(): Promise<AppUpdateStatus> {
     if (this.status.channel === "dev") {
-      this.set({ phase: "disabled" });
+      this.setDevBuild();
       return this.status;
     }
     // Already downloaded and waiting to install: nothing left to learn, and the

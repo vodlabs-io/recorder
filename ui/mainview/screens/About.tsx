@@ -115,6 +115,9 @@ export function About() {
   const connected = connection.state === "connected"
   const daemon = appStore((s) => s.daemon)
   const appVersion = appStore((s) => s.updateState.app.currentVersion)
+  // A development build also names the checkout it runs from.
+  const appBuild = appStore((s) => s.updateState.app.build)
+  const appDetails = appBuild ? `${appVersion} (dev build from ${appBuild})` : appVersion
 
   const [info, setInfo] = useState<DaemonInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -168,7 +171,7 @@ export function About() {
   const openIssue = (reportId?: string) => {
     const details = [
       ...(reportId ? [`Report ID: ${reportId}`] : []),
-      `App: ${appVersion ?? "—"}`,
+      `App: ${appDetails || "—"}`,
       `Daemon: ${info?.version ?? daemon.version ?? "—"}${info?.commit ? ` (${info.commit.slice(0, 12)})` : ""}`,
       `System: ${info ? `${info.os}/${info.arch}` : "—"}`,
     ].join("\n")
@@ -190,7 +193,7 @@ export function About() {
   // sending it — and nothing leaves the machine on its own.
   const copyDiagnostics = async () => {
     const lines = [
-      `App:      ${appVersion ?? "—"}`,
+      `App:      ${appDetails || "—"}`,
       `Daemon:   ${info?.version ?? daemon.version ?? "—"}${info?.commit ? ` (${info.commit})` : ""}`,
       `System:   ${info ? `${info.os}/${info.arch}` : "—"}`,
       `Service:  ${info?.cloud_api_url ?? "—"}`,
@@ -227,7 +230,9 @@ export function About() {
               <Stat label="Recording" value={daemon.workerCount} />
               <Stat label="VODs" value={vodTotal ?? "—"} />
               {/* The Web UI has no build of its own to report. */}
-              {appVersion && <Stat label="App version" value={appVersion} />}
+              {appVersion && (
+                <Stat label="App version" value={appBuild ? `${appVersion} dev` : appVersion} />
+              )}
               <Stat
                 label="Daemon version"
                 value={info?.version || daemon.version || "—"}

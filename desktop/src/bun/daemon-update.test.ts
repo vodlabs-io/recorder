@@ -26,6 +26,7 @@ function makeHost(script: HostScript = {}) {
     container: () => false,
     devBuild: () => false,
     infoReady: () => true,
+    commit: () => null,
     executablePath: () =>
       script.executablePath === undefined ? "/old/vlrecd" : script.executablePath,
     shutdown: async () => {

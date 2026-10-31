@@ -438,6 +438,7 @@ export type AppUpdateStatus = {
   availableVersion: string | null; // the newer version when one was found
   progress: number | null; // 0–100 while downloading, else null
   message: string | null; // human-readable error/info for the error phase
+  build: string | null; // dev builds: the checkout, e.g. "main @ 1a2b3c4, modified"
 };
 
 // DaemonUpdateStatus is the daemon's half. availableVersion is the cloud's
