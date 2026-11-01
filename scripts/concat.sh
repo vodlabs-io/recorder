@@ -278,8 +278,10 @@ reencode_concat() {
         # output; scale absorbs the change on its own.
         inputs+=(-reinit_filter 0 -i "${vod_files[$i]}")
 
-        # Scale preserving aspect ratio, pad to the canvas, normalize SAR/pixfmt.
-        filter+="[${i}:v]scale=${target_w}:${target_h}:force_original_aspect_ratio=decrease,"
+        # Scale preserving aspect ratio into limited-range BT.709, pad to the
+        # canvas, normalize SAR/pixfmt.
+        filter+="[${i}:v]scale=${target_w}:${target_h}:force_original_aspect_ratio=decrease:"
+        filter+="out_color_matrix=bt709:out_range=tv:out_primaries=bt709:out_transfer=bt709,"
         filter+="pad=${target_w}:${target_h}:(ow-iw)/2:(oh-ih)/2:color=black,"
         filter+="setsar=1,format=yuv420p[v${i}];"
 
