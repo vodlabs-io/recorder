@@ -84,7 +84,24 @@ type mergePlan struct {
 	// falls back to 1000 fps, which starves the hardware encoders' per-frame
 	// bit budget.
 	vp8FrameRate float64
+	// frameRate is the highest frame rate measured over the other parts, 0
+	// when none has a plausible one.
+	frameRate float64
 }
+
+// reencodeBatchParts is the most parts one re-encode opens at once. ffmpeg
+// opens every input up front and keeps a decoder per part, so start-up time
+// and memory grow with the count: a few hundred parts take minutes to start
+// and gigabytes to run. Longer merges re-encode in batches that are then
+// joined with a stream copy. A var so tests can batch a few parts.
+var reencodeBatchParts = 40
+
+// maxFrameRate bounds the probed frame rates a re-encode trusts: a
+// stream without a real rate can report its clock rate instead.
+const maxFrameRate = 120
+
+// defaultFrameRate is the rate h264_mf runs at when no part names one.
+const defaultFrameRate = 30
 
 // stagingDir is the job's local scratch space. VOD folders often live on slow
 // external storage, so ffmpeg writes the encode output locally and only the
@@ -264,6 +281,8 @@ func (s *Service) buildMergePlan(ctx context.Context, logger *slog.Logger, job *
 				}
 				plan.vp8FrameRate = max(plan.vp8FrameRate, v.FrameRate)
 			}
+		} else if res.VideoFrameRate <= maxFrameRate {
+			plan.frameRate = max(plan.frameRate, res.VideoFrameRate)
 		}
 		p := partProbe{
 			name:      name,
@@ -442,11 +461,33 @@ func buildReencodeFilter(n, targetW, targetH int, allAudio bool, ditherFilter st
 	return filter.String()
 }
 
+// partsDir is the directory every part lives in, or "" when they span more
+// than one.
+func partsDir(parts []partProbe) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	dir := filepath.Dir(parts[0].path)
+	for _, p := range parts[1:] {
+		if filepath.Dir(p.path) != dir {
+			return ""
+		}
+	}
+	return dir
+}
+
 // reencodeInputArgs is the input-option block for the re-encode concat: one
-// `-i` per part, each opened with the options the graph needs.
-func reencodeInputArgs(parts []partProbe) []string {
+// `-i` per part, each opened with the options the graph needs. A non-empty
+// dir is ffmpeg's working directory, and parts are named relative to it to
+// keep the command line short.
+func reencodeInputArgs(parts []partProbe, dir string) []string {
 	args := make([]string, 0, len(parts)*6)
 	for _, p := range parts {
+		input := p.path
+		if dir != "" {
+			// file: keeps a name containing ':' from being read as a protocol.
+			input = "file:" + filepath.Base(p.path)
+		}
 		args = append(args,
 			// Every part is a filter_complex input, so ffmpeg must know its
 			// pixel format before the graph can be configured; the default
@@ -458,31 +499,26 @@ func reencodeInputArgs(parts []partProbe) []string {
 			// running timeline offset, dropping every later part back to the
 			// start of the output; scale absorbs the change on its own.
 			"-reinit_filter", "0",
-			"-i", p.path)
+			"-i", input)
 	}
 	return args
 }
 
 // runReencodeConcat normalizes mismatched parts onto a common canvas and
-// joins them with the concat filter.
+// joins them with the concat filter, in batches of at most
+// reencodeBatchParts parts that are then stream-copied together.
 func (s *Service) runReencodeConcat(ctx context.Context, logger *slog.Logger, job *Job, plan *mergePlan, stagedOut string, logF *os.File) (string, error) {
 	encArgs, chosen, warning, err := s.selectEncoder(ctx, logger, job.Encoder, plan.targetW, plan.targetH, plan.srcMaxBps, &filterWriter{w: logF})
 	if err != nil {
 		return warning, err
 	}
+	frameRate := outputFrameRate(plan, chosen)
 	logger.Info("Re-encoding to common canvas",
-		"encoder", chosen, "canvas", fmt.Sprintf("%dx%d", plan.targetW, plan.targetH), "vp8_frame_rate", plan.vp8FrameRate)
+		"encoder", chosen, "canvas", fmt.Sprintf("%dx%d", plan.targetW, plan.targetH), "frame_rate", frameRate)
 	if !plan.allAudio {
 		logger.Info("At least one part has no audio; output will be video-only")
 	}
-
-	ditherFilter, ditherPath, err := writeDither(filepath.Dir(stagedOut), plan.sumDur)
-	if err != nil {
-		return warning, err
-	}
-	if ditherPath != "" {
-		defer os.Remove(ditherPath)
-	} else {
+	if plan.sumDur <= 0 {
 		logger.Info("Merged duration unknown; skipping dither")
 	}
 	if plan.allAudio {
@@ -490,15 +526,133 @@ func (s *Service) runReencodeConcat(ctx context.Context, logger *slog.Logger, jo
 			"target_bps", planAudioBitrate(plan.srcMaxAudioBps), "source_max_bps", plan.srcMaxAudioBps)
 	}
 
-	args := reencodeArgs(job, plan, encArgs, ditherFilter, stagedOut)
-	return warning, s.runFFmpegWithProgress(ctx, logger, job.ID, args, stagedOut, plan.sumDur, logF)
+	batches := batchParts(plan.parts, reencodeBatchParts)
+	if len(batches) == 1 {
+		return warning, s.reencodeBatch(ctx, logger, job, plan, encArgs, frameRate, 0, plan.sumDur, stagedOut, logF)
+	}
+	logger.Info("Re-encoding in batches", "batches", len(batches), "max_parts", reencodeBatchParts)
+
+	staging := filepath.Dir(stagedOut)
+	encoded := make([]partProbe, 0, len(batches))
+	var start float64
+	for i, parts := range batches {
+		bp := *plan
+		bp.parts = parts
+		bp.sumDur = partsDuration(plan, parts)
+		out := filepath.Join(staging, fmt.Sprintf("batch%03d.mp4", i+1))
+		// A batch finished before the daemon was stopped is kept.
+		if s.verifyStaged(ctx, logger, out, &bp) == nil {
+			logger.Info("Reusing encoded batch", "batch", i+1)
+		} else {
+			removePartial(out)
+			if err := s.reencodeBatch(ctx, logger, job, &bp, encArgs, frameRate, start, plan.sumDur, out, logF); err != nil {
+				return warning, fmt.Errorf("batch %d of %d: %w", i+1, len(batches), err)
+			}
+		}
+		res, err := ffmpeg.Probe(ctx, logger, out)
+		if err != nil {
+			return warning, fmt.Errorf("probe batch %d: %w", i+1, err)
+		}
+		b := partProbe{name: filepath.Base(out), path: out, res: res, signature: copySignature(res)}
+		if i > 0 && b.signature != encoded[0].signature {
+			return warning, fmt.Errorf("batch %d was encoded differently from batch 1 and cannot be joined to it: %s, want %s",
+				i+1, b.signature, encoded[0].signature)
+		}
+		encoded = append(encoded, b)
+		// The next batch starts where this one ends once they are joined.
+		start += res.Duration
+	}
+
+	logger.Info("Joining batches", "batches", len(encoded))
+	listPath := filepath.Join(staging, "concat_list.txt")
+	if err := os.WriteFile(listPath, []byte(concatListContent(encoded)), 0o644); err != nil {
+		return warning, fmt.Errorf("write concat list: %w", err)
+	}
+	defer os.Remove(listPath)
+	rec := provenance.Record(reencodeWriter(job), job.SessionID, filepath.Base(job.Output))
+	// The join is a fast copy; its progress is shown as indeterminate.
+	if err := s.runFFmpegWithProgress(ctx, logger, job.ID, copyConcatArgs(listPath, stagedOut, rec, false), stagedOut, 0, logF); err != nil {
+		return warning, fmt.Errorf("join batches: %w", err)
+	}
+	for _, b := range encoded {
+		removePartial(b.path)
+	}
+	return warning, nil
 }
 
-// writeDither writes the dither script for a clip of durationSec into dir and
-// returns the filter chain that reads it, and its path. Both are empty when the
-// duration is unknown: sendcmd rejects an empty script.
-func writeDither(dir string, durationSec float64) (filter, path string, err error) {
-	script := dither.VideoScript(durationSec)
+// batchParts splits parts into consecutive runs of at most n.
+func batchParts(parts []partProbe, n int) [][]partProbe {
+	var batches [][]partProbe
+	for len(parts) > n {
+		batches = append(batches, parts[:n])
+		parts = parts[n:]
+	}
+	return append(batches, parts)
+}
+
+// partsDuration is the probed duration of parts, 0 when the plan's total is
+// unknown.
+func partsDuration(plan *mergePlan, parts []partProbe) float64 {
+	if plan.sumDur <= 0 {
+		return 0
+	}
+	var d float64
+	for _, p := range parts {
+		d += p.res.Duration
+	}
+	return d
+}
+
+// outputFrameRate is the constant frame rate a re-encode with encoder runs
+// at, 0 to keep the parts' own timing. VP8 parts always need one (see
+// vp8FrameRate). Media Foundation will not start without a frame rate, and
+// the concat filter's output carries none.
+func outputFrameRate(plan *mergePlan, encoder string) float64 {
+	switch {
+	case plan.vp8FrameRate > 0:
+		return plan.vp8FrameRate
+	case encoder != "h264_mf":
+		return 0
+	case plan.frameRate > 0:
+		return plan.frameRate
+	default:
+		return defaultFrameRate
+	}
+}
+
+// reencodeBatch re-encodes plan's parts into out in one ffmpeg run. out
+// begins startSec into a merge of totalSec, which places its dither and its
+// progress; plan.sumDur is the batch's own duration.
+func (s *Service) reencodeBatch(ctx context.Context, logger *slog.Logger, job *Job, plan *mergePlan, encArgs []string, frameRate, startSec, totalSec float64, out string, logF *os.File) error {
+	dir := filepath.Dir(out)
+	ditherFilter, ditherPath, err := writeDither(dir, startSec, plan.sumDur)
+	if err != nil {
+		return err
+	}
+	if ditherPath != "" {
+		defer os.Remove(ditherPath)
+	}
+
+	// The graph grows with every part, so it goes in a file rather than on
+	// the command line, which Windows caps at 32K characters.
+	filter := buildReencodeFilter(len(plan.parts), plan.targetW, plan.targetH, plan.allAudio, ditherFilter)
+	filterPath := filepath.Join(dir, "filter_complex.txt")
+	if err := os.WriteFile(filterPath, []byte(filter), 0o644); err != nil {
+		return fmt.Errorf("write filter graph: %w", err)
+	}
+	defer os.Remove(filterPath)
+
+	inputDir := partsDir(plan.parts)
+	args := reencodeArgs(job, plan, encArgs, frameRate, filterPath, inputDir, out)
+	return s.runFFmpegInDir(ctx, logger, job.ID, args, inputDir, out, startSec, totalSec, logF)
+}
+
+// writeDither writes the dither script for a clip of durationSec that starts
+// startSec into the merged timeline into dir, and returns the filter chain
+// that reads it and its path. Both are empty when the duration is unknown:
+// sendcmd rejects an empty script.
+func writeDither(dir string, startSec, durationSec float64) (filter, path string, err error) {
+	script := dither.VideoScriptAt(startSec, durationSec)
 	if script == "" {
 		return "", "", nil
 	}
@@ -509,24 +663,25 @@ func writeDither(dir string, durationSec float64) (filter, path string, err erro
 	return dither.VideoFilter(path), path, nil
 }
 
-// reencodeArgs builds the re-encode concat command line. An empty ditherFilter
-// leaves the dither out of the graph.
-func reencodeArgs(job *Job, plan *mergePlan, encArgs []string, ditherFilter, stagedOut string) []string {
+// reencodeArgs builds the re-encode concat command line, which reads the
+// filter graph from filterPath. Parts are named relative to inputDir when it
+// is non-empty (see reencodeInputArgs). A frameRate above 0 makes the output
+// constant-rate at it.
+func reencodeArgs(job *Job, plan *mergePlan, encArgs []string, frameRate float64, filterPath, inputDir, stagedOut string) []string {
 	args := []string{"-hide_banner", "-loglevel", "warning", "-nostats"}
-	args = append(args, reencodeInputArgs(plan.parts)...)
-	filter := buildReencodeFilter(len(plan.parts), plan.targetW, plan.targetH, plan.allAudio, ditherFilter)
+	args = append(args, reencodeInputArgs(plan.parts, inputDir)...)
 
 	if plan.allAudio {
-		args = append(args, "-filter_complex", filter, "-map", "[outv]", "-map", "[outa]")
+		args = append(args, "-/filter_complex", filterPath, "-map", "[outv]", "-map", "[outa]")
 		args = append(args, encArgs...)
 		args = append(args, "-c:a", "aac", "-b:a", strconv.FormatInt(planAudioBitrate(plan.srcMaxAudioBps), 10))
 	} else {
-		args = append(args, "-filter_complex", filter, "-map", "[outv]")
+		args = append(args, "-/filter_complex", filterPath, "-map", "[outv]")
 		args = append(args, encArgs...)
 		args = append(args, "-an")
 	}
-	if plan.vp8FrameRate > 0 {
-		args = append(args, "-fps_mode", "cfr", "-r", strconv.FormatFloat(plan.vp8FrameRate, 'f', -1, 64))
+	if frameRate > 0 {
+		args = append(args, "-fps_mode", "cfr", "-r", strconv.FormatFloat(frameRate, 'f', -1, 64))
 	}
 	args = append(args, "-movflags", provenance.MovFlags("+faststart"))
 	args = append(args, provenance.MetadataArgs(
@@ -538,10 +693,18 @@ func reencodeArgs(job *Job, plan *mergePlan, encArgs []string, ditherFilter, sta
 // KV progress key and stderr into the session's ffmpeg.log. On failure or
 // cancel the partial output is removed.
 func (s *Service) runFFmpegWithProgress(ctx context.Context, logger *slog.Logger, jobID int64, args []string, outputPath string, totalDurSec float64, logF *os.File) error {
+	return s.runFFmpegInDir(ctx, logger, jobID, args, "", outputPath, 0, totalDurSec, logF)
+}
+
+// runFFmpegInDir is runFFmpegWithProgress with ffmpeg started in dir (an
+// empty dir keeps the daemon's working directory), for an output that
+// begins offsetSec into a job of totalDurSec.
+func (s *Service) runFFmpegInDir(ctx context.Context, logger *slog.Logger, jobID int64, args []string, dir, outputPath string, offsetSec, totalDurSec float64, logF *os.File) error {
 	cmd, err := ffmpeg.Command(ctx, logger, args...)
 	if err != nil {
 		return fmt.Errorf("create ffmpeg command: %w", err)
 	}
+	cmd.Dir = dir
 
 	fw := &filterWriter{w: logF}
 	cmd.Stderr = fw
@@ -559,7 +722,7 @@ func (s *Service) runFFmpegWithProgress(ctx context.Context, logger *slog.Logger
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		parseEncodeProgress(stdout, totalDurSec, func(percent float64, etaSec int64, speed float64) {
+		parseEncodeProgress(stdout, offsetSec, totalDurSec, func(percent float64, etaSec int64, speed float64) {
 			s.store.PutEncodeProgress(ctx, vlstate.EncodeProgress{
 				JobID:   jobID,
 				Stage:   stageEncode,

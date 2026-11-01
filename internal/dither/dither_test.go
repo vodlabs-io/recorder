@@ -1,6 +1,7 @@
 package dither
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -51,6 +52,51 @@ func TestVideoScriptCoversTheClock(t *testing.T) {
 	}
 	if VideoScript(0) != "" {
 		t.Error("a zero-length clip should produce no commands")
+	}
+}
+
+// valueAt is the brightness a script holds at t seconds.
+func valueAt(t *testing.T, script string, at float64) string {
+	t.Helper()
+	val := ""
+	for _, l := range strings.Split(strings.TrimSpace(script), "\n") {
+		var when float64
+		var v string
+		if _, err := fmt.Sscanf(l, "%f eq brightness %s", &when, &v); err != nil {
+			t.Fatalf("bad command %q: %v", l, err)
+		}
+		if when > at+1e-9 {
+			break
+		}
+		val = v
+	}
+	return val
+}
+
+// Clips cut from a timeline at any point, even mid-interval, must hold the
+// same offsets the whole timeline holds there.
+func TestVideoScriptAtContinuesTheTimeline(t *testing.T) {
+	full := VideoScript(10)
+	for _, clip := range []struct{ start, dur float64 }{{0, 3.27}, {3.27, 4.05}, {7.32, 2.68}} {
+		part := VideoScriptAt(clip.start, clip.dur)
+		if !strings.HasPrefix(part, "0.0000 ") {
+			t.Errorf("clip at %.2fs does not start at 0: %q", clip.start, part[:20])
+		}
+		for at := 0.0; at < clip.dur; at += 0.013 {
+			if got, want := valueAt(t, part, at), valueAt(t, full, clip.start+at); got != want {
+				t.Fatalf("clip at %.2fs, %.3fs in: %s, timeline has %s", clip.start, at, got, want)
+			}
+		}
+	}
+}
+
+// A Windows drive colon must survive both unescaping passes, or the option
+// list splits at it.
+func TestVideoFilterEscapesWindowsPath(t *testing.T) {
+	got := VideoFilter(`C:\enc\dither.txt`)
+	want := `sendcmd=f=C\\:\\\\enc\\\\dither.txt,eq=brightness=0`
+	if got != want {
+		t.Errorf("VideoFilter = %s, want %s", got, want)
 	}
 }
 

@@ -22,7 +22,7 @@ func TestParseEncodeProgressKnownDuration(t *testing.T) {
 	var lastPercent, lastSpeed float64
 	var lastEta int64
 	var calls int
-	parseEncodeProgress(strings.NewReader(stream), 20.0, func(percent float64, eta int64, speed float64) {
+	parseEncodeProgress(strings.NewReader(stream), 0, 20.0, func(percent float64, eta int64, speed float64) {
 		calls++
 		lastPercent, lastEta, lastSpeed = percent, eta, speed
 	})
@@ -45,7 +45,7 @@ func TestParseEncodeProgressKnownDuration(t *testing.T) {
 func TestParseEncodeProgressCapsAt100(t *testing.T) {
 	stream := "out_time_us=30000000\nspeed=1.0x\nprogress=end\n"
 	var last float64
-	parseEncodeProgress(strings.NewReader(stream), 20.0, func(percent float64, _ int64, _ float64) {
+	parseEncodeProgress(strings.NewReader(stream), 0, 20.0, func(percent float64, _ int64, _ float64) {
 		last = percent
 	})
 	if last != 100 {
@@ -53,10 +53,24 @@ func TestParseEncodeProgressCapsAt100(t *testing.T) {
 	}
 }
 
+// A batch of a longer merge reports progress through the whole merge.
+func TestParseEncodeProgressOffset(t *testing.T) {
+	stream := "out_time_us=10000000\nspeed=2.0x\nprogress=end\n"
+	var percent float64
+	var eta int64
+	parseEncodeProgress(strings.NewReader(stream), 30, 100, func(p float64, e int64, _ float64) {
+		percent, eta = p, e
+	})
+	// (30 + 10) of 100, and (100 - 40) / 2 to go.
+	if math.Abs(percent-40) > 0.01 || eta != 30 {
+		t.Errorf("percent = %.2f eta = %d, want 40 and 30", percent, eta)
+	}
+}
+
 func TestParseEncodeProgressIndeterminate(t *testing.T) {
 	stream := "out_time_us=5000000\nspeed=2.0x\nprogress=end\n"
 	var last float64 = 999
-	parseEncodeProgress(strings.NewReader(stream), 0, func(percent float64, _ int64, _ float64) {
+	parseEncodeProgress(strings.NewReader(stream), 0, 0, func(percent float64, _ int64, _ float64) {
 		last = percent
 	})
 	if last != -1 {
@@ -68,7 +82,7 @@ func TestParseEncodeProgressClockFallback(t *testing.T) {
 	// out_time (clock form) is the last-resort field.
 	stream := "out_time=00:00:15.000000\nspeed=1.0x\nprogress=end\n"
 	var last float64
-	parseEncodeProgress(strings.NewReader(stream), 30.0, func(percent float64, _ int64, _ float64) {
+	parseEncodeProgress(strings.NewReader(stream), 0, 30.0, func(percent float64, _ int64, _ float64) {
 		last = percent
 	})
 	if math.Abs(last-50) > 0.01 {

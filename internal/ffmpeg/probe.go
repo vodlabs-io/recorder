@@ -22,6 +22,10 @@ type ProbeResult struct {
 	VideoProfile string
 	// PixFmt is the video pixel format ("yuv420p"), empty when unknown.
 	PixFmt string
+	// VideoFrameRate is the video stream's average frame rate over the file
+	// (avg_frame_rate), else its nominal one (r_frame_rate); 0 when unknown.
+	// The nominal rate of a live recording is often its clock rate instead.
+	VideoFrameRate float64
 	// VideoExtradataFingerprint identifies the video stream's decoder
 	// configuration (avcC/hvcC), empty when the stream carries none. Two
 	// streams sharing it can be spliced without re-encoding.
@@ -81,6 +85,8 @@ type probeJSON struct {
 		Width         int        `json:"width"`
 		Height        int        `json:"height"`
 		PixFmt        string     `json:"pix_fmt"`
+		AvgFrameRate  string     `json:"avg_frame_rate"`
+		RFrameRate    string     `json:"r_frame_rate"`
 		SampleRate    string     `json:"sample_rate"`
 		Channels      int        `json:"channels"`
 		Extradata     string     `json:"extradata"`
@@ -97,9 +103,9 @@ type probeJSON struct {
 // can carry several seconds of audio before its first video packet, and
 // ffmpeg's 5s default gives up before reaching it — the video stream is then
 // left with no pixel format, which a filter_complex input cannot be
-// configured from. Only the time bound is raised, never probesize: a merge
-// opens every part at once, so a larger probe buffer multiplies by the part
-// count.
+// configured from. Only the time bound is raised, never probesize: a
+// re-encode opens a whole batch of parts at once, so a larger probe buffer
+// multiplies by the part count.
 const AnalyzeDuration = "60M"
 
 // Probe inspects a media file with the bundled ffprobe. It fails when the
@@ -159,6 +165,10 @@ func parseProbe(out []byte, path string) (ProbeResult, error) {
 				res.Height = s.Height
 				res.VideoProfile = string(s.Profile)
 				res.PixFmt = s.PixFmt
+				res.VideoFrameRate = parseRate(s.AvgFrameRate)
+				if res.VideoFrameRate == 0 {
+					res.VideoFrameRate = parseRate(s.RFrameRate)
+				}
 				res.VideoExtradataFingerprint = extradataFingerprint(s.Extradata, s.ExtradataHash)
 				if v, err := strconv.ParseInt(s.BitRate, 10, 64); err == nil && v > 0 {
 					res.VideoBitRate = v
@@ -194,4 +204,18 @@ func parseProbe(out []byte, path string) (ProbeResult, error) {
 		return res, fmt.Errorf("ffprobe %s: no video stream found", path)
 	}
 	return res, nil
+}
+
+// parseRate parses ffprobe's "num/den" rate, 0 when it is missing or 0/0.
+func parseRate(s string) float64 {
+	num, den, ok := strings.Cut(s, "/")
+	if !ok {
+		return 0
+	}
+	n, err1 := strconv.ParseFloat(num, 64)
+	d, err2 := strconv.ParseFloat(den, 64)
+	if err1 != nil || err2 != nil || n <= 0 || d <= 0 {
+		return 0
+	}
+	return n / d
 }
