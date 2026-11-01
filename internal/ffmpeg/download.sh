@@ -50,15 +50,15 @@ REPO="$REPO_OWNER/$REPO_NAME"
 # Pinned release and per-platform checksums (custom-ffmpeg's build-ffmpeg.yml,
 # FFmpeg n9.0.2 + x264 commit b35605ace3ddf7c1a5d67a2eb553f034aef41d55). Bump
 # both together, deliberately, in a commit that names the new release.
-RELEASE_TAG="ffmpeg-18-1"
+RELEASE_TAG="ffmpeg-21-1"
 sha256_for_platform() {
     case "$1" in
-        darwin_amd64)  echo "1848b378705140f3b4cc31d9ba3a899fd618a69ed3f458c3e1f2fce15c56e297" ;;
-        darwin_arm64)  echo "95e841e152dbcbd790e79f1c80fd049bfdf0afeb847ec545f129b6e51d28757e" ;;
-        linux_amd64)   echo "ebab6f4d3dce4f0af7731374994b752a2b5728e4b4c902326e100c3f6ad2b2be" ;;
-        linux_arm64)   echo "929621e87885c47e66c61a0eac36e796a6ebcbb347f50a76c87520addeee299b" ;;
-        windows_amd64) echo "37879e79d42a15cb4d4ec7f019c0d3c059288805ff4b0afee43938f125b6f2b4" ;;
-        windows_arm64) echo "f2bad8e17e83ddfacad408a6ef3a270ead67bedca0b267c9fe7bfe33435e30c1" ;;
+        darwin_amd64)  echo "7022762bc1b8a8984cf9159fd7860643eccab3a6c05fb3309e1a4d9671f45451" ;;
+        darwin_arm64)  echo "361e846fcc142559b06cff2d65688e3c7c7703909c78809b67720c47d758000f" ;;
+        linux_amd64)   echo "74948b9af757a1d95b09c8eece7ba0446a1b4b1e9e705d0feee4b15e504dbcc7" ;;
+        linux_arm64)   echo "218b4468528f08ad4216eed05180178d2ca46a127b6a23ab6cb61e3d7e93013a" ;;
+        windows_amd64) echo "20ca42c0712eab8c84b61b7cf97c3d17d070098ed2fdf531dc0107dfd0039c41" ;;
+        windows_arm64) echo "4cf96550d68467b1e3c748c3aa2cb3488b7aa3657f26ee00b3b5065cf50bec16" ;;
     esac
 }
 
