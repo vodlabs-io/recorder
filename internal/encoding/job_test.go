@@ -25,9 +25,9 @@ func TestConcatListContent(t *testing.T) {
 
 func TestBuildReencodeFilterWithAudio(t *testing.T) {
 	got := buildReencodeFilter(2, 1920, 1080, true, "")
-	want := "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v0];" +
+	want := "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease:out_color_matrix=bt709:out_range=tv:out_primaries=bt709:out_transfer=bt709,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v0];" +
 		"[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a0];" +
-		"[1:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v1];" +
+		"[1:v]scale=1920:1080:force_original_aspect_ratio=decrease:out_color_matrix=bt709:out_range=tv:out_primaries=bt709:out_transfer=bt709,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v1];" +
 		"[1:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a1];" +
 		"[v0][a0][v1][a1]concat=n=2:v=1:a=1[outv][outa]"
 	if got != want {
@@ -37,8 +37,8 @@ func TestBuildReencodeFilterWithAudio(t *testing.T) {
 
 func TestBuildReencodeFilterVideoOnly(t *testing.T) {
 	got := buildReencodeFilter(2, 1280, 720, false, "")
-	want := "[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v0];" +
-		"[1:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v1];" +
+	want := "[0:v]scale=1280:720:force_original_aspect_ratio=decrease:out_color_matrix=bt709:out_range=tv:out_primaries=bt709:out_transfer=bt709,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v0];" +
+		"[1:v]scale=1280:720:force_original_aspect_ratio=decrease:out_color_matrix=bt709:out_range=tv:out_primaries=bt709:out_transfer=bt709,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v1];" +
 		"[v0][v1]concat=n=2:v=1:a=0[outv]"
 	if got != want {
 		t.Errorf("filter mismatch:\n got: %q\nwant: %q", got, want)

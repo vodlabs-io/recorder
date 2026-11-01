@@ -47,18 +47,15 @@ func TestBatchParts(t *testing.T) {
 
 func TestOutputFrameRate(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		plan    mergePlan
-		encoder string
-		want    float64
+		name string
+		plan mergePlan
+		want float64
 	}{
-		{"software keeps the parts' timing", mergePlan{frameRate: 29.97}, softwareEncoder, 0},
-		{"other hardware keeps the parts' timing", mergePlan{frameRate: 29.97}, "h264_nvenc", 0},
-		{"media foundation takes the parts' rate", mergePlan{frameRate: 29.97}, "h264_mf", 29.97},
-		{"media foundation falls back without one", mergePlan{}, "h264_mf", defaultFrameRate},
-		{"vp8 always runs at its measured rate", mergePlan{vp8FrameRate: 24, frameRate: 30}, softwareEncoder, 24},
+		{"takes the parts' rate", mergePlan{frameRate: 29.97}, 29.97},
+		{"falls back without one", mergePlan{}, defaultFrameRate},
+		{"vp8 runs at its measured rate", mergePlan{vp8FrameRate: 24, frameRate: 30}, 24},
 	} {
-		if got := outputFrameRate(&tc.plan, tc.encoder); got != tc.want {
+		if got := outputFrameRate(&tc.plan); got != tc.want {
 			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
 		}
 	}
@@ -77,7 +74,9 @@ func TestReencodeArgsConstantFrameRate(t *testing.T) {
 
 // TestMergeJobReencodesInBatches runs a merge of three mismatched parts with
 // a batch size of two, end to end with the bundled ffmpeg: the parts are
-// re-encoded as two batches and the batches stream-copied into one file.
+// re-encoded as two batches and the batches stream-copied into one file. The
+// second batch opens on a part with another frame rate and color space, which
+// must not change how it is encoded.
 func TestMergeJobReencodesInBatches(t *testing.T) {
 	isolateCache(t)
 	ffPath, err := ffmpeg.Path()
@@ -93,12 +92,18 @@ func TestMergeJobReencodesInBatches(t *testing.T) {
 
 	dir := t.TempDir()
 	var files []recording.ManifestFile
-	for i, size := range []string{"320x240", "160x120", "320x240"} {
+	for i, p := range []struct{ size, rate, colors string }{
+		{"320x240", "10", "bt709"},
+		{"160x120", "10", "bt709"},
+		{"320x240", "15", "smpte170m"},
+	} {
 		name := fmt.Sprintf("vod%d.mp4", i+1)
 		cmd := exec.CommandContext(t.Context(), ffPath,
 			"-hide_banner", "-v", "error",
-			"-f", "lavfi", "-i", "testsrc=size="+size+":rate=10",
-			"-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-f", "mp4", "-y", filepath.Join(dir, name))
+			"-f", "lavfi", "-i", "testsrc=size="+p.size+":rate="+p.rate,
+			"-t", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+			"-colorspace", p.colors, "-color_primaries", p.colors, "-color_trc", p.colors,
+			"-f", "mp4", "-y", filepath.Join(dir, name))
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Skipf("bundled ffmpeg cannot synthesise test media: %v: %s", err, b)
 		}
