@@ -28,10 +28,11 @@ import type {
   BugReportResult,
 } from "../../../shared/types";
 import {
-  START_HIDDEN_FLAG,
   getStartAtLogin,
+  repairStartAtLogin,
   setStartAtLogin,
   startAtLoginSupported,
+  startedAtLogin,
 } from "./start-at-login";
 import { connect } from "@nats-io/transport-node";
 import { followErrorReports, initErrorReports } from "./error-reports";
@@ -1220,7 +1221,8 @@ Electrobun.events.on("before-quit", (event: unknown) => {
 // window must never join the main window's.
 disableWindowTabbing();
 
-if (!process.argv.includes(START_HIDDEN_FLAG)) {
+await repairStartAtLogin();
+if (!(await startedAtLogin())) {
   createMainWindow();
 }
 
