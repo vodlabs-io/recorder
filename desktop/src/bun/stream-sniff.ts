@@ -40,6 +40,7 @@ import { addAllFramesPreload } from "./all-frames-preload";
 import { createPartitionedWindow } from "./partitioned-window";
 import { type Candidate, type Hit, isLiveEnough, rank } from "./stream-sniff-rank";
 import { NUDGE, SNIFFER } from "./stream-sniff-script";
+import { MUTE_MEDIA, muteWebview } from "./webview-mute";
 
 type SniffRequest = { url: string; timeout_ms?: number };
 type SniffResponse = { title?: string; candidates: Candidate[]; error?: string };
@@ -100,7 +101,7 @@ function context(): SniffContext {
       frame,
       url: BLANK_URL,
       sandbox: true,
-      preload: SNIFFER,
+      preload: MUTE_MEDIA + SNIFFER,
       hidden: true,
       // Borderless: AppKit pulls a titled window back onto a screen when it is
       // first shown, and only a titled one can join a tab group.
@@ -111,6 +112,7 @@ function context(): SniffContext {
   // Placed before it is first shown, and shown without taking focus.
   win.setPosition(frame.x, frame.y);
   win.showInactive();
+  muteWebview(view);
   const c: SniffContext = { win, view, watch: null, ready: addAllFramesPreload(view, SNIFFER) };
   const onDownload = (e: unknown) => {
     const path = (e as { data?: { detail?: unknown } })?.data?.detail;

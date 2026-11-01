@@ -26,6 +26,7 @@ import {
 } from "../../../shared/daemon/subjects";
 import type { PlatformInfo } from "../../../shared/types";
 import { createPartitionedWindow } from "./partitioned-window";
+import { MUTE_MEDIA, muteWebview } from "./webview-mute";
 
 type BrowserFetchRequest = {
   platform: string;
@@ -264,11 +265,13 @@ function createContext(partition: string, state: Partition): FetchContext {
   // is never painted on Windows (see partitioned-window.ts). This view is
   // hidden either way, but there is no reason to keep the broken shape.
   const { win, view } = createPartitionedWindow(
-    { title: "…", frame, url: BLANK_URL, sandbox: true },
+    { title: "…", frame, url: BLANK_URL, sandbox: true, preload: MUTE_MEDIA },
     partition,
   );
   // Never steal the user's focus: this window exists only to host the view.
   win.hide();
+  // Platform pages autoplay with sound; nobody is watching this one.
+  muteWebview(view);
 
   const ctx: FetchContext = {
     win,
