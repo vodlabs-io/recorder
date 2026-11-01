@@ -71,6 +71,10 @@ const interactiveLogins = new Set<string>();
 // Platforms with a background refresh in flight, and when each last ran.
 const refreshesInFlight = new Set<string>();
 const lastRefreshAt = new Map<string, number>();
+// The captured_at of each stored login a refresh found logged out. Refreshing
+// it again only reloads the platform's page for nothing, so refreshes skip it
+// until a new login (a different captured_at) replaces it.
+const loggedOutLogins = new Map<string, number>();
 
 function partitionFor(platform: string): string {
   return `persist:${platform}`;
@@ -193,13 +197,22 @@ async function daemonHasLogin(
   session: DaemonSession,
   platform: string,
 ): Promise<boolean> {
+  return (await daemonLogin(session, platform)) !== null;
+}
+
+// daemonLogin returns the daemon's stored login status for the platform, or
+// null when it holds none (or cannot be asked).
+async function daemonLogin(
+  session: DaemonSession,
+  platform: string,
+): Promise<{ platform: string; captured_at: number } | null> {
   try {
-    const logins = await session.request<{ platform: string }[] | null>(
-      Subjects.platformLoginList,
-    );
-    return (logins ?? []).some((l) => l.platform === platform);
+    const logins = await session.request<
+      { platform: string; captured_at: number }[] | null
+    >(Subjects.platformLoginList);
+    return (logins ?? []).find((l) => l.platform === platform) ?? null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -384,8 +397,8 @@ export type RefreshResult = "refreshed" | "logged_out" | "skipped" | "failed";
 //                  signal TikTok gives us, so it flips the Accounts row to
 //                  "Expired" via platformlogin.health;
 //   "skipped"    — interactive login open, refresh already running, ran too
-//                  recently, or the shared login view was busy with a signed
-//                  fetch;
+//                  recently, the login was already found logged out, or the
+//                  shared login view was busy with a signed fetch;
 //   "failed"     — the page never loaded (offline, platform down). Changes
 //                  nothing: a network failure is not a login failure.
 //
@@ -405,7 +418,8 @@ export async function refreshPlatformLogin(
   // Only refresh logins the daemon still holds. Without this, a refresh racing
   // a sign-out would capture the not-yet-wiped partition and re-store the login
   // the user just removed.
-  if (!(await daemonHasLogin(session, platform))) {
+  const stored = await daemonLogin(session, platform);
+  if (!stored || loggedOutLogins.get(platform) === stored.captured_at) {
     return "skipped";
   }
 
@@ -469,6 +483,7 @@ export async function refreshPlatformLogin(
             platform,
             healthy: false,
           });
+          loggedOutLogins.set(platform, stored.captured_at);
           return "logged_out";
         } catch (err) {
           console.error(`login refresh (${platform}): daemon request failed`, err);

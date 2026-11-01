@@ -1,9 +1,10 @@
 // Compile the app's own macOS native library into the assembled bundle, beside
 // Electrobun's libNativeWrapper.dylib in Contents/MacOS.
 //
-// libVLLoginPopups.dylib (desktop/native/macos/login-popups.m) gives platform
-// sign-in windows real popup windows; without it "Sign in with Google" and
-// similar popup sign-ins do nothing (see desktop/src/bun/login-popups.ts).
+// libVLLoginPopups.dylib (desktop/native/macos/*.m) gives platform sign-in
+// windows real popup windows; without it "Sign in with Google" and similar
+// popup sign-ins do nothing (see desktop/src/bun/login-popups.ts). It also
+// mutes the hidden platform webviews (see desktop/src/bun/webview-mute.ts).
 //
 // Runs from the postBuild hook (scripts/post-build.ts), before Hutch signs the
 // bundle, so the library is signed with it. NOT best-effort: a macOS build
@@ -40,7 +41,8 @@ const { exitCode } = Bun.spawnSync(
 		"-arch", arch, `-mmacosx-version-min=${MIN_MACOS}`,
 		"-framework", "Cocoa", "-framework", "WebKit",
 		"-install_name", `@loader_path/${LIB}`,
-		"-o", out, join(root, "desktop", "native", "macos", "login-popups.m"),
+		"-o", out,
+		...["login-popups.m", "webview-mute.m"].map((src) => join(root, "desktop", "native", "macos", src)),
 	],
 	{ stdio: ["ignore", "inherit", "inherit"] },
 );
