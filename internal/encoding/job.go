@@ -427,16 +427,21 @@ func copyConcatArgs(listPath, out, rec string, toWebM bool) []string {
 
 // buildReencodeFilter builds the filter_complex graph that normalizes n parts
 // onto a targetW×targetH canvas and concatenates them: each input is scaled
-// (aspect-preserving), padded/centered on a black canvas, and pixel-format
-// normalized; when every part has audio it is resampled to a common format so
-// the streams are concatenable, otherwise the graph is video-only. Mirrors
-// scripts/concat.sh.
+// (aspect-preserving) and converted to limited-range BT.709, padded/centered
+// on a black canvas, and pixel-format normalized; when every part has audio
+// it is resampled to a common format so the streams are concatenable,
+// otherwise the graph is video-only. Mirrors scripts/concat.sh.
+//
+// The color conversion matters twice: the encoder tags the output with the
+// first frame's colors, which would mislabel parts in another color space,
+// and writes them into the SPS, so batches opening on different ones could
+// not be joined.
 func buildReencodeFilter(n, targetW, targetH int, allAudio bool, ditherFilter string) string {
 	var filter, concatLabels strings.Builder
 	for i := 0; i < n; i++ {
 		fmt.Fprintf(&filter,
-			"[%d:v]scale=%d:%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v%d];",
-			i, targetW, targetH, targetW, targetH, i)
+			"[%d:v]scale=%d:%d:force_original_aspect_ratio=decrease:%s,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p[v%d];",
+			i, targetW, targetH, bt709, targetW, targetH, i)
 		if allAudio {
 			fmt.Fprintf(&filter, "[%d:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a%d];", i, i)
 			fmt.Fprintf(&concatLabels, "[v%d][a%d]", i, i)
@@ -460,6 +465,9 @@ func buildReencodeFilter(n, targetW, targetH int, allAudio bool, ditherFilter st
 	}
 	return filter.String()
 }
+
+// bt709 are the scale options that convert a part to limited-range BT.709.
+const bt709 = "out_color_matrix=bt709:out_range=tv:out_primaries=bt709:out_transfer=bt709"
 
 // partsDir is the directory every part lives in, or "" when they span more
 // than one.
@@ -512,7 +520,7 @@ func (s *Service) runReencodeConcat(ctx context.Context, logger *slog.Logger, jo
 	if err != nil {
 		return warning, err
 	}
-	frameRate := outputFrameRate(plan, chosen)
+	frameRate := outputFrameRate(plan)
 	logger.Info("Re-encoding to common canvas",
 		"encoder", chosen, "canvas", fmt.Sprintf("%dx%d", plan.targetW, plan.targetH), "frame_rate", frameRate)
 	if !plan.allAudio {
@@ -603,16 +611,15 @@ func partsDuration(plan *mergePlan, parts []partProbe) float64 {
 	return d
 }
 
-// outputFrameRate is the constant frame rate a re-encode with encoder runs
-// at, 0 to keep the parts' own timing. VP8 parts always need one (see
-// vp8FrameRate). Media Foundation will not start without a frame rate, and
-// the concat filter's output carries none.
-func outputFrameRate(plan *mergePlan, encoder string) float64 {
+// outputFrameRate is the constant frame rate a re-encode runs at. The concat
+// filter's output carries none: Media Foundation will not start without one,
+// and other encoders write the first part's timing into the SPS, so batches
+// opening on parts with different rates could not be joined. VP8 parts use
+// their own measured rate (see vp8FrameRate).
+func outputFrameRate(plan *mergePlan) float64 {
 	switch {
 	case plan.vp8FrameRate > 0:
 		return plan.vp8FrameRate
-	case encoder != "h264_mf":
-		return 0
 	case plan.frameRate > 0:
 		return plan.frameRate
 	default:
