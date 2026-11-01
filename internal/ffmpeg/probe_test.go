@@ -9,7 +9,7 @@ import (
 const sampleProbeJSON = `{
   "streams": [
     {"codec_type":"video","codec_name":"h264","profile":"High","width":540,"height":960,
-     "pix_fmt":"yuv420p","bit_rate":"1200000",
+     "pix_fmt":"yuv420p","avg_frame_rate":"30000/1001","r_frame_rate":"2000/1","bit_rate":"1200000",
      "extradata_hash":"MD5:0e5a37cf42810a345caa740018408414"},
     {"codec_type":"audio","codec_name":"aac","profile":"HE-AACv2","sample_rate":"44100",
      "channels":2,"bit_rate":"64000",
@@ -28,6 +28,9 @@ func TestParseProbe(t *testing.T) {
 	}
 	if res.VideoProfile != "High" || res.PixFmt != "yuv420p" {
 		t.Errorf("video config: profile=%q pix_fmt=%q", res.VideoProfile, res.PixFmt)
+	}
+	if res.VideoFrameRate < 29.97 || res.VideoFrameRate > 29.98 {
+		t.Errorf("video frame rate: %v", res.VideoFrameRate)
 	}
 	if res.VideoExtradataFingerprint != "MD5:0e5a37cf42810a345caa740018408414" {
 		t.Errorf("video extradata hash: %q", res.VideoExtradataFingerprint)
@@ -68,6 +71,19 @@ func TestParseProbeNoAudio(t *testing.T) {
 	}
 	if res.AudioCodec != "" || res.AudioSampleRate != 0 || res.AudioChannels != 0 {
 		t.Errorf("expected no audio, got %+v", res)
+	}
+}
+
+// A stream with no average rate (0/0) falls back to its nominal one.
+func TestParseProbeFrameRateFallback(t *testing.T) {
+	const j = `{"streams":[{"codec_type":"video","codec_name":"h264","width":1280,"height":720,
+	  "avg_frame_rate":"0/0","r_frame_rate":"25/1"}],"format":{"duration":"10.0"}}`
+	res, err := parseProbe([]byte(j), "vod1.mp4")
+	if err != nil {
+		t.Fatalf("parseProbe: %v", err)
+	}
+	if res.VideoFrameRate != 25 {
+		t.Errorf("frame rate = %v, want 25", res.VideoFrameRate)
 	}
 }
 

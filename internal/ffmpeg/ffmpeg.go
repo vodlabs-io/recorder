@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"runtime"
 	"sync"
 )
 
@@ -44,9 +45,27 @@ func Command(ctx context.Context, logger *slog.Logger, args ...string) (*exec.Cm
 		return nil, fmt.Errorf("failed to get ffmpeg path: %w", err)
 	}
 	logger.Info("Using ffmpeg binary", "path", path)
+	if runtime.GOOS == "windows" {
+		if n := commandLineLen(path, args); n > maxWindowsCommandLine {
+			return nil, fmt.Errorf("ffmpeg command line is about %d characters, over the Windows limit of %d", n, maxWindowsCommandLine)
+		}
+	}
 
 	cmd := exec.CommandContext(ctx, path, args...)
 	return cmd, nil
+}
+
+// maxWindowsCommandLine is CreateProcess's limit, less the terminating NUL.
+const maxWindowsCommandLine = 32766
+
+// commandLineLen estimates the length of the Windows command line for path
+// and args: each argument plus a separator and a pair of quotes.
+func commandLineLen(path string, args []string) int {
+	n := len(path) + 2
+	for _, a := range args {
+		n += len(a) + 3
+	}
+	return n
 }
 
 // probeCommand creates an exec.Cmd for running ffprobe with the given

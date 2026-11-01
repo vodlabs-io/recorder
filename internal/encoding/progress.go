@@ -16,12 +16,13 @@ import (
 type encodeProgressFn func(percent float64, etaSec int64, speed float64)
 
 // parseEncodeProgress consumes ffmpeg's `-progress pipe:1` key=value stream,
-// reporting at most ~1/s. totalDurSec 0 means the output length is unknown.
+// reporting at most ~1/s. The output begins offsetSec into a job of
+// totalDurSec; totalDurSec 0 means the job's length is unknown.
 //
 // out_time_us is the reliable microsecond field; out_time_ms is parsed as a
 // fallback but is ALSO microseconds (a long-standing ffmpeg quirk), and
 // out_time=HH:MM:SS.micro is the last resort.
-func parseEncodeProgress(r io.Reader, totalDurSec float64, report encodeProgressFn) {
+func parseEncodeProgress(r io.Reader, offsetSec, totalDurSec float64, report encodeProgressFn) {
 	scanner := bufio.NewScanner(r)
 	var outTimeSec, speed float64
 	last := time.Time{}
@@ -38,12 +39,13 @@ func parseEncodeProgress(r io.Reader, totalDurSec float64, report encodeProgress
 		percent := -1.0
 		var eta int64
 		if totalDurSec > 0 {
-			percent = outTimeSec / totalDurSec * 100
+			done := offsetSec + outTimeSec
+			percent = done / totalDurSec * 100
 			if percent > 100 {
 				percent = 100
 			}
 			if speed > 0 {
-				eta = int64((totalDurSec - outTimeSec) / speed)
+				eta = int64((totalDurSec - done) / speed)
 				if eta < 0 {
 					eta = 0
 				}

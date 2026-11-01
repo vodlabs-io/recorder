@@ -69,11 +69,11 @@ func TestEnqueueConvertValidation(t *testing.T) {
 
 func TestReencodeArgsNameTheConvertWriter(t *testing.T) {
 	plan := &mergePlan{parts: []partProbe{{path: "/v/vod.webm"}}, targetW: 640, targetH: 360, allAudio: true}
-	convert := strings.Join(reencodeArgs(&Job{Type: jobTypeConvert, Output: "vod.mp4"}, plan, nil, "", "/s/vod.mp4"), " ")
+	convert := strings.Join(reencodeArgs(&Job{Type: jobTypeConvert, Output: "vod.mp4"}, plan, nil, 0, "/s/filter_complex.txt", "", "/s/vod.mp4"), " ")
 	if !strings.Contains(convert, "writer=convert+reencode") {
 		t.Errorf("convert args lack the convert writer: %s", convert)
 	}
-	merge := strings.Join(reencodeArgs(&Job{Type: jobTypeMerge, Output: "vod.mp4"}, plan, nil, "", "/s/vod.mp4"), " ")
+	merge := strings.Join(reencodeArgs(&Job{Type: jobTypeMerge, Output: "vod.mp4"}, plan, nil, 0, "/s/filter_complex.txt", "", "/s/vod.mp4"), " ")
 	if !strings.Contains(merge, "writer=merge+reencode") {
 		t.Errorf("merge args lack the merge writer: %s", merge)
 	}
@@ -85,8 +85,7 @@ func TestReencodeArgsNameTheConvertWriter(t *testing.T) {
 // the content, not the extension): a stream copy would keep yuv444p, so
 // yuv420p in the output proves the re-encode.
 func TestConvertJobReencodesSingleFile(t *testing.T) {
-	// Staging lives under the user cache dir; keep it off the real daemon's.
-	t.Setenv("HOME", t.TempDir())
+	isolateCache(t)
 	ffPath, err := ffmpeg.Path()
 	if err != nil {
 		t.Skipf("no bundled ffmpeg: %v", err)

@@ -1,7 +1,9 @@
 package encoding
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -149,7 +151,7 @@ func TestMergeOutputName(t *testing.T) {
 // fails the whole graph — so every `-i` must raise -analyzeduration first.
 func TestReencodeInputArgsRaiseAnalyzeDurationPerPart(t *testing.T) {
 	parts := []partProbe{{path: "/vods/session/vod1.mp4"}, {path: "/vods/session/vod2.mp4"}}
-	args := reencodeInputArgs(parts)
+	args := reencodeInputArgs(parts, "")
 
 	var seen int
 	for i, a := range args {
@@ -182,17 +184,9 @@ func TestCopyConcatArgsRaiseAnalyzeDuration(t *testing.T) {
 	}
 }
 
-func TestReencodeArgsSkipDitherWhenDurationUnknown(t *testing.T) {
+func TestReencodeFilterSkipsDitherWhenDurationUnknown(t *testing.T) {
 	dir := t.TempDir()
-	job := &Job{SessionID: "s1", Output: "vod.mp4"}
-	plan := &mergePlan{
-		parts:    []partProbe{{path: "/v/vod1.webm"}, {path: "/v/vod2.mp4"}},
-		targetW:  1280,
-		targetH:  720,
-		allAudio: true,
-	}
-
-	filter, path, err := writeDither(dir, plan.sumDur)
+	filter, path, err := writeDither(dir, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,26 +196,63 @@ func TestReencodeArgsSkipDitherWhenDurationUnknown(t *testing.T) {
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
 		t.Errorf("unknown duration left files behind: %v", entries)
 	}
-	args := strings.Join(reencodeArgs(job, plan, nil, filter, "/v/vod.mp4.merging"), " ")
+	graph := buildReencodeFilter(2, 1280, 720, true, filter)
 	// The embedded ffmpeg fails to configure the graph when sendcmd has no
 	// commands.
-	if strings.Contains(args, "sendcmd") || strings.Contains(args, "eq=brightness") {
-		t.Errorf("args carry the dither: %s", args)
+	if strings.Contains(graph, "sendcmd") || strings.Contains(graph, "eq=brightness") {
+		t.Errorf("graph carries the dither: %s", graph)
 	}
-	if !strings.Contains(args, "concat=n=2:v=1:a=1[outv][outa]") {
-		t.Errorf("concat should feed [outv] directly: %s", args)
+	if !strings.Contains(graph, "concat=n=2:v=1:a=1[outv][outa]") {
+		t.Errorf("concat should feed [outv] directly: %s", graph)
 	}
 
-	plan.sumDur = 2
-	filter, path, err = writeDither(dir, plan.sumDur)
+	filter, path, err = writeDither(dir, 0, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if path == "" {
 		t.Fatal("known duration should write a dither script")
 	}
-	args = strings.Join(reencodeArgs(job, plan, nil, filter, "/v/vod.mp4.merging"), " ")
-	if !strings.Contains(args, "[cv]sendcmd=f=") {
-		t.Errorf("args lack the dither: %s", args)
+	if graph := buildReencodeFilter(2, 1280, 720, true, filter); !strings.Contains(graph, "[cv]sendcmd=f=") {
+		t.Errorf("graph lacks the dither: %s", graph)
+	}
+}
+
+// Windows caps a command line at 32K characters, so a merge's command must not
+// grow with its graph or with the parts' directory.
+func TestReencodeArgsStayShortForManyParts(t *testing.T) {
+	dir := filepath.Join("C:", "Users", "someone", "Downloads", "recordings", "tiktok", "streamer", "2026-10-31_06-01-53-0700")
+	plan := &mergePlan{targetW: 720, targetH: 1280, allAudio: true}
+	for i := 1; i <= 300; i++ {
+		plan.parts = append(plan.parts, partProbe{path: filepath.Join(dir, fmt.Sprintf("vod%d.mp4", i))})
+	}
+	job := &Job{SessionID: "s1", Output: "vod.mp4"}
+	joined := strings.Join(reencodeArgs(job, plan, nil, 0, "/staging/filter_complex.txt", partsDir(plan.parts), "/staging/vod.mp4"), " ")
+	if strings.Contains(joined, "concat=") || strings.Contains(joined, dir) {
+		t.Errorf("args carry the graph or absolute part paths: %s", joined)
+	}
+	if !strings.Contains(joined, "-/filter_complex /staging/filter_complex.txt") {
+		t.Errorf("args must read the graph from its file: %s", joined)
+	}
+	if !strings.Contains(joined, "-i file:vod300.mp4") {
+		t.Errorf("parts should be named relative to their directory: %s", joined)
+	}
+	if n := len(joined); n > 20000 {
+		t.Errorf("300-part command line is %d characters", n)
+	}
+}
+
+func TestPartsDir(t *testing.T) {
+	a := filepath.Join("v", "a", "vod1.mp4")
+	b := filepath.Join("v", "a", "vod2.mp4")
+	c := filepath.Join("v", "b", "vod3.mp4")
+	if got := partsDir([]partProbe{{path: a}, {path: b}}); got != filepath.Join("v", "a") {
+		t.Errorf("shared dir = %q", got)
+	}
+	if got := partsDir([]partProbe{{path: a}, {path: c}}); got != "" {
+		t.Errorf("mixed dirs = %q, want empty", got)
+	}
+	if got := reencodeInputArgs([]partProbe{{path: a}, {path: c}}, ""); got[len(got)-1] != c {
+		t.Errorf("without a dir, inputs keep their paths: %v", got)
 	}
 }
