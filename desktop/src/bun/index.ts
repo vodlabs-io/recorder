@@ -1221,7 +1221,8 @@ Electrobun.events.on("before-quit", (event: unknown) => {
 // window must never join the main window's.
 disableWindowTabbing();
 
-await repairStartAtLogin();
+// A dev build must not take over the installed app's login item.
+if (appChannel !== "dev") await repairStartAtLogin();
 if (!(await startedAtLogin())) {
   createMainWindow();
 }
