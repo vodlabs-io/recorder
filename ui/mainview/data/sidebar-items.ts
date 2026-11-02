@@ -16,6 +16,13 @@ const encodingItem = {
   icon: Cpu,
 };
 
+// Named so the sidebar can hang the expired-login dot on it.
+const accountsItem = {
+  title: "Accounts",
+  url: "#/accounts",
+  icon: KeyRound,
+};
+
 export const sidebarItems = {
   navMain: [
     {
@@ -29,13 +36,10 @@ export const sidebarItems = {
       icon: Film,
     },
     encodingItem,
-    {
-      title: "Accounts",
-      url: "#/accounts",
-      icon: KeyRound,
-    },
+    accountsItem,
   ],
   navEncoding: encodingItem,
+  navAccounts: accountsItem,
   // Its own top-level item (rendered between navMain and navSettings). The
   // sidebar shows a badge on it when an app or daemon update is available.
   navUpdate: {

@@ -65,6 +65,14 @@ into every frame, once the view's native webview exists. Windows already runs
 a custom preload in every frame. Linux's WebKitGTK wrapper injects both
 preloads into the top frame only, so iframe players stay out of reach there.
 
+## `electrobun-2.0.5-sdk-menu-data.patch`
+
+Same SDK and same hook, in its own file because the hook leaves a patch already
+in the devkit alone, and re-cutting the one above would fail every devkit that
+has its old form. `serializeMenuAction` stores an entry per menu item, data or
+not, and frees it only when that item is clicked, so every rebuild leaked one
+entry per item. The tray menu rebuilds every few seconds while recording.
+
 ## `electrobun-2.0.5-win-cookie-api.patch`
 
 Against `blackboardsh/electrobun` at tag `v2.0.5`, file

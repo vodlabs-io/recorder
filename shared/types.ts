@@ -96,6 +96,15 @@ export type QuitPrompt = {
   processing: number;
 };
 
+// AppIntent is a request from the desktop host (a tray menu item) for the UI to
+// show something: a screen, and optionally a dialog over it (Add Streamer, or the
+// Update tab's confirmation before an install interrupts running work).
+export type AppIntent = {
+  route: string;
+  addStreamer?: boolean;
+  confirmInstall?: boolean;
+};
+
 // ServiceState is the daemon's view of the VodLabs service. While it is
 // unreachable nothing is checked, so no new recording can start; the ones
 // already running carry on.

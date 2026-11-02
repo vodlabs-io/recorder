@@ -19,6 +19,7 @@ const connectionListeners = new Set<(c: ConnectionInfo) => void>()
 const quitListeners = new Set<(p: QuitPrompt) => void>()
 const updateListeners = new Set<(s: UpdateState) => void>()
 const vodsListeners = new Set<() => void>()
+const appIntentListeners = new Set<() => void>()
 
 // Single Electroview transport for the whole webview. All bun RPC (native
 // helpers + daemon proxy) flows through this; bun pushes arrive as messages.
@@ -48,6 +49,9 @@ const rpc = Electroview.defineRPC<AppRPCType>({
       },
       recordingsChanged: () => {
         for (const cb of vodsListeners) cb()
+      },
+      appIntentPending: () => {
+        for (const cb of appIntentListeners) cb()
       },
     },
   },
@@ -165,6 +169,14 @@ const electrobunClient: DaemonClient = {
     await req.setEncodeQueuePaused({ paused })
   },
   listEncoders: (refresh = false) => req.listEncoders({ refresh }),
+
+  takeAppIntent: () => req.takeAppIntent({}),
+  onAppIntentPending(cb) {
+    appIntentListeners.add(cb)
+    return () => {
+      appIntentListeners.delete(cb)
+    }
+  },
 
   getQuitPrompt: () => req.getQuitPrompt({}),
   confirmQuit: () => req.confirmQuit({}),

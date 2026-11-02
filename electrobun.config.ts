@@ -43,6 +43,12 @@ export default {
 			// LoadImage(IMAGE_ICON), which only reads .ico, so on Windows the
 			// tray reuses the colour app icon instead of the silhouette png.
 			"desktop/icon.ico": "views/icon.ico",
+			// Linux's tray icon, and each platform's copy with an alert badge
+			// built in; scripts/gen-tray-attention.ts.
+			"desktop/tray-linux.png": "views/tray-linux.png",
+			"desktop/tray-attention.png": "views/tray-attention.png",
+			"desktop/tray-linux-attention.png": "views/tray-linux-attention.png",
+			"desktop/icon-attention.ico": "views/icon-attention.ico",
 			// The license and the notices of what the app bundles travel with it.
 			"LICENSE": "LICENSE",
 			"THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",

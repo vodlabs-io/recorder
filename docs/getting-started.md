@@ -9,7 +9,11 @@ closed, so after a reboot, a stream that starts before you open the app again
 is missed.
 
 Closing the window keeps the app running in the system tray. To stop it,
-choose **Quit** from the tray icon or the app menu.
+choose **Quit** from the tray icon or the app menu. The tray menu also shows
+what is recording and who is live, flags anything that needs you, such as an
+expired login or a full disk, and has shortcuts for adding a streamer, opening
+the recordings folder, pausing encoding and installing an update. An alert
+badge on the tray icon means something needs you.
 
 ## Add a streamer
 

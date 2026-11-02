@@ -105,23 +105,13 @@ function StorageBar({ root }: { root: StorageRoot }) {
   )
 }
 
-// StorageAttention is how loudly the sidebar should point at Settings → Files.
-// "critical" is a root that has actually run out; "warn" covers a root running
-// low and one that could not be probed, which is worth a look for a different
-// reason.
-export type StorageAttention = "none" | "warn" | "critical"
-
-// selectStorageAttention is the one definition of "storage needs attention",
-// shared by the sidebar dot and the banner so the two cannot disagree about
-// whether there is a problem.
-export function selectStorageAttention(s: {
+// selectStorageNeedsAttention is the one definition of "storage needs attention"
+// behind the sidebar dot: a root that is low, full or could not be probed.
+export function selectStorageNeedsAttention(s: {
   daemon: { diskStatus: DiskStatus | null }
-}): StorageAttention {
-  const roots = s.daemon.diskStatus?.roots
-  if (!roots || roots.length === 0) return "none"
-  if (roots.some((r) => r.state === "full")) return "critical"
-  if (roots.some((r) => r.state === "low" || r.state === "unknown")) return "warn"
-  return "none"
+}): boolean {
+  const roots = s.daemon.diskStatus?.roots ?? []
+  return roots.some((r) => r.state !== "ok")
 }
 
 // StorageCard is StorageBars in its own card, for the Settings screens. It

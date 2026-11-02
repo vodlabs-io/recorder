@@ -7,6 +7,7 @@ export type {
   Activity,
   AddStreamerParams,
   AddStreamerResult,
+  AppIntent,
   AppUpdateStatus,
   CloudInterval,
   CloudIntervals,
@@ -62,6 +63,7 @@ import type {
   VODCancelMovesResponse,
   AddStreamerParams,
   AddStreamerResult,
+  AppIntent,
   CloudIntervals,
   ConnectionInfo,
   DaemonInfo,
@@ -282,6 +284,12 @@ export interface DaemonClient {
   confirmQuit(): Promise<boolean>;
   forceQuit(): Promise<boolean>;
   cancelQuit(): Promise<boolean>;
+
+  // What the host wants shown (a tray menu item on the desktop): takeAppIntent
+  // takes and clears it, onAppIntentPending says one is waiting. Hosts without a
+  // tray never have one.
+  takeAppIntent(): Promise<AppIntent | null>;
+  onAppIntentPending(cb: () => void): () => void;
 
   // Push subscriptions (return an unsubscribe fn)
   onStreamersChanged(cb: (snapshot: StreamersSnapshot) => void): () => void;
