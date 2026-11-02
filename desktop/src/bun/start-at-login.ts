@@ -79,6 +79,8 @@ export function launchAgentPlist(): string {
 	</dict>
 	<key>RunAtLoad</key>
 	<true/>
+	<key>AssociatedBundleIdentifiers</key>
+	<string>${IDENTIFIER}</string>
 	<key>ProcessType</key>
 	<string>Interactive</string>
 </dict>

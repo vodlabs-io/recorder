@@ -37,6 +37,13 @@ describe("login item", () => {
     expect(plist).toContain("com.vodlabs.recorder");
   });
 
+  // Login Items names the item after the app rather than its executable.
+  test("ties the LaunchAgent to the app bundle", () => {
+    expect(launchAgentPlist()).toContain(
+      "<key>AssociatedBundleIdentifiers</key>\n\t<string>com.vodlabs.recorder</string>",
+    );
+  });
+
   test("writes a desktop entry an autostart directory will read", () => {
     const entry = desktopEntry();
     expect(entry).toStartWith("[Desktop Entry]");
