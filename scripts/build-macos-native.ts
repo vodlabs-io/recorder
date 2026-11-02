@@ -4,7 +4,8 @@
 // libVLLoginPopups.dylib (desktop/native/macos/*.m) gives platform sign-in
 // windows real popup windows; without it "Sign in with Google" and similar
 // popup sign-ins do nothing (see desktop/src/bun/login-popups.ts). It also
-// mutes the hidden platform webviews (see desktop/src/bun/webview-mute.ts).
+// mutes the hidden platform webviews (see desktop/src/bun/webview-mute.ts) and
+// swaps the tray icon (see desktop/src/bun/tray-icon.ts).
 //
 // Runs from the postBuild hook (scripts/post-build.ts), before Hutch signs the
 // bundle, so the library is signed with it. NOT best-effort: a macOS build
@@ -42,7 +43,7 @@ const { exitCode } = Bun.spawnSync(
 		"-framework", "Cocoa", "-framework", "WebKit",
 		"-install_name", `@loader_path/${LIB}`,
 		"-o", out,
-		...["login-popups.m", "webview-mute.m"].map((src) => join(root, "desktop", "native", "macos", src)),
+		...["login-popups.m", "webview-mute.m", "tray-icon.m"].map((src) => join(root, "desktop", "native", "macos", src)),
 	],
 	{ stdio: ["ignore", "inherit", "inherit"] },
 );

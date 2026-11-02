@@ -88,6 +88,7 @@ function App() {
     // App-wide so the sidebar badge reflects update availability on any screen,
     // not just the Update tab.
     appStore.getState().initUpdates()
+    appStore.getState().initAppIntents()
   }, [])
 
   return (

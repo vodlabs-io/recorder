@@ -32,12 +32,10 @@ function formatDuration(totalSec: number): string {
 }
 
 // healthColor maps an estimate against the target to a dot color: green when at
-// or under target, amber up to 2× target, red beyond, slate when unknown.
+// or under target, yellow above it, slate when unknown.
 function healthColor(estSec: number | null, targetSec: number): string {
   if (estSec === null || targetSec <= 0) return "bg-slate-500"
-  if (estSec <= targetSec) return "bg-green-500"
-  if (estSec <= 2 * targetSec) return "bg-amber-500"
-  return "bg-red-500"
+  return estSec <= targetSec ? "bg-green-500" : "bg-yellow-500"
 }
 
 export function PollingIntervals() {

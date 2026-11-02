@@ -13,9 +13,11 @@ import type {
   VODCancelMovesResponse,
   VODPreviews,
   AddStreamerResult,
+  AppIntent,
   CloudIntervals,
   ConnectionInfo,
   DaemonInfo,
+  EncodeQueue,
   PlatformInfo,
   QuitPrompt,
   SetPlatformLoginParams,
@@ -44,11 +46,24 @@ import {
   BUG_REPORT_TIMEOUT_MS,
   VODS_DELETE_TIMEOUT_MS,
   VODS_REV_KEY,
+  ENCODE_QUEUE_REV_KEY,
   VODS_PREVIEWS_TIMEOUT_MS,
   VODS_THUMBNAIL_TIMEOUT_MS,
   refPayload,
 } from "../../../shared/daemon/subjects";
 import { countPendingWork, hasPendingWork } from "../../../shared/daemon/pending-work";
+import {
+  buildTrayMenu,
+  trayActionRoute,
+  TRAY_ADD_STREAMER,
+  TRAY_INSTALL_UPDATE,
+  TRAY_OPEN_RECORDINGS,
+  TRAY_PAUSE_ENCODING,
+  TRAY_QUIT,
+  TRAY_RESUME_ENCODING,
+  type TrayMenuItem,
+} from "./tray-menu";
+import { prepareMacTrayIconSwap, setMacTrayTemplateImage } from "./tray-icon";
 import { AppUpdater } from "./app-update";
 import { DaemonUpdater, type DaemonHost } from "./daemon-update";
 import { applyWindowIcon } from "./win-window-icon";
@@ -78,12 +93,16 @@ installFileLogging();
 // different server holding the same port on ::1.
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://127.0.0.1:${DEV_SERVER_PORT}`;
+const DEV_SERVER_PAGE_MARKER = "<title>VodLabs Recorder</title>";
 const NATS_URL = process.env.VLREC_NATS_URL ?? "nats://127.0.0.1:4222";
 // A few requests make the daemon wait on a remote answer before it can reply,
 // so they need a ceiling above the daemon's own. Time out below it and the user
 // gets a generic local timeout instead of the daemon's own account of what
 // went wrong.
 const CLOUD_ROUNDTRIP_TIMEOUT_MS = 50_000;
+
+// How often the tray menu may be rebuilt.
+const TRAY_RENDER_INTERVAL_MS = 2_000;
 
 // session owns the daemon connection: NATS transport, KV mirroring into the
 // snapshot, reconnect resync, and debounced snapshot delivery (see
@@ -115,6 +134,10 @@ const session = new DaemonSession({
       if (key === VODS_REV_KEY) {
         pushVodsChanged();
       }
+      if (key === ENCODE_QUEUE_REV_KEY) {
+        void refreshEncodeQueue();
+      }
+      scheduleTrayRender();
     },
     // During a graceful quit the daemon keeps its NATS server up until it has
     // fully shut down (recordings stopped, processing drained), so the first
@@ -175,6 +198,17 @@ let installState: UpdateState["install"] = { phase: "idle", message: null };
 // on it). "dev" means an unpackaged build run from the repo, where neither half
 // self-updates — see the guard in DaemonUpdater.
 let appChannel = "";
+
+// What the tray last asked the UI to show, until a webview takes it.
+let pendingIntent: AppIntent | null = null;
+// Inputs to the tray menu the snapshot doesn't carry. See MARK: Tray.
+let tray: Tray | null = null;
+let trayEncodeQueue: EncodeQueue | null = null;
+let trayPlatformNames: ReadonlyMap<string, string> = new Map();
+let trayRenderTimer: ReturnType<typeof setTimeout> | null = null;
+let lastTrayMenu = "";
+let lastTrayTooltip = "";
+let lastTrayAttention = false;
 
 // MARK: RPC
 // ---------------------------------------------------------------------------
@@ -287,6 +321,11 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
       // A refusal to monitor a page that can only be recorded once comes back
       // as a result: the UI offers to record it once, and an error's code does
       // not cross the RPC boundary.
+      takeAppIntent: () => {
+        const intent = pendingIntent;
+        pendingIntent = null;
+        return intent;
+      },
       addStreamer: async ({ monitor, ...ref }) => {
         try {
           return await session.request<AddStreamerResult>(
@@ -446,6 +485,7 @@ function updateState(): UpdateState {
 // the freshly-mounted webview pulls via getUpdateState, so an early drop before
 // the transport is wired is harmless.
 function pushUpdateState(): void {
+  scheduleTrayRender();
   try {
     rpc.send.updateStateChanged(updateState());
   } catch {
@@ -461,8 +501,14 @@ function setInstall(phase: UpdateState["install"]["phase"], message: string | nu
 }
 
 function setConnection(info: ConnectionInfo): void {
+  const connected = info.state === "connected" && connection.state !== "connected";
   connection = info;
   pushConnection();
+  scheduleTrayRender();
+  if (connected) {
+    void refreshEncodeQueue();
+    void refreshPlatformNames();
+  }
 }
 
 // pushVodsChanged tells the webview the VOD Archive listing changed. Best-effort:
@@ -760,6 +806,7 @@ async function onConnected(info: DaemonInfo): Promise<void> {
   daemonExePath = info.executable_path || null;
   daemonCommit = info.commit || null;
   daemonInfoReady = true;
+  scheduleTrayRender();
   await session.start();
   void daemonUpdater.check();
   startLoginRefresh();
@@ -996,9 +1043,13 @@ if (!(await acquireSingleInstanceLock(() => showMainWindow()))) {
 async function getMainViewUrl(): Promise<string> {
   if (appChannel === "dev") {
     try {
-      await fetch(DEV_SERVER_URL, { method: "HEAD" });
-      console.log(`HMR enabled: Using Vite dev server at ${DEV_SERVER_URL}`);
-      return DEV_SERVER_URL;
+      // Another project's server can hold this port, so check the page is ours.
+      const page = await (await fetch(DEV_SERVER_URL)).text();
+      if (page.includes(DEV_SERVER_PAGE_MARKER)) {
+        console.log(`HMR enabled: Using Vite dev server at ${DEV_SERVER_URL}`);
+        return DEV_SERVER_URL;
+      }
+      console.log(`Port ${DEV_SERVER_PORT} is serving something else; using the built UI.`);
     } catch {
       console.log(
         "Vite dev server not running. Run 'bun run dev:hmr' for HMR support.",
@@ -1169,36 +1220,183 @@ ApplicationMenu.on("application-menu-clicked", (event: unknown) => {
 });
 
 // MARK: Tray
-// Keeps the app reachable while the window is closed to the tray. Left-click
-// behaviour differs per OS, so the actions live on the menu: Open raises or
-// recreates the window, Quit is the explicit exit. (Closing the window never
-// quits — the only ways out are this Quit and the app menu's Quit.) The Tray
-// constructor degrades gracefully if the platform has no tray.
+// Keeps the app reachable while the window is closed to the tray, and says at a
+// glance what the app is doing and what needs the user (see tray-menu.ts).
+// Left-click behaviour differs per OS, so the actions live on the menu: status
+// rows open the screen that deals with them, Open raises or recreates the
+// window, Quit is the explicit exit. (Closing the window never quits — the only
+// ways out are this Quit and the app menu's Quit.) The Tray constructor degrades
+// gracefully if the platform has no tray.
+//
+// A menu is rebuilt whole. macOS keeps showing an open menu through that, but
+// Windows destroys the native menu, so a rebuild can close it under the user's
+// cursor, and Linux replaces its menu widget. Those two rebuild only when the
+// menu's meaning changes, leaving the fast-moving figures to the tooltip, which
+// Windows has and the Linux indicator doesn't.
+//
+// When something needs the user, the icon swaps to a copy with an alert badge
+// built in (scripts/gen-tray-attention.ts). Each platform's badge follows its
+// icon: monochrome in the macOS menu bar and Ubuntu's top bar, yellow on the
+// colour Windows icon.
 //
 // Tray icon format differs by OS. Windows' native tray loads the icon via
 // LoadImage(IMAGE_ICON), which only reads .ico — a .png returns no icon — so
-// Windows gets the colour app icon (icon.ico). macOS/Linux take the flat
-// silhouette tray.png; on macOS `template: true` tints its alpha to the menu
-// bar so it adapts to light/dark. Both assets are bundled to views/ via
-// build.copy (see electrobun.config.ts / scripts/gen-icons.sh). The Windows
+// Windows gets the colour app icon (icon.ico). macOS takes the flat silhouette
+// tray.png; `template: true` tints its alpha to the menu bar so it adapts to
+// light/dark. Linux has no tinting, so it takes a white copy for the dark top
+// bar Ubuntu ships. All are bundled to views/ via build.copy (see
+// electrobun.config.ts / scripts/gen-icons.sh). The Windows
 // `title` also becomes the icon's hover tooltip; macOS would render it as
 // menu-bar text, so leave it blank there.
 const isWindows = process.platform === "win32";
-const tray = new Tray({
+const LIVE_TRAY_FIGURES = process.platform === "darwin";
+const isMac = process.platform === "darwin";
+const TRAY_ICON = isWindows ? "views://icon.ico" : isMac ? "views://tray.png" : "views://tray-linux.png";
+const TRAY_ATTENTION_ICON = isWindows
+  ? "views://icon-attention.ico"
+  : isMac
+    ? "views://tray-attention.png"
+    : "views://tray-linux-attention.png";
+if (isMac) prepareMacTrayIconSwap();
+tray = new Tray({
   title: isWindows ? "VodLabs Recorder" : "",
-  image: isWindows ? "views://icon.ico" : "views://tray.png",
+  image: TRAY_ICON,
   template: !isWindows,
 });
-tray.setMenu([
-  { type: "normal", label: "Open VodLabs Recorder", action: "open" },
-  { type: "separator" },
-  { type: "normal", label: "Quit VodLabs Recorder", action: "quit" },
-]);
-tray.on("tray-clicked", (event: unknown) => {
+renderTray();
+tray.on("tray-clicked", onTrayClicked);
+
+function onTrayClicked(event: unknown): void {
   const action = (event as { data?: { action?: string } }).data?.action ?? "";
-  if (action === "quit") requestQuit();
+  const route = trayActionRoute(action);
+  if (action === TRAY_QUIT) requestQuit();
+  else if (action === TRAY_ADD_STREAMER) showAppIntent({ route: "#/dashboard", addStreamer: true });
+  else if (action === TRAY_OPEN_RECORDINGS) void openRecordingsFolder();
+  else if (action === TRAY_PAUSE_ENCODING) void setEncodingPaused(true);
+  else if (action === TRAY_RESUME_ENCODING) void setEncodingPaused(false);
+  else if (action === TRAY_INSTALL_UPDATE) installUpdatesFromTray();
+  else if (route) showAppIntent({ route });
   else showMainWindow(); // "" = bare icon click, "open" = menu item
-});
+}
+
+// Win32 menu text reads "&" as a mnemonic marker, and folder names can hold one.
+function trayItems(items: TrayMenuItem[]): TrayMenuItem[] {
+  return isWindows
+    ? items.map((i) => (i.type === "normal" ? { ...i, label: i.label.replaceAll("&", "&&") } : i))
+    : items;
+}
+
+// renderTray applies the current state to the tray, skipping the native calls
+// when nothing it shows has changed. The session keeps its mirror current while
+// the window is closed, so this works without one.
+function renderTray(): void {
+  if (!tray) return;
+  const { items, tooltip, attention } = buildTrayMenu({
+    connection,
+    snapshot: session.snapshot(),
+    update: updateState(),
+    encodeQueue: trayEncodeQueue,
+    platformNames: trayPlatformNames,
+    canOpenRecordings: !daemonContainer,
+    liveFigures: LIVE_TRAY_FIGURES,
+  });
+  const menu = JSON.stringify(items);
+  if (menu !== lastTrayMenu) {
+    lastTrayMenu = menu;
+    tray.setMenu(trayItems(items));
+  }
+  if (isWindows && tooltip !== lastTrayTooltip) {
+    lastTrayTooltip = tooltip;
+    tray.setTitle(tooltip);
+  }
+  const needsAttention = attention > 0;
+  if (needsAttention !== lastTrayAttention) {
+    lastTrayAttention = needsAttention;
+    const icon = needsAttention ? TRAY_ATTENTION_ICON : TRAY_ICON;
+    if (isMac) setMacTrayTemplateImage(tray.resolveImagePath(icon));
+    else tray.setImage(icon);
+  }
+}
+
+// scheduleTrayRender coalesces the stream of KV changes (every recording's stats
+// tick lands here) into one render per interval.
+function scheduleTrayRender(): void {
+  if (trayRenderTimer) return;
+  trayRenderTimer = setTimeout(() => {
+    trayRenderTimer = null;
+    renderTray();
+  }, TRAY_RENDER_INTERVAL_MS);
+}
+
+// The queue's paused flag and failed jobs aren't in the snapshot, only the rev
+// that says they may have changed. A failed read keeps the last answer.
+async function refreshEncodeQueue(): Promise<void> {
+  try {
+    trayEncodeQueue = await session.request<EncodeQueue>(Subjects.encodeList);
+    scheduleTrayRender();
+  } catch {
+    /* the next rev change or reconnect asks again */
+  }
+}
+
+async function refreshPlatformNames(): Promise<void> {
+  try {
+    const platforms = await session.request<PlatformInfo[]>(Subjects.platforms);
+    trayPlatformNames = new Map(platforms.map((p) => [p.name, p.display_name ?? p.name]));
+    scheduleTrayRender();
+  } catch {
+    /* an expired login then shows its platform's key until the next connect */
+  }
+}
+
+function trayActionFailed(title: string, err: unknown): void {
+  console.error(`${title}:`, err);
+  Utils.showNotification({ title, body: err instanceof Error ? err.message : String(err) });
+}
+
+// Finished recordings end up in the archive folder when there is one.
+async function openRecordingsFolder(): Promise<void> {
+  try {
+    const config = await session.request<UserConfig>(Subjects.configGet);
+    const folder = config.archive_dir || config.download_dir;
+    if (!folder) throw new Error("No download folder is set.");
+    if (!Utils.openPath(folder)) throw new Error(`${folder} isn't available.`);
+  } catch (err) {
+    trayActionFailed("Couldn't open the recordings folder", err);
+  }
+}
+
+async function setEncodingPaused(paused: boolean): Promise<void> {
+  try {
+    await session.request(paused ? Subjects.encodePause : Subjects.encodeResume);
+    await refreshEncodeQueue();
+  } catch (err) {
+    trayActionFailed(`Couldn't ${paused ? "pause" : "resume"} encoding`, err);
+  }
+}
+
+// Installing restarts the daemon, so work it would interrupt goes through the
+// Update tab's confirmation first. With nothing to interrupt, the menu item's own
+// words are confirmation enough.
+function installUpdatesFromTray(): void {
+  if (hasPendingWork(countPendingWork(session.snapshot().streamers))) {
+    showAppIntent({ route: "#/update", confirmInstall: true });
+    return;
+  }
+  void installUpdates();
+}
+
+// showAppIntent raises the window and asks it to show something. A window opened
+// for this isn't listening yet, so the intent waits to be taken on mount.
+function showAppIntent(intent: AppIntent): void {
+  pendingIntent = intent;
+  showMainWindow();
+  try {
+    rpc.send.appIntentPending({});
+  } catch {
+    /* transport not ready; the webview pulls on mount */
+  }
+}
 
 // macOS: clicking the dock icon while the window is closed reopens it.
 app.on("reopen", () => showMainWindow());

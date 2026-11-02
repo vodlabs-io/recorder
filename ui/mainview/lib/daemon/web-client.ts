@@ -401,6 +401,10 @@ export class WebDaemonClient implements DaemonClient {
     }
   }
 
+  // No tray, so nothing ever asks for a screen.
+  takeAppIntent = () => Promise.resolve(null)
+  onAppIntentPending = () => () => {}
+
   // Quit flow: the Web UI doesn't own the daemon's lifecycle.
   getQuitPrompt = () => Promise.resolve<QuitPrompt | null>(null)
   confirmQuit = () => Promise.resolve(false)

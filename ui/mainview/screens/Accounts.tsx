@@ -100,7 +100,7 @@ function StatusCell({ account }: { account: PlatformLoginView | null }) {
     ? { color: "bg-slate-500", label: "Not signed in" }
     : account.healthy
       ? { color: "bg-green-500", label: "Active" }
-      : { color: "bg-red-500", label: "Expired" }
+      : { color: "bg-yellow-500", label: "Expired" }
   return (
     <span className="flex items-center gap-2">
       <span className={cn("inline-flex h-2.5 w-2.5 rounded-full", color)} />

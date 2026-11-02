@@ -1,0 +1,13 @@
+diff --git a/sdks/main/proc/native.ts b/sdks/main/proc/native.ts
+--- a/sdks/main/proc/native.ts
++++ b/sdks/main/proc/native.ts
+@@ -34,6 +34,9 @@ function clearMenuData(id: string): void {
+ const ELECTROBUN_DELIMITER = "|EB|";
+ 
+ function serializeMenuAction(action: string, data: any): string {
++	// Nothing to look up later, so nothing to keep: the registry only frees an
++	// entry when its item is clicked, and a menu can be rebuilt indefinitely.
++	if (action && data === undefined) return action;
+ 	const dataId = storeMenuData(data);
+ 	return `${ELECTROBUN_DELIMITER}${dataId}|${action}`;
+ }

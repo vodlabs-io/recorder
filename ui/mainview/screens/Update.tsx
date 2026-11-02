@@ -185,6 +185,14 @@ export function Update() {
 
   const pending = countPendingWork(streamers)
 
+  // The tray's install asks for this confirmation when it would interrupt work.
+  const installConfirmRequested = appStore((s) => s.installConfirmRequested)
+  useEffect(() => {
+    if (!installConfirmRequested) return
+    setConfirming(true)
+    appStore.getState().clearInstallConfirmRequest()
+  }, [installConfirmRequested])
+
   function onInstallClick() {
     if (hasPendingWork(pending)) {
       setConfirming(true)

@@ -43,6 +43,7 @@ export function AddStreamer({
   trigger?: ReactElement
 }) {
   const platforms = appStore((s) => s.platforms)
+  const addRequested = appStore((s) => s.addStreamerRequested)
 
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<AddMode>("url")
@@ -80,6 +81,13 @@ export function AddStreamer({
     return () => cancelAnimationFrame(id)
   }, [open, mode])
 
+  // Held until the dialog closes rather than until it opens: the first snapshot
+  // can swap the dashboard's empty state for its toolbar, each with their own
+  // AddStreamer, and the one that takes over reopens the dialog.
+  useEffect(() => {
+    if (addRequested && !open && !disabled) handleOpenChange(true)
+  }, [addRequested, open, disabled])
+
   function reset() {
     setMode("url")
     setPlatform(platforms[0]?.name ?? "")
@@ -98,6 +106,7 @@ export function AddStreamer({
 
   function handleOpenChange(next: boolean) {
     setOpen(next)
+    if (!next) appStore.getState().clearAddStreamerRequest()
     if (next) {
       reset()
       getDaemonClient()
@@ -181,7 +190,7 @@ export function AddStreamer({
           archive_dir: archiveDirTrimmed === "" ? null : archiveDirTrimmed,
         })
       }
-      setOpen(false)
+      handleOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

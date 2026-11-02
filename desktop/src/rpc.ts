@@ -4,6 +4,7 @@ import type {
   VODCancelMovesResponse,
   AddStreamerParams,
   AddStreamerResult,
+  AppIntent,
   CloudIntervals,
   ConnectionInfo,
   DaemonInfo,
@@ -87,6 +88,10 @@ export type AppRPCType = {
       confirmQuit: { params: {}; response: boolean };
       forceQuit: { params: {}; response: boolean };
       cancelQuit: { params: {}; response: boolean };
+      // Takes (and clears) what the host last asked the UI to show. Pulled on
+      // mount and on appIntentPending, so a request reaches a window opened for
+      // it exactly once.
+      takeAppIntent: { params: {}; response: AppIntent | null };
       // Streamer mutations (resolve to a status string from the daemon)
       addStreamer: { params: AddStreamerParams; response: AddStreamerResult };
       removeStreamer: { params: StreamerRef; response: string };
@@ -169,6 +174,8 @@ export type AppRPCType = {
       // The daemon's VOD Archive contents changed (rides the daemon.vods_rev
       // KV key); an open VOD Archive screen re-pulls the listing.
       recordingsChanged: {};
+      // The host has an AppIntent waiting; see takeAppIntent.
+      appIntentPending: {};
     };
   }>;
 };

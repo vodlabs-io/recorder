@@ -9,6 +9,9 @@
 #   desktop/icon.png             Linux — single 512x512 PNG
 #   desktop/icon.ico             Windows — multi-res .ico (256/48/32/16)
 #   desktop/tray.png             system tray template image (32x32)
+#   desktop/tray-linux.png       the tray silhouette in white, for Linux's dark bar
+#   desktop/tray-attention.png, desktop/tray-linux-attention.png,
+#   desktop/icon-attention.ico   each tray icon with an alert badge built in
 #
 # These paths are wired into electrobun.config.ts (build.mac.icons /
 # build.linux.icon / build.win.icon / build.copy) and the Tray in
@@ -114,5 +117,11 @@ echo -e "${GREEN}✓ desktop/icon.ico (256/48/32/16)${NC}"
 echo -e "${YELLOW}Generating tray icon...${NC}"
 sips -s format png -z 32 32 "$TRAY_SRC" --out "${DESK}/tray.png" > /dev/null
 echo -e "${GREEN}✓ desktop/tray.png (32x32)${NC}"
+
+# --- Tray attention badge ---------------------------------------------------
+
+echo -e "${YELLOW}Generating tray attention icons...${NC}"
+bun "${SCRIPT_DIR}/gen-tray-attention.ts"
+echo -e "${GREEN}✓ desktop/tray-linux.png and the attention icons${NC}"
 
 echo -e "${GREEN}Done. All icons regenerated.${NC}"

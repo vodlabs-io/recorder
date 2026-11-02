@@ -17,9 +17,16 @@ import { useLocation } from 'react-router-dom'
 import { sidebarItems } from "@/data/sidebar-items";
 import { appStore } from "@/state/app-state";
 import { selectUpdateAvailable } from "@/state/update";
-import { selectStorageAttention } from "@/components/storage-space";
+import { selectStorageNeedsAttention } from "@/components/storage-space";
+import { expiredLogins } from "@shared/daemon/logins";
 import { getDaemonClient } from "@/lib/daemon";
 import { LogOut } from "lucide-react";
+
+// AttentionDot marks a tab with something to deal with. Yellow whatever the
+// severity: a red dot means recording.
+function AttentionDot() {
+  return <span className="ml-auto inline-flex h-2 w-2 shrink-0 rounded-full bg-yellow-500" />
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
@@ -32,15 +39,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const encodePending = appStore((s) => s.encode.pending);
   // Dot on Settings → Files when a storage root is low, full or unreachable.
   // The settings sub-menu is always expanded, so the parent needs no copy.
-  const storageAttention = appStore(selectStorageAttention);
-  const storageDot =
-    storageAttention === "none" ? null : (
-      <span
-        className={`ml-auto inline-flex h-2 w-2 shrink-0 rounded-full ${
-          storageAttention === "critical" ? "bg-red-500" : "bg-amber-500"
-        }`}
-      />
-    );
+  const storageAttention = appStore(selectStorageNeedsAttention);
+  // Dot on Accounts when a stored login needs signing in again.
+  const loginExpired = appStore((s) => expiredLogins(s.accounts).length > 0);
   const encodingURL = sidebarItems.navEncoding.url;
   const updateItem = sidebarItems.navUpdate;
   const aboutItem = sidebarItems.navAbout;
@@ -61,6 +62,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       <a href={item.url}>
                         {item.icon && <item.icon />}
                         <span>{item.title}</span>
+                        {item.url === sidebarItems.navAccounts.url && loginExpired && <AttentionDot />}
                       </a>
                     }
                   />
@@ -83,9 +85,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <a href={updateItem.url}>
                     <updateItem.icon />
                     <span>{updateItem.title}</span>
-                    {updateAvailable && (
-                      <span className="ml-auto inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500" />
-                    )}
+                    {updateAvailable && <AttentionDot />}
                   </a>
                 }
               />
@@ -111,7 +111,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           render={
                             <a href={subItem.url}>
                               <span>{subItem.title}</span>
-                              {subItem.url.endsWith("/files") && storageDot}
+                              {subItem.url.endsWith("/files") && storageAttention && <AttentionDot />}
                             </a>
                           }
                         />
