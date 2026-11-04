@@ -58,7 +58,7 @@ RUN mkdir -p /rootfs/config /rootfs/recordings /rootfs/cache \
 # The embedded ffmpeg is dynamically linked against glibc 2.38 or later, and
 # on amd64 against libstdc++ too; distroless cc-debian13 has both, plus CA
 # certificates and tzdata, and no shell or package manager.
-FROM gcr.io/distroless/cc-debian13@sha256:d74d144baa124dd9defd01d71872bb56c49d4441dba6153ccf790364f97e64b1
+FROM gcr.io/distroless/cc-debian13@sha256:58e12be899275afaa05f1b03051ab19037ed7f252528e57a3a9ad7e220a62578
 
 ARG VERSION=docker
 ARG COMMIT=unknown
