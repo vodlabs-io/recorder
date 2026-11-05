@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -88,6 +89,29 @@ func TestScrapeClientRefusesLoopbackAddress(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), errPrivateAddress.Error()) {
 		t.Fatalf("error = %v, want it to mention a non-public address", err)
+	}
+}
+
+// A proxy the environment configures is reached even on loopback; the
+// platform host the request names is the proxy's to resolve.
+func TestScrapeClientReachesLoopbackProxy(t *testing.T) {
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("proxied " + r.URL.String()))
+	}))
+	defer proxy.Close()
+	proxyURL, _ := url.Parse(proxy.URL)
+	saved := scrapeProxy
+	scrapeProxy = http.ProxyURL(proxyURL)
+	t.Cleanup(func() { scrapeProxy = saved })
+
+	resp, err := newScrapeClient().Get("http://www.tiktok.com/")
+	if err != nil {
+		t.Fatalf("through the proxy: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if string(body) != "proxied http://www.tiktok.com/" {
+		t.Fatalf("body = %q", body)
 	}
 }
 

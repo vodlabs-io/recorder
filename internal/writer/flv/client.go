@@ -6,25 +6,32 @@ import (
 	"net/http"
 	"syscall"
 	"time"
+
+	"github.com/vodlabs-io/recorder/internal/netguard"
 )
 
 func Client() *http.Client {
-	return ClientWithDialControl(nil)
+	return &http.Client{Transport: transport(nil)}
 }
 
-// ClientWithDialControl is Client with control set as its dialer's Control,
-// which can refuse an address before the connection is made.
-func ClientWithDialControl(control func(network, address string, c syscall.RawConn) error) *http.Client {
+// GuardedClient is Client for addresses others supply: it dials only the
+// public internet, or the proxy the environment configures (netguard.Transport).
+func GuardedClient() *http.Client {
+	return &http.Client{Transport: netguard.Transport(transport(netguard.ControlContext))}
+}
+
+// transport is the FLV transport, with control as its dialer's ControlContext.
+func transport(control func(ctx context.Context, network, address string, c syscall.RawConn) error) *http.Transport {
 	connTimeout := 10 * time.Second
 	readTimeout := 5 * time.Second
 
-	transport := &http.Transport{
+	t := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
-				Timeout:   connTimeout,
-				KeepAlive: 30 * time.Second,
-				Control:   control,
+				Timeout:        connTimeout,
+				KeepAlive:      30 * time.Second,
+				ControlContext: control,
 			}
 			conn, err := dialer.DialContext(ctx, network, addr)
 			if err != nil {
@@ -44,7 +51,7 @@ func ClientWithDialControl(control func(network, address string, c syscall.RawCo
 		DisableCompression:    true,
 	}
 
-	return &http.Client{Transport: transport}
+	return t
 }
 
 // timeoutConn wraps a net.Conn with read and write timeouts
