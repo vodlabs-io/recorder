@@ -424,3 +424,20 @@ func TestServeRequeuesCheckFailedDuringHold(t *testing.T) {
 	})
 
 }
+
+// A daemon holding a login never asks a platform that tells a signed-out caller
+// nothing without it, and one holding none has nothing else to ask with.
+func TestAsksSignedIn(t *testing.T) {
+	c := newSweepTestClient(t, 0, &platformauth.Session{
+		Platform: "instagram", Cookies: []platformauth.Cookie{{Name: "sessionid", Value: "1", Domain: "instagram.com"}},
+	})
+	if !c.asksSignedIn("instagram") {
+		t.Error("a login-required platform with a login was not asked signed in")
+	}
+	if c.asksSignedIn("twitch") {
+		t.Error("a platform that answers signed-out callers was asked signed in")
+	}
+	if newSweepTestClient(t, 0, nil).asksSignedIn("instagram") {
+		t.Error("asked signed in with no login")
+	}
+}

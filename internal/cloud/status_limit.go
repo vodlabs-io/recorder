@@ -207,6 +207,11 @@ func (c *Client) rateLimitStatusRequests(ctx context.Context) {
 		if ctx.Err() != nil || id == (streamer.StreamerRef{}) {
 			return // Context canceled
 		}
+		// A platform that tells a signed-out caller nothing is never asked signed
+		// out by a daemon holding a login: the answer would only be a wall to climb.
+		if kind == kindStatus && c.asksSignedIn(id.Platform) {
+			kind = kindAuthed
+		}
 
 		l := c.limiterFor(ctx, id.Platform)
 		lane := l.highPri
@@ -232,6 +237,12 @@ func (c *Client) rateLimitStatusRequests(ctx context.Context) {
 				"platform", id.Platform, "id", id, "kind", kind)
 		}
 	}
+}
+
+// asksSignedIn reports whether a status check of this platform should carry the
+// stored login from the start.
+func (c *Client) asksSignedIn(platform string) bool {
+	return vlconfig.LoginRequiredFor(platform) && c.cookies != nil && c.cookies.Has(platform)
 }
 
 // limiterFor returns the platform's limiter, starting it on first use and

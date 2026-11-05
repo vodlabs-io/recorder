@@ -24,6 +24,7 @@ type fakeCDN struct {
 	typ      string
 	gone     bool
 	first    int64
+	relative bool
 	segments []string
 	srv      *httptest.Server
 }
@@ -60,6 +61,9 @@ func (f *fakeCDN) serve(w http.ResponseWriter, r *http.Request) {
 
 func (f *fakeCDN) manifest() string {
 	base := f.srv.URL + "/v/hash/live-dash/dash-abr/"
+	if f.relative {
+		base = ""
+	}
 	var tl strings.Builder
 	for i := f.listed - 1; i >= 0; i-- {
 		t := 4934 + (f.end-i-firstNumber)*2000
@@ -196,6 +200,20 @@ func TestRenditionsAdvanceTogetherWhileReadingThePast(t *testing.T) {
 	resp.Body.Close()
 	if got := get(t, s, audio); strings.Count(got, "#EXTINF") != 2*CatchUpBatch {
 		t.Fatalf("audio did not move on:\n%s", got)
+	}
+}
+
+// The manifest a playback URL serves gives relative addresses, and the one a
+// check's reply embeds absolute ones.
+func TestAddressesRelativeToTheManifest(t *testing.T) {
+	f := newFakeCDN(t, 105)
+	f.relative = true
+	s := openSeat(t, f)
+	got := get(t, s, playlistURL("dash-lp-hd-v"))
+	host := f.srv.URL
+	if !strings.Contains(got, host+"/v/hash/live-dash/ID/dash-lp-hd-v/1_0-105.m4v") ||
+		!strings.Contains(got, host+"/v/hash/live-dash/dash-lp-hd-v/1_0-init.m4v") {
+		t.Errorf("addresses not resolved against the manifest:\n%s", got)
 	}
 }
 

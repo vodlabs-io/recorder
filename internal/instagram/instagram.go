@@ -568,7 +568,11 @@ func (s *Seat) firstAvailable(ctx context.Context, m *mpd) int64 {
 				if tl.Predicted == "" || tl.EndNumber == 0 {
 					continue
 				}
-				u, err := resolve(r.BaseURL, numbered(tl.Predicted, firstNumber))
+				base, err := resolve(s.manifest, r.BaseURL)
+				if err != nil {
+					continue
+				}
+				u, err := resolve(base, numbered(tl.Predicted, firstNumber))
 				if err != nil {
 					continue
 				}
@@ -629,7 +633,13 @@ func (s *Seat) applyRep(m *mpd, rep *mpdRep) {
 	r.width, r.height, r.frameRate = rep.Width, rep.Height, rep.FrameRate
 	r.bandwidth, r.codecs = rep.Bandwidth, rep.Codecs
 
-	init, err := resolve(rep.BaseURL, rep.Template.Initialization)
+	// A manifest's addresses are relative to its BaseURL, and that to the manifest.
+	base, err := resolve(s.manifest, rep.BaseURL)
+	if err != nil {
+		s.log.Warn("Unreadable Instagram base address", "error", err)
+		return
+	}
+	init, err := resolve(base, rep.Template.Initialization)
 	if err != nil {
 		s.log.Warn("Unreadable Instagram init segment address", "error", err)
 		return
@@ -659,7 +669,7 @@ func (s *Seat) applyRep(m *mpd, rep *mpdRep) {
 		msPerSegment = float64(lastListedT-origin) / float64(span)
 	}
 	for n := r.next; n <= tl.EndNumber; n++ {
-		u, err := resolve(rep.BaseURL, numbered(tl.Predicted, n))
+		u, err := resolve(base, numbered(tl.Predicted, n))
 		if err != nil {
 			s.log.Warn("Unreadable Instagram segment address", "error", err)
 			return
