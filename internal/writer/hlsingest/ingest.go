@@ -47,6 +47,10 @@ const maxAdaptivePoll = 5 * time.Second
 // see segmentFetchShare.
 const segmentPollRetries = 3
 
+// retainedSegmentPollRetries is segmentPollRetries on an Origin that keeps the
+// segment, so the bound only has to outlast a passing network failure.
+const retainedSegmentPollRetries = 60
+
 // segmentFetchShare is the fraction of one segment's duration that a segment's
 // fetch attempts may take before the ingest goes back to polling. An Origin
 // drops about one segment per segment-duration, and the poll retry only
@@ -111,6 +115,10 @@ type Config struct {
 	// SegmentRename is applied to every segment URL the media playlist names
 	// (see stream.SegmentRename). Nil for every Origin but the one that needs it.
 	SegmentRename *stream.SegmentRename
+	// retainedOrigin is set for an Origin whose seat keeps every segment of the
+	// Broadcast (see retainedSeat): a failed fetch costs nothing but a later retry,
+	// and the renditions of its past are read in batches.
+	retainedOrigin bool
 }
 
 // Map is an fMP4 initialisation segment, named by EXT-X-MAP. Every Segment
@@ -240,6 +248,9 @@ func Run(
 		}()
 		o.client = seat.Client(client)
 		o.cfg.URL = seat.master()
+		if r, ok := seat.(retainedSeat); ok {
+			o.cfg.retainedOrigin = r.retained()
+		}
 	}
 
 	playlistURL, audioURL, err := o.resolveRenditions(o.cfg.URL)
@@ -290,6 +301,14 @@ func (o *ingest) pollInterval() time.Duration {
 		return o.cfg.PollInterval
 	}
 	return defaultPollInterval
+}
+
+// segmentRetries is how many polls a failed download is retried over.
+func (o *ingest) segmentRetries() int {
+	if o.cfg.retainedOrigin {
+		return retainedSegmentPollRetries
+	}
+	return segmentPollRetries
 }
 
 // refreshes reports whether this Origin's playlist URL has to be re-resolved
@@ -451,6 +470,9 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 			meanSegment = pubWindow / time.Duration(pubCount)
 		}
 		fetchBudget := segmentFetchBudget(pubWindow, meanSegment)
+		if o.cfg.retainedOrigin {
+			fetchBudget = 0
+		}
 
 		// Begin at the live edge rather than adopting the Origin's whole
 		// sliding window, which on a DVR playlist is hours of the past.
@@ -546,7 +568,7 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				if absMap != lastMapURI {
 					body, err := o.fetchRetry(ctx, absMap, fetchBudget)
 					if err != nil {
-						if poll := retry.spend(seg.SeqId); poll <= segmentPollRetries {
+						if poll := retry.spend(seg.SeqId); poll <= o.segmentRetries() {
 							o.logger.Warn("Init map download failed, retrying on the next poll",
 								"error", err, "map_url", absMap, "poll", poll)
 							stalled = true
@@ -570,7 +592,7 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				body, err = o.fetchRetry(ctx, absSeg, fetchBudget)
 			}
 			if err != nil {
-				if poll := retry.spend(seg.SeqId); poll <= segmentPollRetries {
+				if poll := retry.spend(seg.SeqId); poll <= o.segmentRetries() {
 					// Leave it unseen and stop: the segments after it must not
 					// be handed over first, and the Origin still holds it.
 					o.logger.Warn("Segment download failed, retrying on the next poll",
@@ -623,7 +645,7 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				// A Sink that cannot take this segment gets the same
 				// stop-and-resume a failed fetch does, so the segment is not
 				// lost and the ones behind it do not overtake it.
-				if poll := retry.spend(seg.SeqId); poll <= segmentPollRetries {
+				if poll := retry.spend(seg.SeqId); poll <= o.segmentRetries() {
 					o.logger.Warn("Sink rejected segment, retrying on the next poll",
 						"error", err, "segment_url", absSeg, "poll", poll)
 					stalled = true

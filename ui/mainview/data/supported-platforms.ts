@@ -61,6 +61,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   younow: "YouNow",
   peeks: "Peeks",
   fansly: "Fansly",
+  instagram: "Instagram",
   cameraprive: "CameraPrive",
   eplay: "ePlay",
   myfreecams: "MyFreeCams",

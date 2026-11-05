@@ -67,8 +67,22 @@ func TestEndsUnmonitored(t *testing.T) {
 		{"generic", unmonitoredStallLimit - time.Second, false},
 		{"twitch", time.Hour, false},
 	} {
-		if got := endsUnmonitored(tc.platform, tc.gap); got != tc.want {
+		if got := endsUnmonitored(tc.platform, false, tc.gap); got != tc.want {
 			t.Errorf("endsUnmonitored(%s, %v) = %v, want %v", tc.platform, tc.gap, got, tc.want)
 		}
+	}
+}
+
+// A platform that tells only a signed-in viewer is monitored only where there is
+// a login to ask with.
+func TestEndsUnmonitoredWithoutALogin(t *testing.T) {
+	if !endsUnmonitored("instagram", false, unmonitoredStallLimit) {
+		t.Error("nothing here can see the status, so the session should end")
+	}
+	if endsUnmonitored("instagram", true, unmonitoredStallLimit) {
+		t.Error("the sweep sees the status, so it decides when the session ends")
+	}
+	if endsUnmonitored("twitch", false, unmonitoredStallLimit) {
+		t.Error("a platform that tells anyone is monitored without a login")
 	}
 }

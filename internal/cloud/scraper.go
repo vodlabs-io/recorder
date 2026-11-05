@@ -1,6 +1,7 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -138,6 +139,12 @@ type scrapeRequest struct {
 	ExtractorRegex string `json:"extractor_regex,omitempty"`
 	// ExtractorJSON is a JSONPath (gjson syntax) to extract a subset of JSON data.
 	ExtractorJSON string `json:"extractor_json,omitempty"`
+	// BrowserFallback lets a BrowserContext request run over plain HTTP with the
+	// stored login when this machine has no webview to run it in.
+	BrowserFallback bool `json:"browser_fallback,omitempty"`
+	// BrowserHostPage is the path of the document a BrowserContext request runs
+	// from, on its own origin (see browserfetch.Request.HostPage).
+	BrowserHostPage string `json:"browser_host_page,omitempty"`
 	// AuthPlatform, when set, asks this client to attach its LOCALLY stored login
 	// cookies for the named platform to the outbound request.
 	//
@@ -273,10 +280,17 @@ func (h *scrapeHandler) handleScrapeRequest(msg *nats.Msg) {
 					h.respondWithError(msg, "internal error")
 				}
 			}()
-			h.handleViaBrowser(msg, scrapeReq)
+			h.handleViaBrowser(msg, scrapeReq, parsedURL)
 		}()
 		return
 	}
+
+	h.fetchDirect(msg, scrapeReq, parsedURL)
+}
+
+// fetchDirect makes a scrape with this machine's own HTTP client.
+func (h *scrapeHandler) fetchDirect(msg *nats.Msg, scrapeReq scrapeRequest, parsedURL *url.URL) {
+	log := h.logger.With("func", "fetchDirect")
 
 	// Ordinary scrape: enforce the rate limit and hold a concurrency slot.
 	// A refusal has already replied and reported itself.
@@ -393,7 +407,10 @@ func (h *scrapeHandler) handleScrapeRequest(msg *nats.Msg) {
 			return
 		}
 		matches := re.FindSubmatch(body)
-		if len(matches) >= 2 {
+		if len(matches) > 2 {
+			body = bytes.Join(matches[1:], []byte("\n"))
+			extracted = true
+		} else if len(matches) == 2 {
 			body = matches[1]
 			extracted = true
 		} else if len(matches) == 1 {
@@ -419,6 +436,11 @@ func (h *scrapeHandler) handleScrapeRequest(msg *nats.Msg) {
 	}
 
 	headers := replyHeaders(resp.Header, extracted)
+	// A plugin reading a redirect's end (a login wall) cannot see it otherwise:
+	// the client followed it here.
+	if final := resp.Request.URL.String(); final != scrapeReq.URL {
+		headers["Location"] = final
+	}
 
 	scrapeResp := scrapeResponse{
 		Status:  resp.StatusCode,
@@ -511,10 +533,10 @@ func (h *scrapeHandler) maxPayload() int64 {
 // about. The reply therefore has to name what it needs (ExtractorJSON), which
 // is applied here, on this machine: a request that names nothing is refused
 // rather than answered with the page.
-func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest) {
+func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest, parsedURL *url.URL) {
 	log := h.logger.With("func", "handleViaBrowser")
 
-	if scrapeReq.ExtractorJSON == "" {
+	if scrapeReq.ExtractorJSON == "" && scrapeReq.ExtractorRegex == "" {
 		log.Warn("Refusing a browser-context request that names no fields",
 			"platform", scrapeReq.AuthPlatform, "url", scrapeReq.URL)
 		h.respondWithError(msg, "a browser-context request must name the fields it needs")
@@ -522,6 +544,10 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest)
 	}
 
 	if h.localNC == nil {
+		if scrapeReq.BrowserFallback {
+			h.fetchDirect(msg, scrapeReq, parsedURL)
+			return
+		}
 		log.Warn("Browser-context request but no local NATS connection", "platform", scrapeReq.AuthPlatform)
 		h.respondWithError(msg, "browser context unavailable")
 		return
@@ -532,14 +558,19 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest)
 		timeout = time.Duration(scrapeReq.TimeoutMS) * time.Millisecond
 	}
 
-	reqData, err := json.Marshal(browserfetch.Request{
+	fetchReq := browserfetch.Request{
 		Platform:       scrapeReq.AuthPlatform,
 		URL:            scrapeReq.URL,
 		Method:         scrapeReq.Method,
 		Body:           scrapeReq.Body,
 		TimeoutMS:      int(timeout / time.Millisecond),
 		ExtractorRegex: scrapeReq.ExtractorRegex,
-	})
+		HostPage:       scrapeReq.BrowserHostPage,
+	}
+	if scrapeReq.BrowserHostPage != "" {
+		fetchReq.Headers = scrapeReq.Headers
+	}
+	reqData, err := json.Marshal(fetchReq)
 	if err != nil {
 		h.respondWithError(msg, "failed to marshal browser request")
 		return
@@ -549,6 +580,11 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest)
 		"platform", scrapeReq.AuthPlatform, "url", scrapeReq.URL)
 
 	reply, err := h.localNC.Request(browserfetch.RequestSubject, reqData, timeout)
+	if errors.Is(err, nats.ErrNoResponders) && scrapeReq.BrowserFallback {
+		log.Info("No browser context; making the request directly", "platform", scrapeReq.AuthPlatform)
+		h.fetchDirect(msg, scrapeReq, parsedURL)
+		return
+	}
 	if err != nil {
 		// No desktop subscriber (headless), app closed, or the webview timed out.
 		log.Info("Browser context unavailable", "platform", scrapeReq.AuthPlatform, "error", err)
@@ -567,9 +603,25 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest)
 		return
 	}
 
+	headers := map[string]string{"X-Scrape-Extracted": "true"}
+	if bfResp.RedirectedTo != "" {
+		headers["Location"] = bfResp.RedirectedTo
+	}
+	// A page it was sent away to, or an error page, has none of the named fields,
+	// and all a plugin needs of it is that it was sent away. Nothing of it travels.
+	failed := bfResp.Status < 200 || bfResp.Status >= 300
+	if bfResp.RedirectedTo != "" || (failed && !gjson.Valid(bfResp.Body)) {
+		h.respond(msg, scrapeResponse{Status: bfResp.Status, Headers: headers})
+		return
+	}
+
 	// The webview applied the regex in-page, if there was one; the reply is
-	// narrowed to the named fields here before it leaves the machine.
-	extracted, err := narrowBrowserBody(bfResp.Body, scrapeReq.ExtractorJSON)
+	// narrowed to the named fields here before it leaves the machine. A request
+	// that named only a regex was narrowed by it already.
+	extracted := bfResp.Body
+	if scrapeReq.ExtractorJSON != "" {
+		extracted, err = narrowBrowserBody(bfResp.Body, scrapeReq.ExtractorJSON)
+	}
 	if err != nil {
 		log.Info("Browser context response did not hold the named fields",
 			"platform", scrapeReq.AuthPlatform, "json_path", scrapeReq.ExtractorJSON,
@@ -587,7 +639,7 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest)
 
 	h.respond(msg, scrapeResponse{
 		Status:  bfResp.Status,
-		Headers: map[string]string{"X-Scrape-Extracted": "true"},
+		Headers: headers,
 		Body:    extracted,
 	})
 }

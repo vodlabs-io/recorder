@@ -39,11 +39,18 @@ type BrowserFetchRequest = {
   // group 1 if present) instead of chunking the whole page through the cookie
   // relay. Supplied by the cloud; compiled here by the page's JS engine.
   extractor_regex?: string;
+  // host_page, when set, is the path of the document on the URL's own origin the
+  // request runs from: a bare page of the origin, for a request nothing in-page
+  // has to sign. Nothing is then waited for, and headers are sent with it.
+  host_page?: string;
+  headers?: Record<string, string>;
 };
 type BrowserFetchResponse = {
   status: number;
   body?: string;
   error?: string;
+  // Where the request ended up, when that is not where it was sent.
+  redirected_to?: string;
 };
 
 // COOKIE_PREFIX names the transient result cookies. It is deliberately shared
@@ -78,23 +85,44 @@ function eventUrl(e: unknown): string {
 // pageURLFor returns a real platform page (with the signing JS) to host the
 // fetch. Using the target URL's own origin keeps same-origin API calls (e.g.
 // TikTok's api-live/user/room on www.tiktok.com) truly same-origin.
-function pageURLFor(targetURL: string): string {
-  return new URL(targetURL).origin + "/";
+export function pageURLFor(targetURL: string, hostPage?: string): string {
+  const origin = new URL(targetURL).origin;
+  return hostPage ? new URL(hostPage, origin + "/").href : origin + "/";
+}
+
+// fetchInit is the fetch options for a request's own headers. The browser sets
+// the User-Agent and cookies itself, and takes the Referer as an option.
+export function fetchInit(
+  method: string,
+  body: string,
+  headers: Record<string, string> | undefined,
+): Record<string, unknown> {
+  const init: Record<string, unknown> = { credentials: "include", method: method || "GET" };
+  if (body) init.body = body;
+  const own: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers ?? {})) {
+    const name = k.toLowerCase();
+    if (name === "referer") init.referrer = v;
+    else if (name !== "user-agent" && name !== "cookie") own[k] = v;
+  }
+  if (Object.keys(own).length > 0) init.headers = own;
+  return init;
 }
 
 // buildInjectedScript returns main-world JS that waits for the platform's signing
 // SDK to initialise, performs the fetch (so the SDK signs it), and writes the
 // response into COOKIE_PREFIX cookies for bun to read. Runs entirely in-page.
-function buildInjectedScript(
+export function buildInjectedScript(
   id: string,
   target: string,
   method: string,
   body: string,
   extractorRegex: string,
+  bare = false,
+  headers?: Record<string, string>,
 ): string {
   const targetJSON = JSON.stringify(target);
-  const methodJSON = JSON.stringify(method || "GET");
-  const bodyJSON = JSON.stringify(body || "");
+  const initJSON = JSON.stringify(fetchInit(method, body, headers));
   const regexJSON = JSON.stringify(extractorRegex || "");
   const prefix = COOKIE_PREFIX + id + "_";
   const prefixJSON = JSON.stringify(prefix);
@@ -122,15 +150,14 @@ function buildInjectedScript(
       catch (e) { return false; }
     }
     var waited = 0;
-    for (var i = 0; i < 60; i++) {
+    for (var i = 0; i < ${bare ? 0 : 60}; i++) {
       if (window.byted_acrawler && fetchPatched()) break;
       await new Promise(function (r) { setTimeout(r, 100); });
       waited += 100;
     }
     var ready = !!(window.byted_acrawler && fetchPatched());
 
-    var opts = { credentials: "include", method: ${methodJSON} };
-    if (${bodyJSON}) opts.body = ${bodyJSON};
+    var opts = ${initJSON};
 
     // The SDK's wrapper can transiently return undefined instead of a Response
     // even after the wait above, so retry once and report it plainly.
@@ -155,10 +182,12 @@ function buildInjectedScript(
     if (RX) {
       try {
         var m = text.match(new RegExp(RX));
-        out = m ? (m[1] != null ? m[1] : m[0]) : "";
+        out = !m ? "" : m.length > 2
+          ? m.slice(1).map(function (g) { return g == null ? "" : g; }).join("\\n")
+          : (m[1] != null ? m[1] : m[0]);
       } catch (e) { out = ""; }
     }
-    store({ status: resp.status, body: out });
+    store({ status: resp.status, body: out, redirected_to: resp.redirected ? resp.url : "" });
   } catch (e) {
     store({ status: 0, error: String(e) });
   }
@@ -437,7 +466,7 @@ async function performFetch(
   req: BrowserFetchRequest,
   timeoutMs: number,
 ): Promise<BrowserFetchResponse> {
-  const pageURL = pageURLFor(req.url);
+  const pageURL = pageURLFor(req.url, req.host_page);
   const host = new URL(req.url).host;
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const deadline = Date.now() + timeoutMs;
@@ -455,7 +484,15 @@ async function performFetch(
   // The document is ready; webmssdk loads shortly after. Inject the fetch (it
   // waits for the SDK internally), then poll cookies for the result.
   ctx.view.executeJavascript(
-    buildInjectedScript(id, req.url, req.method || "GET", req.body || "", req.extractor_regex || ""),
+    buildInjectedScript(
+      id,
+      req.url,
+      req.method || "GET",
+      req.body || "",
+      req.extractor_regex || "",
+      Boolean(req.host_page),
+      req.headers,
+    ),
   );
   return await awaitResult(partition, id, host, Math.max(deadline - Date.now(), POLL_INTERVAL_MS));
 }

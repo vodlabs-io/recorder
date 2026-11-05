@@ -219,8 +219,11 @@ func TestSweepEligible(t *testing.T) {
 			"means the sweep checks each streamer exactly once, ever")
 	}
 
+	// A broadcast with no session on it stays too: with nothing recording it,
+	// nothing else would ever notice that it ended.
 	for _, st := range []streamer.LiveStatus{
 		streamer.StatusRestricted, streamer.StatusUnknown, streamer.StatusAuthRequired,
+		streamer.StatusLive, streamer.StatusPaused,
 	} {
 		doc := base
 		doc.Status = st
@@ -230,7 +233,6 @@ func TestSweepEligible(t *testing.T) {
 	}
 
 	for _, st := range []streamer.LiveStatus{
-		streamer.StatusLive, streamer.StatusPaused,
 		streamer.StatusDefunct, streamer.StatusInvalid, streamer.StatusRemoved,
 	} {
 		doc := base
@@ -505,5 +507,18 @@ func TestNoteUnrunnableBacksOff(t *testing.T) {
 	}
 	if due, _ := s.due(key, sweepNow.Add(sweepUnrunnableHold+time.Minute)); !due {
 		t.Error("the hold should expire")
+	}
+}
+
+// A login with nothing to watch is not spent reading a live feed.
+func TestSweepFeedsOnlyWhenSomethingIsWatched(t *testing.T) {
+	login := &platformauth.Session{
+		Platform: "bigo", Cookies: []platformauth.Cookie{{Name: "yyuid", Value: "1", Domain: "bigo.tv"}},
+	}
+	if newSweepTestClient(t, 0, login).feedWanted("bigo") {
+		t.Error("a daemon watching nothing wants a feed")
+	}
+	if !newSweepTestClient(t, 1, login).feedWanted("bigo") {
+		t.Error("a daemon watching a streamer does not want its feed")
 	}
 }

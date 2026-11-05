@@ -8,6 +8,7 @@ import (
 
 	"github.com/vodlabs-io/recorder/internal/cameraprive"
 	"github.com/vodlabs-io/recorder/internal/fansly"
+	"github.com/vodlabs-io/recorder/internal/instagram"
 )
 
 // Stream represents a single stream variant with quality information
@@ -37,11 +38,12 @@ func (s Stream) IsHLS() bool {
 		return false
 	}
 	// A Niconico program (nicolive://), an FC2 Live channel (fc2live://), a
-	// Peeks broadcast (peeks://), a Fansly channel (fansly://) or a CameraPrive
-	// room (cameraprive://) is recorded from the HLS its seat is granted.
+	// Peeks broadcast (peeks://), a Fansly channel (fansly://), a CameraPrive
+	// room (cameraprive://) or an Instagram broadcast (instagram://) is recorded
+	// from the HLS its seat is granted or serves.
 	return strings.Contains(s.URL, ".m3u8") || strings.HasPrefix(s.URL, "nicolive://") ||
 		strings.HasPrefix(s.URL, "fc2live://") || strings.HasPrefix(s.URL, "peeks://") ||
-		fansly.IsURL(s.URL) || cameraprive.IsURL(s.URL)
+		fansly.IsURL(s.URL) || cameraprive.IsURL(s.URL) || instagram.IsURL(s.URL)
 }
 
 // SeatLoginHost names the platform host a stream's seat reads it from as the

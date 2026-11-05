@@ -37,7 +37,16 @@ type Request struct {
 	// to just the matched block instead of being chunked whole. Capture group 1
 	// wins when present, else the full match. The pattern is compiled by the
 	// page's JS engine, so it must be a valid JS RegExp.
+	//
+	// With several capture groups, the groups are joined by newlines.
 	ExtractorRegex string `json:"extractor_regex,omitempty"`
+	// HostPage, when set, is the path of the document on the URL's own origin the
+	// request runs from, in place of the front page: a bare page of the origin,
+	// for a request nothing in-page has to sign. Nothing is then waited for, and
+	// Headers are sent. Supplied by the cloud; the origin stays the URL's own.
+	HostPage string `json:"host_page,omitempty"`
+	// Headers are sent with a request that names a HostPage.
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // Response is the desktop's reply: the platform's HTTP response, or an error.
@@ -45,6 +54,9 @@ type Response struct {
 	Status int    `json:"status"`
 	Body   string `json:"body,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// RedirectedTo is where the request ended up when that is not where it was
+	// sent.
+	RedirectedTo string `json:"redirected_to,omitempty"`
 }
 
 // SniffSubject is the LOCAL NATS subject (request-reply) on which the daemon

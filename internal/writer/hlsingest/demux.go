@@ -23,6 +23,10 @@ import (
 // stalled audio playlist delays the video by seconds rather than stopping it.
 const maxPendingVideo = 3
 
+// maxPendingVideoRetained is maxPendingVideo on an Origin read in batches, whose
+// two renditions may each be a whole batch ahead of the other.
+const maxPendingVideoRetained = 24
+
 // maxPendingAudio bounds the audio fragments held for video that has not
 // arrived, so a stalled video playlist cannot grow the queue without limit.
 const maxPendingAudio = 32
@@ -45,7 +49,10 @@ func (o *ingest) runDemuxed(ctx context.Context, videoURL, audioURL string) erro
 	audioCtx, stopAudio := context.WithCancel(ctx)
 	defer stopAudio()
 
-	m := &demuxMerger{sink: o.sink, logger: o.logger, stopAudio: stopAudio}
+	m := &demuxMerger{sink: o.sink, logger: o.logger, stopAudio: stopAudio, maxPending: maxPendingVideo}
+	if o.cfg.retainedOrigin {
+		m.maxPending = maxPendingVideoRetained
+	}
 	video := &ingest{cfg: o.cfg, client: o.client, logger: o.logger, sink: videoTrack{m}}
 	acfg := o.cfg
 	acfg.RefreshURL, acfg.URLTTL = nil, 0
@@ -100,6 +107,8 @@ type demuxMerger struct {
 	sink      Sink
 	logger    *slog.Logger
 	stopAudio func()
+	// maxPending is how many video segments may wait for their audio.
+	maxPending int
 
 	// passthrough is set once the video turns out not to need the audio
 	// joined: it carries a sound track of its own, or is not fragmented MP4,
@@ -273,7 +282,7 @@ func (m *demuxMerger) drain(final bool) error {
 	for len(m.video) > 0 && m.videoInit != nil {
 		v := m.video[0]
 		covered := m.audioInit != nil && !math.IsNaN(v.end) && m.audioEnd >= v.end-audioSlack
-		if !final && !covered && !math.IsNaN(v.end) && len(m.video) <= maxPendingVideo {
+		if !final && !covered && !math.IsNaN(v.end) && len(m.video) <= m.maxPending {
 			return nil
 		}
 
