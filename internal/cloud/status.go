@@ -32,6 +32,17 @@ type streamersResponse struct {
 // check is parked until a browser context appears.
 var ErrCheckNotRunnable = errors.New("cloud could not run that check")
 
+// PlatformUnreachableError is a check that failed because this machine's own
+// request to the platform failed: a reset, a timeout, a DNS failure. Its message
+// is the service's account of which host and how.
+type PlatformUnreachableError struct{ Detail string }
+
+func (e *PlatformUnreachableError) Error() string { return e.Detail }
+
+// PlatformUnreachable lets a package that does not import this one recognise
+// the error.
+func (*PlatformUnreachableError) PlatformUnreachable() bool { return true }
+
 // How long the daemon waits on a status check. The cloud answers within 48s,
 // so both sit above that: the cloud gives up first and can say why. An authed
 // check runs through the desktop webview, so it gets longer.
@@ -120,6 +131,9 @@ func (c *Client) fetchStatus(ctx context.Context, opts statusOpts, id ...streame
 		body, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode == http.StatusServiceUnavailable {
 			return nil, fmt.Errorf("%w: %s", ErrCheckNotRunnable, strings.TrimSpace(string(body)))
+		}
+		if resp.StatusCode == http.StatusFailedDependency {
+			return nil, &PlatformUnreachableError{Detail: strings.TrimSpace(string(body))}
 		}
 		return nil, fmt.Errorf("status failed: %s - %s", resp.Status, string(body))
 	}
