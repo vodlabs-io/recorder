@@ -224,6 +224,12 @@ func Open(ctx context.Context, raw string, client *http.Client, userAgent string
 		bySegment: map[string]segmentPlace{},
 		lastGood:  time.Now(),
 	}
+	// Read to its end by this process already: there is nothing left to take a
+	// seat on, whatever a status check that has not caught up still says.
+	if n, ok := resumePoint(id); ok && n == resumeFinished {
+		cancel()
+		return nil, ErrEnded
+	}
 	openCtx, cancelOpen := context.WithTimeout(ctx, openTimeout)
 	defer cancelOpen()
 	m, err := s.readManifest(openCtx)
@@ -267,6 +273,8 @@ const (
 	// resumeOverlap goes back over what may have been fetched and not yet handed
 	// on: reading a segment twice beats leaving a hole.
 	resumeOverlap = 5
+	// resumeFinished is the resume point of a broadcast read to its end.
+	resumeFinished = -1
 )
 
 func resumePoint(id string) (int64, bool) {
@@ -294,6 +302,7 @@ func (s *Seat) noteResumePoint() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	reached := int64(0)
+	finished := s.ended
 	for _, r := range s.renditions {
 		if !r.polled {
 			continue
@@ -304,8 +313,12 @@ func (s *Seat) noteResumePoint() {
 		if n := r.segments[r.fetched-1].number; reached == 0 || n < reached {
 			reached = n
 		}
+		finished = finished && r.fetched == len(r.segments)
 	}
-	if reached > 0 {
+	switch {
+	case reached > 0 && finished:
+		setResumePoint(s.id, resumeFinished)
+	case reached > 0:
 		setResumePoint(s.id, max(reached-resumeOverlap, s.first))
 	}
 }

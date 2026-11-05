@@ -46,9 +46,13 @@ func reconnectPlan(err error, partBytes int64) (freshURL, skipDelay bool) {
 const unmonitoredStallLimit = 3 * time.Minute
 
 // endsUnmonitored reports whether a session that has recorded nothing for gap
-// should end because its platform is never monitored.
-func endsUnmonitored(platform string, gap time.Duration) bool {
-	return gap >= unmonitoredStallLimit && vlconfig.NoMonitor(platform)
+// should end because nothing here can see its streamer's status: its platform is
+// never monitored, or tells nobody but a signed-in viewer and hasLogin is false.
+func endsUnmonitored(platform string, hasLogin bool, gap time.Duration) bool {
+	if gap < unmonitoredStallLimit {
+		return false
+	}
+	return vlconfig.NoMonitor(platform) || (vlconfig.LoginRequiredFor(platform) && !hasLogin)
 }
 
 // streamHost returns the server a stream URL points at, for logging: the rest
@@ -172,7 +176,8 @@ func (w *worker) Run(ctx context.Context) error {
 				// and usually resumes within seconds. A lag is a hole in the
 				// recording, so the gap since the last byte is what decides.
 				gap := w.dataGap(sessionStart)
-				if endsUnmonitored(w.strKey.Platform, gap) {
+				hasLogin := w.cookies != nil && w.cookies.Has(w.strKey.Platform)
+				if endsUnmonitored(w.strKey.Platform, hasLogin, gap) {
 					w.logger.Info("No data for too long on a platform nothing monitors; treating the stream as ended",
 						"idle", gap.Round(time.Second))
 					state = streamerOffline

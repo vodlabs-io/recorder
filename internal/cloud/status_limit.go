@@ -245,6 +245,13 @@ func (c *Client) asksSignedIn(platform string) bool {
 	return vlconfig.LoginRequiredFor(platform) && c.cookies != nil && c.cookies.Has(platform)
 }
 
+// signsIn reports whether a fetch of this kind carries the stored login: an
+// authenticated check does, and so does a re-sign where a signed-out one could
+// only ever be told the platform has nothing to say.
+func (c *Client) signsIn(platform string, kind requestKind) bool {
+	return kind == kindAuthed || (kind == kindStream && c.asksSignedIn(platform))
+}
+
 // limiterFor returns the platform's limiter, starting it on first use and
 // retuning it when the pace from the heartbeat has changed. A URL-only lookup
 // has no platform yet and shares the empty-name limiter at the default pace.
@@ -357,7 +364,7 @@ func (c *Client) serve(
 		if l.local {
 			str, err = c.checkLocal(ctx, id, kind == kindStream)
 		} else {
-			str, err = c.fetchSingleStatus(ctx, id, kind == kindAuthed, kind == kindStream)
+			str, err = c.fetchSingleStatus(ctx, id, c.signsIn(id.Platform, kind), kind == kindStream)
 		}
 		if errors.Is(err, errBlocked) {
 			return // every status is fetched again once the block lifts
@@ -514,7 +521,7 @@ func (c *Client) retryStatusFetch(
 			return
 		}
 
-		str, err := c.fetchSingleStatus(ctx, id, kind == kindAuthed, kind == kindStream)
+		str, err := c.fetchSingleStatus(ctx, id, c.signsIn(id.Platform, kind), kind == kindStream)
 		if errors.Is(err, errBlocked) {
 			return
 		}

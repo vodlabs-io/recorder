@@ -307,6 +307,33 @@ func TestSeatTakenAgainCarriesOn(t *testing.T) {
 	}
 }
 
+// A broadcast read to its end is over, whatever a stale status still says.
+func TestSeatOnABroadcastReadToItsEndIsRefused(t *testing.T) {
+	f := newFakeCDN(t, 101)
+	refreshEvery = 0
+	raw := Scheme + "://888?" + url.Values{"mpd": {f.srv.URL + "/v/hash/a.mpd"}}.Encode()
+	s, err := Open(context.Background(), raw, f.srv.Client(), "ua", testLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := playlistURL("dash-lp-hd-a")
+	get(t, s, u)
+	f.set(func() { f.typ = "static" })
+	if got := get(t, s, u); !strings.Contains(got, "#EXT-X-ENDLIST") {
+		t.Fatalf("%s", got)
+	}
+	client := s.Client(f.srv.Client())
+	resp, err := client.Get(f.srv.URL + "/v/hash/live-dash/ID/dash-lp-hd-a/1_0-101.m4a?ms=m_C&ccb=2-4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	s.Close()
+	if _, err := Open(context.Background(), raw, f.srv.Client(), "ua", testLog); err != ErrEnded {
+		t.Fatalf("err %v", err)
+	}
+}
+
 func TestBroadcastWithItsPastGoneStartsAtWhatIsListed(t *testing.T) {
 	f := newFakeCDN(t, 500)
 	f.first = 1
