@@ -26,7 +26,8 @@ YouTube, Twitch and Kick.
 The app updates itself. [Installing](docs/install.md) covers the first-launch
 warnings on each system.
 
-To install only the command-line tool, on macOS or Linux:
+To install only the command-line tool, on macOS or Linux (AI agents and scripts:
+see [the agent guide](docs/agents.md)):
 
 ```sh
 curl -fsSL https://vodlabs.io/install.sh | sh

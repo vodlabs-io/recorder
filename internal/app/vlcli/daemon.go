@@ -49,6 +49,13 @@ func (a *App) connectDaemon(ctx context.Context, cmd *cli.Command) (context.Cont
 	return ctx, nil
 }
 
+// develRefusedHint tells whoever made a build without a version why nothing
+// records and what to run instead.
+const develRefusedHint = `The VodLabs service refuses this development build ("devel"), so it cannot check or record streamers.
+Install a release: curl -fsSL https://vodlabs.io/install.sh | sh
+Or build from a clone with its tags using ./scripts/build.sh, which stamps the version.
+`
+
 func (a *App) notifyDaemonUpdate(ctx context.Context, cmd *cli.Command) {
 	if cmd.Name == "update" {
 		return
@@ -57,11 +64,15 @@ func (a *App) notifyDaemonUpdate(ctx context.Context, cmd *cli.Command) {
 	if err != nil {
 		return
 	}
-	current, err := semver.NewVersion(daemonVer)
+	upstream, err := vlstate.GetUpstreamVersion(ctx, a.kv)
 	if err != nil {
 		return
 	}
-	upstream, err := vlstate.GetUpstreamVersion(ctx, a.kv)
+	if daemonVer == "devel" && upstream.UpdateRequired {
+		fmt.Fprint(os.Stderr, develRefusedHint)
+		return
+	}
+	current, err := semver.NewVersion(daemonVer)
 	if err != nil {
 		return
 	}
@@ -116,7 +127,7 @@ func initNATS(
 		nats.NoReconnect(),
 		nats.ClosedHandler(func(_ *nats.Conn) {
 			if !isClosing() {
-				fmt.Println(cr() + "Daemon disconnected")
+				fmt.Fprintln(os.Stderr, cr()+"Daemon disconnected")
 				onClose()
 			}
 		}),

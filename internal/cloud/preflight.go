@@ -41,6 +41,10 @@ func (e *rejectionError) Definitive() bool { return e.Code != codeUnavailable }
 // a page this machine can record once itself.
 func (e *rejectionError) UnsupportedSite() bool { return e.Code == codeUnsupportedSite }
 
+// RejectedPlatform names the platform a rejection is about, or "" when no
+// platform claims the URL.
+func (e *rejectionError) RejectedPlatform() string { return e.Platform }
+
 // resolveResponse is the accepted answer: the canonical identity to store.
 type resolveResponse struct {
 	Platform string `json:"platform"`

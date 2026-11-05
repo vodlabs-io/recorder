@@ -34,6 +34,22 @@ doing anything.
 The service has stopped serving this version. Open **Update**, or run
 `vod update` if you use the command-line tool.
 
+## "This recorder could not reach" a platform
+
+The status check ran on this machine and its request to the platform failed, with
+the reason after the colon: `connection reset by peer` or a timeout usually means
+a firewall, a proxy or a sandbox is blocking that platform. `vod doctor <platform>
+<username>` runs the same check and shows what this machine can reach. Recording
+needs that network path too, so the fix is on the network, not in the recorder.
+
+## "The VodLabs service refuses this development build"
+
+A build without a version number reports itself as `devel`, and the service only
+serves those on the developers' own machines. A plain `go build`, a source archive
+or a shallow clone all produce one. [Install a release](install.md#the-command-line-tool),
+or run `./scripts/build.sh` from a full clone, which stamps the last release's
+version.
+
 ## The app doesn't open
 
 **Windows:** if SmartScreen shows "Windows protected your PC", click **More

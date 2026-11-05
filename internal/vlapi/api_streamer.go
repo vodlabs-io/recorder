@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/micro"
+	"github.com/vodlabs-io/recorder/internal/platformlogin"
 	"github.com/vodlabs-io/recorder/internal/streamer"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vlstate"
@@ -135,7 +136,9 @@ func (s *Service) preflight(req micro.Request, id streamer.StreamerRef, once boo
 		}
 		return resolved, true
 	}
-	if id.URL != "" && unsupportedSite(err) && s.streamerFuncs.ResolvePage != nil {
+	// A rejection that names a platform is about that platform (not enabled, say),
+	// so the page is not one to try recording on its own.
+	if id.URL != "" && unsupportedSite(err) && rejectedPlatform(err) == "" && s.streamerFuncs.ResolvePage != nil {
 		if _, perr := webpage.Canonical(id.URL); perr == nil {
 			if !once {
 				respond(req, fail(ErrMonitorUnsupported, monitorUnsupportedMessage))
@@ -178,6 +181,15 @@ func (s *Service) preflightPage(req micro.Request, rawURL string) (streamer.Stre
 func unsupportedSite(err error) bool {
 	var verdict interface{ UnsupportedSite() bool }
 	return errors.As(err, &verdict) && verdict.UnsupportedSite()
+}
+
+// rejectedPlatform names the platform a cloud rejection is about, or "".
+func rejectedPlatform(err error) string {
+	var verdict interface{ RejectedPlatform() string }
+	if errors.As(err, &verdict) {
+		return verdict.RejectedPlatform()
+	}
+	return ""
 }
 
 // resolveURLRef turns a URL-only ref into the platform/username identity the
@@ -908,6 +920,12 @@ func (s *Service) handleCheckStreamer(req micro.Request) {
 	if !ok {
 		return
 	}
+	var opts CheckRequest
+	_ = json.Unmarshal(req.Data(), &opts)
+	if opts.Wait && s.streamerFuncs.Recheck != nil && !s.hasLogin(id.StreamerKey.Platform) {
+		s.checkStreamerNow(req, id)
+		return
+	}
 	if s.isRetired(id) && s.streamerFuncs.Recheck != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), addResolveTimeout)
 		defer cancel()
@@ -925,6 +943,59 @@ func (s *Service) handleCheckStreamer(req micro.Request) {
 		respond(req, fail(errInternal, "status queue full"))
 	}
 }
+
+// CheckRequest is the payload for streamer.check. With Wait the reply carries the
+// check's own outcome: the streamer's status, or why the check failed.
+type CheckRequest struct {
+	streamer.StreamerRef
+	Wait bool `json:"wait,omitempty"`
+}
+
+// checkStreamerNow runs the check while the caller waits, for a client that
+// needs to know whether this machine can check the streamer at all.
+func (s *Service) checkStreamerNow(req micro.Request, id streamer.StreamerRef) {
+	resolved, _, ok := s.resolveURLRef(req, id)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), checkNowTimeout)
+	defer cancel()
+	if err := s.streamerFuncs.Recheck(ctx, resolved); err != nil {
+		code := errUnavailable
+		var unreachable interface{ PlatformUnreachable() bool }
+		if errors.As(err, &unreachable) && unreachable.PlatformUnreachable() {
+			code = ErrPlatformUnreachable
+		}
+		respond(req, fail(code, err.Error()))
+		return
+	}
+	status := "checked"
+	if resolved.StreamerKey.Valid() && s.kv != nil {
+		lookup, cancel := context.WithTimeout(context.Background(), kvLookupTimeout)
+		defer cancel()
+		if doc, err := vlstate.GetStreamerDoc(lookup, s.kv, resolved.StreamerKey); err == nil && doc.Status != "" {
+			status = string(doc.Status)
+		}
+	}
+	respond(req, OK(status))
+}
+
+// hasLogin reports whether a platform login is stored. A check that waits is
+// signed out, so with a login the queued check runs instead, which signs in
+// when the signed-out answer is not enough.
+func (s *Service) hasLogin(platform string) bool {
+	if platform == "" || s.kv == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), kvLookupTimeout)
+	defer cancel()
+	_, err := s.kv.Get(ctx, platformlogin.Key(platform))
+	return err == nil
+}
+
+// checkNowTimeout sits above the daemon's own ceiling on a status check, so the
+// check is the side that gives up first and can say why.
+const checkNowTimeout = 80 * time.Second
 
 // isRetired reports whether a streamer is Unavailable or Defunct, so a check
 // must also clear that state. Anything unreadable (a URL-only streamer, no doc
