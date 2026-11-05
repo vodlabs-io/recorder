@@ -55,6 +55,8 @@ var (
 	// refreshEvery is the least time between two reads of the manifest. The
 	// renditions' playlists are polled apart and share what it says.
 	refreshEvery = time.Second
+	// advanceEvery is the least time between two batches of a playlist.
+	advanceEvery = time.Second
 	// goneAfter is how long the manifest may keep failing, with nothing new,
 	// before the broadcast is taken to be over.
 	goneAfter      = 45 * time.Second
@@ -159,6 +161,8 @@ type rendition struct {
 	fetched   int
 	// polled reports that something is reading this rendition's playlist.
 	polled bool
+	// advancedAt is when published last moved.
+	advancedAt time.Time
 }
 
 // segmentPlace is where a segment sits in its rendition.
@@ -460,7 +464,12 @@ func (s *Seat) renderMedia(r *rendition) string {
 			limit = min(limit, other.fetched+CatchUpBatch)
 		}
 	}
-	r.published = max(r.published, min(r.published+CatchUpBatch, limit))
+	// The ingest reads a playlist twice as it starts, a moment apart, and the
+	// first poll must still hold no more than the first batch.
+	if now := time.Now(); now.Sub(r.advancedAt) >= advanceEvery {
+		r.published = max(r.published, min(r.published+CatchUpBatch, limit))
+		r.advancedAt = now
+	}
 	from := max(0, r.published-playlistDepth)
 	window := r.segments[from:r.published]
 

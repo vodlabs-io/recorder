@@ -90,7 +90,7 @@ func (f *fakeCDN) set(fn func()) {
 
 func openSeat(t *testing.T, f *fakeCDN) *Seat {
 	t.Helper()
-	refreshEvery = 0
+	refreshEvery, advanceEvery = 0, 0
 	raw := Scheme + "://17956329360037581?" + url.Values{"mpd": {f.srv.URL + "/v/hash/live-dash/dash-abr/17956329360037581.mpd?oh=1"}}.Encode()
 	s, err := Open(context.Background(), raw, f.srv.Client(), "ua", testLog)
 	if err != nil {
@@ -175,6 +175,19 @@ func TestMediaPlaylistCatchesUpFromTheFirstSegment(t *testing.T) {
 	}
 	if n := strings.Count(last, "#EXTINF"); n != playlistDepth {
 		t.Errorf("playlist holds %d segments, want %d", n, playlistDepth)
+	}
+}
+
+// The ingest reads a playlist twice as it starts, and skips what is more than half
+// a minute behind the head of the first poll: both reads must hold the first batch.
+func TestReadingAPlaylistTwiceAtOncePublishesOneBatch(t *testing.T) {
+	s := openSeat(t, newFakeCDN(t, 500))
+	advanceEvery = time.Hour
+	defer func() { advanceEvery = 0 }()
+	u := playlistURL("dash-lp-pst-v")
+	get(t, s, u)
+	if got := get(t, s, u); strings.Count(got, "#EXTINF") != CatchUpBatch {
+		t.Errorf("second read holds %d segments", strings.Count(got, "#EXTINF"))
 	}
 }
 
@@ -278,7 +291,7 @@ func TestEncoderRestartStartsANewRun(t *testing.T) {
 // broadcast over into a new part.
 func TestSeatTakenAgainCarriesOn(t *testing.T) {
 	f := newFakeCDN(t, 500)
-	refreshEvery = 0
+	refreshEvery, advanceEvery = 0, 0
 	raw := Scheme + "://777?" + url.Values{"mpd": {f.srv.URL + "/v/hash/a.mpd"}}.Encode()
 	s, err := Open(context.Background(), raw, f.srv.Client(), "ua", testLog)
 	if err != nil {
@@ -310,7 +323,7 @@ func TestSeatTakenAgainCarriesOn(t *testing.T) {
 // A broadcast read to its end is over, whatever a stale status still says.
 func TestSeatOnABroadcastReadToItsEndIsRefused(t *testing.T) {
 	f := newFakeCDN(t, 101)
-	refreshEvery = 0
+	refreshEvery, advanceEvery = 0, 0
 	raw := Scheme + "://888?" + url.Values{"mpd": {f.srv.URL + "/v/hash/a.mpd"}}.Encode()
 	s, err := Open(context.Background(), raw, f.srv.Client(), "ua", testLog)
 	if err != nil {
