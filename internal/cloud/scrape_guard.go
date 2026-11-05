@@ -50,6 +50,9 @@ func checkScrapeTarget(method string, u *url.URL) error {
 	return nil
 }
 
+// scrapeProxy picks a scrape's proxy, replaced only by tests.
+var scrapeProxy = http.ProxyFromEnvironment
+
 // newScrapeClient builds the HTTP client scrapes are made with. It is separate
 // from the client the daemon talks to the service with, which legitimately
 // reaches a private address when a developer runs the service locally.
@@ -60,22 +63,25 @@ func checkScrapeTarget(method string, u *url.URL) error {
 // cannot hand the daemon on to somewhere the guard would have refused. (Go
 // already drops Cookie and Authorization headers on a cross-host redirect, so
 // the login cannot travel either way.)
+//
+// Through a proxy the environment configures, the proxy resolves the host, so
+// checkScrapeTarget's platform check is what bounds it.
 func newScrapeClient() *http.Client {
 	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-		Control:   netguard.DialControl,
+		Timeout:        10 * time.Second,
+		KeepAlive:      30 * time.Second,
+		ControlContext: netguard.ControlContext,
 	}
 	return &http.Client{
-		Transport: &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
+		Transport: netguard.Transport(&http.Transport{
+			Proxy:                 scrapeProxy,
 			DialContext:           dialer.DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          10,
 			IdleConnTimeout:       60 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ExpectContinueTimeout: time.Second,
-		},
+		}),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return errors.New("stopped after 10 redirects")

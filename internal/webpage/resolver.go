@@ -67,13 +67,14 @@ func New(nc *nats.Conn, logger *slog.Logger) *Resolver {
 }
 
 // guardedClient reads pages and probes streams, refusing every address that
-// is not public internet, including on a redirect.
+// is not public internet, including on a redirect, save the proxy the
+// environment configures.
 func guardedClient() *http.Client {
 	t := http.DefaultTransport.(*http.Transport).Clone()
-	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, Control: netguard.DialControl}
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second, ControlContext: netguard.ControlContext}
 	t.DialContext = dialer.DialContext
 	return &http.Client{
-		Transport: t,
+		Transport: netguard.Transport(t),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return errors.New("stopped after 5 redirects")

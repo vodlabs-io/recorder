@@ -5,10 +5,13 @@
 package netguard
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
 	"strings"
 	"syscall"
 )
@@ -82,3 +85,56 @@ func DialControl(_, address string, _ syscall.RawConn) error {
 	}
 	return nil
 }
+
+// ControlContext is DialControl for a net.Dialer's ControlContext, except that
+// it lets through the dial to the proxy Transport sends a request through.
+func ControlContext(ctx context.Context, network, address string, c syscall.RawConn) error {
+	if p, _ := ctx.Value(proxyKey{}).(proxyChoice); p.url != nil {
+		return nil
+	}
+	return DialControl(network, address, c)
+}
+
+// Transport returns a RoundTripper that sends each request through t, via the
+// proxy t.Proxy picks for it (such as http.ProxyFromEnvironment). That proxy is
+// the user's own configuration, so ControlContext lets t dial it even on this
+// machine or network; every direct dial stays guarded. t.Proxy is replaced, so
+// send requests through the returned RoundTripper only.
+//
+// The proxy resolves a proxied request's host itself, out of the dial guard's
+// sight, so a host that is BlockedHost on its face is refused before it.
+func Transport(t *http.Transport) http.RoundTripper {
+	g := &transport{t: t, pick: t.Proxy}
+	t.Proxy = func(req *http.Request) (*url.URL, error) {
+		p, _ := req.Context().Value(proxyKey{}).(proxyChoice)
+		return p.url, p.err
+	}
+	return g
+}
+
+// proxyKey keys a request's proxyChoice in its context, where t.Proxy and the
+// dial it leads to both read it.
+type proxyKey struct{}
+
+type proxyChoice struct {
+	url *url.URL
+	err error
+}
+
+type transport struct {
+	t    *http.Transport
+	pick func(*http.Request) (*url.URL, error)
+}
+
+func (g *transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	var p proxyChoice
+	if g.pick != nil {
+		p.url, p.err = g.pick(req)
+	}
+	if p.err == nil && p.url != nil && BlockedHost(req.URL.Hostname()) {
+		p.err = fmt.Errorf("%w: %s", ErrPrivateAddress, req.URL.Hostname())
+	}
+	return g.t.RoundTrip(req.WithContext(context.WithValue(req.Context(), proxyKey{}, p)))
+}
+
+func (g *transport) CloseIdleConnections() { g.t.CloseIdleConnections() }
