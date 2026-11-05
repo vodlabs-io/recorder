@@ -31,12 +31,15 @@ without one.
 ## Check this machine can record
 
 ```sh
-vod doctor --json twitch example     # or a URL, or just the platform
+vod doctor --json twitch                     # the platform
+vod doctor --json twitch example             # a streamer you track: a real check
 ```
 
 This checks the daemon, its connection to the service, whether the service offers
 the platform, whether this machine reaches the platform's site, and, given a
-streamer, runs a real status check from this machine. It exits with 1 if any check
+streamer this recorder tracks, runs a real status check from this machine.
+`vod record --once` runs the same check for its own streamer as soon as it starts,
+and ends with `unreachable` if this machine cannot reach the platform. It exits with 1 if any check
 fails, and each failed check says why.
 
 If the platform is not offered, it can't be recorded: `vod platforms --json` lists

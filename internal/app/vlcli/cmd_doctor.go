@@ -40,7 +40,8 @@ func (a *App) doctorCommand() *cli.Command {
 		ArgsUsage: "[<url> | <platform> [<username>]]",
 		Description: "Checks the daemon and its connection to the VodLabs service, and that this " +
 			"machine reaches the service and GitHub. Given a platform, it also reaches the " +
-			"platform's site; given a streamer, it runs a real status check from this machine. " +
+			"platform's site; given a streamer this recorder tracks, it runs a real status check " +
+			"from this machine. " +
 			"Never starts a daemon. Exits 1 if any check fails.",
 		Flags:     []cli.Flag{jsonFlag()},
 		Arguments: streamerArgs(),
@@ -265,6 +266,8 @@ func (a *App) statusCheck(ref streamer.StreamerRef) doctorCheck {
 	switch {
 	case errors.Is(err, vlapi.ErrPlatformUnreachable):
 		c.Detail = strings.TrimPrefix(err.Error(), vlapi.ErrPlatformUnreachable.Error()+": ")
+	case err != nil && strings.Contains(err.Error(), "not in your subscriptions"):
+		c.Detail = "the service checks only streamers this recorder tracks; add it with 'vod streamer add' first"
 	case err != nil:
 		c.Detail = err.Error()
 	case status == "checking":
