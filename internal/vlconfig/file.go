@@ -42,7 +42,7 @@ func ensureFileExists(filePath string, content []byte) error {
 		if err := os.WriteFile(filePath, content, 0644); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", filePath, err)
 		}
-		fmt.Println("Created default config at ", filePath)
+		fmt.Fprintln(os.Stderr, "Created default config at", filePath)
 	}
 	return nil
 }
