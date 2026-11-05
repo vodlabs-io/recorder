@@ -246,6 +246,9 @@ var scrapeDomains = map[string][]string{
 	"fansly": {
 		"fansly.com",
 	},
+	"instagram": {
+		"instagram.com",
+	},
 	"cameraprive": {
 		"cameraprive.com",
 	},

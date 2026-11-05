@@ -315,6 +315,21 @@
 		"channel_url": "https://www.peeks.com/u/{username}"
 	},
 	{
+		"name": "instagram",
+		"display_name": "Instagram",
+		"channel_url": "https://www.instagram.com/{username}/",
+		"login": {
+			"url": "https://www.instagram.com/accounts/login/",
+			"refresh_url": "https://www.instagram.com/",
+			"cookie_domains": [
+				"instagram.com"
+			],
+			"session_cookie": "sessionid",
+			"required": true,
+			"live_feed": true
+		}
+	},
+	{
 		"name": "fansly",
 		"display_name": "Fansly",
 		"channel_url": "https://fansly.com/{username}",

@@ -161,6 +161,10 @@ type loginFlow struct {
 	// whether a user's account is spent on round-the-clock checking. Distinct
 	// from a room that is merely restricted (an 18+ TikTok stream).
 	Required bool `json:"required,omitempty"`
+	// LiveFeed means one signed-in request says who is live among the accounts
+	// the user follows there, so the daemon asks that far more often than it
+	// checks any one streamer. Client-authoritative, like Required.
+	LiveFeed bool `json:"live_feed,omitempty"`
 	// SessionCookie, when set, names the cookie whose presence in the login
 	// webview means the user is signed in (e.g. "sessionid"). The desktop uses it
 	// as the primary, most reliable capture trigger; SuccessURLPattern is a
@@ -261,6 +265,13 @@ func LoginFlowFor(name string) *loginFlow {
 func LoginRequiredFor(name string) bool {
 	l := LoginFlowFor(name)
 	return l != nil && l.Required
+}
+
+// LiveFeedFor reports whether a signed-in client can ask the cloud to read the
+// platform's live feed.
+func LiveFeedFor(name string) bool {
+	l := LoginFlowFor(name)
+	return l != nil && l.LiveFeed
 }
 
 // platforms is the live supported-platform list. It is seeded from the embedded

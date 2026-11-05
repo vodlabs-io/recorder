@@ -194,13 +194,34 @@ func TestDefaultBigoHasLogin(t *testing.T) {
 	}
 }
 
+// Instagram tells a signed-out visitor nothing, so the daemon polls it with the
+// user's login, and reads its live feed.
+func TestInstagramLogin(t *testing.T) {
+	l := LoginFlowFor("instagram")
+	if l == nil {
+		t.Fatal("no instagram login")
+	}
+	if !LoginRequiredFor("instagram") || !LiveFeedFor("instagram") {
+		t.Error("instagram must be login-required with a live feed")
+	}
+	if l.SessionCookie != "sessionid" {
+		t.Errorf("session cookie %q", l.SessionCookie)
+	}
+	if !l.AllowsHost("www.instagram.com") || l.AllowsHost("scontent-sea5-1.cdninstagram.com") {
+		t.Error("the login must go to instagram.com alone")
+	}
+	if !ScrapeHostAllowed("www.instagram.com") {
+		t.Error("the scrape host is not allowed")
+	}
+}
+
 // TestSetPlatformsLoginRequiredIsClientAuthoritative extends the guard on the
 // rest of the login descriptor to the flag that decides how often a user's own
 // account is spent.
 func TestSetPlatformsLoginRequiredIsClientAuthoritative(t *testing.T) {
 	snapshotPlatforms(t)
 
-	// No shipped platform requires a login, so embed a stand-in that does.
+	// A stand-in, so the test does not depend on any one shipped platform.
 	embeddedLogins["walled"] = &loginFlow{
 		URL: "https://walled.example/login", CookieDomains: []string{"walled.example"}, Required: true,
 	}

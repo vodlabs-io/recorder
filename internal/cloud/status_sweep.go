@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"context"
+	"errors"
 	"hash/fnv"
 	"math/rand/v2"
 	"sort"
@@ -16,6 +17,9 @@ import (
 // The login sweep polls login-gated platforms with the user's stored login. The
 // cloud announces status changes it can see, but on a login-gated platform
 // every unauthenticated lookup looks the same whether or not anyone is live.
+//
+// A platform with a live feed answers for every account the user follows in one
+// request, which is asked for on a cadence of its own (sweepFeeds).
 //
 // Polling spends a real account's requests, so it is paced by three rules:
 //
@@ -57,6 +61,12 @@ const (
 	// sweepUnrunnableHold is how long a streamer is set aside after a check the
 	// client could not run at all (e.g. no desktop app to sign it).
 	sweepUnrunnableHold = time.Hour
+
+	// feedEvery is how often a platform's live feed is read. feedRefusedHold is
+	// how long it is left alone after the check could not run, which is also what
+	// a platform turning the login away for asking too much looks like.
+	feedEvery       = 3 * time.Minute
+	feedRefusedHold = time.Hour
 )
 
 // loginSweep holds the sweep's scheduling state: when each streamer is next due
@@ -66,10 +76,14 @@ type loginSweep struct {
 	mu      sync.Mutex
 	entries map[streamer.StreamerKey]*sweepEntry
 	budgets map[string]*sweepBudget
+	// feeds is when each platform's live feed is next read.
+	feeds map[string]time.Time
 	// loginRequired picks the platforms the daemon polls itself: those whose
 	// embedded descriptor marks the login required. Tests substitute a stand-in,
 	// since no shipped platform sets it.
 	loginRequired func(platform string) bool
+	// liveFeed picks the platforms with a live feed to read.
+	liveFeed func(platform string) bool
 }
 
 type sweepEntry struct {
@@ -83,7 +97,9 @@ func newLoginSweep() *loginSweep {
 	return &loginSweep{
 		entries:       make(map[streamer.StreamerKey]*sweepEntry),
 		budgets:       make(map[string]*sweepBudget),
+		feeds:         make(map[string]time.Time),
 		loginRequired: vlconfig.LoginRequiredFor,
+		liveFeed:      vlconfig.LiveFeedFor,
 	}
 }
 
@@ -206,9 +222,6 @@ func sweepEligible(doc vlstate.StreamerDoc) bool {
 		return false // already recording; the session reports its own end
 	}
 	switch doc.Status {
-	case streamer.StatusLive, streamer.StatusPaused:
-		// Being watched already, by whatever is acting on the live status.
-		return false
 	case streamer.StatusDefunct, streamer.StatusInvalid, streamer.StatusRemoved:
 		// Retired or gone. The sweep never asks for a re-check, so it could not
 		// bring one of these back even if it looked.
@@ -221,6 +234,10 @@ func sweepEligible(doc vlstate.StreamerDoc) bool {
 // longer since it was last seen live, the less likely it is to be live soon, so
 // the interval widens steeply.
 func sweepInterval(doc vlstate.StreamerDoc, now time.Time) time.Duration {
+	// A broadcast with no session on it: nothing else would notice its end.
+	if doc.Status == streamer.StatusLive || doc.Status == streamer.StatusPaused {
+		return sweepFloor
+	}
 	if inBroadcastWindow(doc, now) {
 		return sweepFloor
 	}
@@ -324,7 +341,9 @@ func (c *Client) runLoginSweep(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			c.sweepOnce(ctx, time.Now())
+			now := time.Now()
+			c.sweepOnce(ctx, now)
+			c.sweepFeeds(ctx, now)
 		}
 	}
 }
@@ -434,4 +453,65 @@ func (c *Client) sweepOnce(ctx context.Context, now time.Time) int {
 		c.logger.With("func", "sweepOnce").Debug("Login sweep queued checks", "count", sent)
 	}
 	return sent
+}
+
+// sweepFeeds reads the live feed of each platform that has one and is due. Each
+// read runs on its own, since it can take as long as a whole check.
+func (c *Client) sweepFeeds(ctx context.Context, now time.Time) {
+	if c.sweep == nil {
+		return
+	}
+	for _, platform := range c.sweepablePlatforms() {
+		if !c.sweep.liveFeed(platform) || !c.feedWanted(platform) {
+			continue
+		}
+		c.sweep.mu.Lock()
+		next, known := c.sweep.feeds[platform]
+		due := !known || !now.Before(next)
+		if due {
+			c.sweep.feeds[platform] = now.Add(feedEvery + jitterFor(feedEvery))
+		}
+		c.sweep.mu.Unlock()
+		if due {
+			go c.readLiveFeed(ctx, platform)
+		}
+	}
+}
+
+// feedWanted reports whether anything would come of reading a platform's live
+// feed: a login with nothing to watch should not be spent.
+func (c *Client) feedWanted(platform string) bool {
+	return len(c.store.DocsForPlatform(platform)) > 0
+}
+
+// readLiveFeed asks the cloud to read one platform's live feed through this
+// daemon, and acts on what it says about the streamers tracked here.
+func (c *Client) readLiveFeed(ctx context.Context, platform string) {
+	log := c.logger.With("func", "readLiveFeed", "platform", platform)
+	streamers, err := c.fetchLiveFeed(ctx, platform)
+	switch {
+	case errors.Is(err, errLoginRefused):
+		log.Info("The platform refused the login reading its live feed")
+		c.applyAuthedResult(ctx, streamer.StreamerState{
+			StreamerRef: streamer.StreamerRef{StreamerKey: streamer.StreamerKey{Platform: platform}},
+			Status:      streamer.StatusAuthRequired,
+		})
+		return
+	case errors.Is(err, ErrCheckNotRunnable):
+		log.Info("Live feed could not be read; leaving it for a while", "error", err)
+		c.sweep.mu.Lock()
+		c.sweep.feeds[platform] = time.Now().Add(feedRefusedHold)
+		c.sweep.mu.Unlock()
+		return
+	case err != nil:
+		log.Warn("Failed to read live feed", "error", err)
+		return
+	}
+	log.Debug("Read live feed", "tracked_live", len(streamers))
+	for _, str := range streamers {
+		if ctx.Err() != nil {
+			return
+		}
+		c.handleFetchResult(ctx, str, true)
+	}
 }

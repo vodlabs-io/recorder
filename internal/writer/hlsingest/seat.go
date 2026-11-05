@@ -9,6 +9,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/cameraprive"
 	"github.com/vodlabs-io/recorder/internal/fansly"
 	"github.com/vodlabs-io/recorder/internal/fc2live"
+	"github.com/vodlabs-io/recorder/internal/instagram"
 	"github.com/vodlabs-io/recorder/internal/nicolive"
 	"github.com/vodlabs-io/recorder/internal/peeks"
 )
@@ -43,14 +44,34 @@ type camerapriveSeat struct{ *cameraprive.Seat }
 
 func (s camerapriveSeat) master() string { return s.MasterURL }
 
+type instagramSeat struct{ *instagram.Seat }
+
+func (s instagramSeat) master() string { return s.MasterURL }
+
+// retained implements retainedSeat: an Instagram broadcast keeps every segment
+// until it ends.
+func (s instagramSeat) retained() bool { return true }
+
+// retainedSeat is a seat on an Origin that keeps every segment of the Broadcast,
+// so a fetch that fails can be tried again at leisure.
+type retainedSeat interface{ retained() bool }
+
 // isSeatURL reports whether u names a broadcast recorded through a seat.
 func isSeatURL(u string) bool {
-	return nicolive.IsURL(u) || fc2live.IsURL(u) || peeks.IsURL(u) || fansly.IsURL(u) || cameraprive.IsURL(u)
+	return nicolive.IsURL(u) || fc2live.IsURL(u) || peeks.IsURL(u) || fansly.IsURL(u) ||
+		cameraprive.IsURL(u) || instagram.IsURL(u)
 }
 
 // openSeat takes a seat on the broadcast u names. login signs a Fansly seat's
 // channel reads, or a CameraPrive seat's room reads, in as the recorder's user.
 func openSeat(ctx context.Context, u string, client *http.Client, userAgent string, login map[string]string, logger *slog.Logger) (seat, error) {
+	if instagram.IsURL(u) {
+		s, err := instagram.Open(ctx, u, client, userAgent, logger)
+		if err != nil {
+			return nil, err
+		}
+		return instagramSeat{s}, nil
+	}
 	if cameraprive.IsURL(u) {
 		s, err := cameraprive.Open(ctx, u, client, userAgent, login, logger)
 		if err != nil {
@@ -95,5 +116,5 @@ func seatEnded(err error) bool {
 		errors.Is(err, peeks.ErrEnded) || errors.Is(err, peeks.ErrPaid) ||
 		errors.Is(err, fansly.ErrEnded) || errors.Is(err, fansly.ErrLocked) ||
 		errors.Is(err, cameraprive.ErrEnded) || errors.Is(err, cameraprive.ErrPaid) ||
-		errors.Is(err, cameraprive.ErrLocked)
+		errors.Is(err, cameraprive.ErrLocked) || errors.Is(err, instagram.ErrEnded)
 }

@@ -15,7 +15,10 @@ import (
 	"github.com/vodlabs-io/recorder/internal/vlstate"
 )
 
-const streamersRoute = "/api/v1/streamers"
+const (
+	streamersRoute = "/api/v1/streamers"
+	liveFeedRoute  = "/api/v1/live-feed/"
+)
 
 // streamersResponse is the response from GET /api/v1/streamers
 type streamersResponse struct {
@@ -127,6 +130,52 @@ func (c *Client) fetchStatus(ctx context.Context, opts statusOpts, id ...streame
 	}
 	log.Debug("Fetched streamers", "count", len(result.Streamers), "as_of", result.AsOf)
 
+	return result.Streamers, nil
+}
+
+// errLoginRefused is the cloud saying the platform turned the stored login away.
+var errLoginRefused = errors.New("the platform refused the login")
+
+// fetchLiveFeed has the cloud read a platform's live feed through this daemon,
+// which attaches its local cookies to the one request that makes (see
+// scraper.go). It returns what the feed says of the streamers subscribed here.
+func (c *Client) fetchLiveFeed(ctx context.Context, platform string) (streamer.List, error) {
+	if err := c.checkBlocked(); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBaseURL+liveFeedRoute+url.PathEscape(platform), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("X-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
+	c.setClientHeaders(req)
+	req.Header.Set("X-Client-ID", c.clientID)
+	if err := c.signRequest(req, nil); err != nil {
+		return nil, fmt.Errorf("failed to sign request: %w", err)
+	}
+	client := &http.Client{Transport: c.httpClient.Transport, Timeout: authedCheckCeiling}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("live feed request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	c.noteResponse(ctx, resp)
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusServiceUnavailable:
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("%w: %s", ErrCheckNotRunnable, strings.TrimSpace(string(body)))
+	case http.StatusUnauthorized:
+		return nil, errLoginRefused
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("live feed failed: %s - %s", resp.Status, string(body))
+	}
+	var result streamersResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
 	return result.Streamers, nil
 }
 
