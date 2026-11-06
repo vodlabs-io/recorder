@@ -115,6 +115,11 @@ type Config struct {
 	// SegmentRename is applied to every segment URL the media playlist names
 	// (see stream.SegmentRename). Nil for every Origin but the one that needs it.
 	SegmentRename *stream.SegmentRename
+	// Tail is the Session's memory of the segments it recorded last. Segments
+	// at the start of this ingest that it already holds are skipped, so a part
+	// starting at the live edge does not repeat the end of the part before it.
+	// Nil records every segment.
+	Tail *Tail
 	// retainedOrigin is set for an Origin whose seat keeps every segment of the
 	// Broadcast (see retainedSeat): a failed fetch costs nothing but a later retry,
 	// and the renditions of its past are read in batches.
@@ -416,6 +421,11 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 	// Polls spent on the segment the last one stopped at. See segmentPollRetries.
 	var retry segRetry
 
+	// Set until the first segment is handed over: until then, segments the
+	// Session already recorded are skipped rather than recorded again.
+	resuming := o.cfg.Tail != nil
+	repeated := 0
+
 	// When the playlist URL is next re-resolved; zero when it never is.
 	var refreshAt time.Time
 	if o.refreshes() {
@@ -632,6 +642,23 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 				o.unmaskBigoSegment(body, absSeg)
 			}
 
+			hash := ""
+			if o.cfg.Tail != nil {
+				hash = SegmentHash(body)
+			}
+			if resuming && o.cfg.Tail.Has(hash) {
+				seen.mark(seg.SeqId, absSeg)
+				retry.clear()
+				repeated++
+				continue
+			}
+			if resuming {
+				resuming = false
+				if repeated > 0 {
+					o.logger.Info("Skipped segments the Session already recorded", "segments", repeated)
+				}
+			}
+
 			s := Segment{
 				URI:             absSeg,
 				Duration:        seg.Duration,
@@ -656,6 +683,7 @@ func (o *ingest) run(ctx context.Context, playlistURL string) error {
 			}
 			seen.mark(seg.SeqId, absSeg)
 			retry.clear()
+			o.cfg.Tail.Add(hash)
 			seq++
 
 			if ctx.Err() != nil {

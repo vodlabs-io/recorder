@@ -53,8 +53,12 @@ func (o *ingest) runDemuxed(ctx context.Context, videoURL, audioURL string) erro
 	if o.cfg.retainedOrigin {
 		m.maxPending = maxPendingVideoRetained
 	}
-	video := &ingest{cfg: o.cfg, client: o.client, logger: o.logger, sink: videoTrack{m}}
-	acfg := o.cfg
+	// The two renditions are joined into segments of their own, so neither
+	// rendition's segments can be matched against what the Session recorded.
+	vcfg := o.cfg
+	vcfg.Tail = nil
+	video := &ingest{cfg: vcfg, client: o.client, logger: o.logger, sink: videoTrack{m}}
+	acfg := vcfg
 	acfg.RefreshURL, acfg.URLTTL = nil, 0
 	audio := &ingest{cfg: acfg, client: o.client, logger: o.logger.With("rendition", "audio"), sink: audioTrack{m}}
 
