@@ -309,8 +309,17 @@ jobs:
         env:
           ELECTROBUN_APP_VERSION: ${{ steps.version.outputs.value }}
 
-      # Stapling fetches the ticket from Apple's ticket service, which macOS
-      # runners sometimes lose the connection to, so a failed build is retried.
+      # Stapling fetches the ticket from Apple's ticket service, which
+      # advertises HTTP/3. QUIC connections from GitHub's macOS runners drop
+      # (actions/runner-images#14924), so UDP 443 is refused for this job and
+      # stapler stays on HTTPS over TCP.
+      - name: Keep stapler off HTTP/3
+        if: runner.os == 'macOS'
+        run: |
+          echo "block return out quick proto udp from any to any port 443" | sudo pfctl -f -
+          sudo pfctl -E
+
+      # A build that still fails to staple is retried.
       - name: Build desktop app
         if: runner.os == 'macOS'
         run: |
