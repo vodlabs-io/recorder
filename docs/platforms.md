@@ -54,12 +54,32 @@ need an account.
 | YouNow | Yes |
 | YouTube | Yes |
 
-Some sites run on one of these platforms and work the same way, for example
-XHamsterLive (Stripchat), Camster (Flirt4Free), Jerkmate (Streamate), Hi Live
-(LiveMe) and SexLikeReal (Dreamcam). Paste their links as usual.
-
 `vod platforms` lists the platforms your installed version supports. A newly
 added platform can need an app update before it appears.
 
 A page from a site not listed here can still be recorded once, while it is
 live: use **Record once** in the app, or `vod record --once <url>`.
+
+## Sites that run on a supported platform
+
+Many sites are white labels: they show another platform's streamers under their
+own name. You can paste a link from any site below as usual. The recorder
+records the stream from the platform in the right-hand column and lists it under
+that platform.
+
+| Site | Platform |
+| --- | --- |
+| Asians Live | AsianCamModels |
+| Buzzu, ELive, Galla | TiLive |
+| CamDolls, Camster, FILF, KinkLive, Naked, PrivateLive | Flirt4Free |
+| CameraBoys, DatingCam.org, FetishFix, JOYourself, LivePrivates, LiveSex, LiveSexAsian, MaturesCam, MyCams, MyTrannyCams, XXXCams | LiveJasmin |
+| CamModels, CamsFreeFun, Chatmate, GayFreeFun, HomeCams, Jerkmate, JizzRouletteLive, LiveFreeFun, LiveHDCams, LoveSexxxy, MileHighCams, MyCamDirect, NextDoorChat, NuruLive, Pornication, PrivateFeeds, RealLiveGuys, Streamen, TSMate, VividCams, XFameLive | Streamate |
+| EuroGirlsWebcam, WebXCams | XCams |
+| EuroLive, RoyalCams | BongaCams |
+| FireCams | Cams.com |
+| Hi Live | LiveMe |
+| SexLikeReal (VR cam girls) | Dreamcam |
+| Supermen, TGirlsCams | ImLive |
+| Sweepsex | Chaturbate |
+| XHamsterLive, XTease | Stripchat |
+
