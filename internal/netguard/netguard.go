@@ -13,7 +13,9 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 )
 
 // ErrPrivateAddress is a connection refused for going somewhere not public.
@@ -102,9 +104,11 @@ func ControlContext(ctx context.Context, network, address string, c syscall.RawC
 // send requests through the returned RoundTripper only.
 //
 // The proxy resolves a proxied request's host itself, out of the dial guard's
-// sight, so a host that is BlockedHost on its face is refused before it.
+// sight. So a host that is BlockedHost on its face, or that resolves to a
+// blocked address on this machine, is refused before it. A host this machine
+// cannot resolve is left to the proxy: a sandbox behind one often has no DNS.
 func Transport(t *http.Transport) http.RoundTripper {
-	g := &transport{t: t, pick: t.Proxy}
+	g := &transport{t: t, pick: t.Proxy, names: map[string]nameCheck{}}
 	t.Proxy = func(req *http.Request) (*url.URL, error) {
 		p, _ := req.Context().Value(proxyKey{}).(proxyChoice)
 		return p.url, p.err
@@ -124,17 +128,80 @@ type proxyChoice struct {
 type transport struct {
 	t    *http.Transport
 	pick func(*http.Request) (*url.URL, error)
+
+	mu    sync.Mutex
+	names map[string]nameCheck // proxied hosts' lookups, by lower-case name
 }
+
+// nameCheck is a proxied host's lookup: the blocked address it resolved to, if
+// any, until the lookup expires.
+type nameCheck struct {
+	blocked netip.Addr
+	until   time.Time
+}
+
+// lookupNetIP resolves a proxied request's host. Tests replace it.
+var lookupNetIP = net.DefaultResolver.LookupNetIP
+
+const (
+	proxiedLookupTimeout = 2 * time.Second
+	proxiedLookupTTL     = time.Minute
+	proxiedLookupMax     = 1024 // cached names before the cache is cleared
+)
 
 func (g *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var p proxyChoice
 	if g.pick != nil {
 		p.url, p.err = g.pick(req)
 	}
-	if p.err == nil && p.url != nil && BlockedHost(req.URL.Hostname()) {
-		p.err = fmt.Errorf("%w: %s", ErrPrivateAddress, req.URL.Hostname())
+	if p.err == nil && p.url != nil {
+		p.err = g.checkProxied(req.Context(), req.URL.Hostname())
 	}
 	return g.t.RoundTrip(req.WithContext(context.WithValue(req.Context(), proxyKey{}, p)))
+}
+
+// checkProxied refuses a proxied request's host if it is BlockedHost, or if any
+// address it resolves to here is blocked. A failed lookup lets it through.
+func (g *transport) checkProxied(ctx context.Context, host string) error {
+	if BlockedHost(host) {
+		return fmt.Errorf("%w: %s", ErrPrivateAddress, host)
+	}
+	if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
+		return nil // a public literal address
+	}
+	name := strings.TrimSuffix(strings.ToLower(host), ".")
+
+	now := time.Now()
+	g.mu.Lock()
+	c, ok := g.names[name]
+	g.mu.Unlock()
+	if !ok || now.After(c.until) {
+		c = nameCheck{until: now.Add(proxiedLookupTTL)}
+		lctx, cancel := context.WithTimeout(ctx, proxiedLookupTimeout)
+		addrs, err := lookupNetIP(lctx, "ip", name)
+		cancel()
+		if ctx.Err() != nil {
+			return nil // the request is over; its transport reports why
+		}
+		if err == nil {
+			for _, a := range addrs {
+				if BlockedAddr(a) {
+					c.blocked = a
+					break
+				}
+			}
+		}
+		g.mu.Lock()
+		if len(g.names) >= proxiedLookupMax {
+			clear(g.names)
+		}
+		g.names[name] = c
+		g.mu.Unlock()
+	}
+	if c.blocked.IsValid() {
+		return fmt.Errorf("%w: %s resolves to %s", ErrPrivateAddress, host, c.blocked)
+	}
+	return nil
 }
 
 func (g *transport) CloseIdleConnections() { g.t.CloseIdleConnections() }

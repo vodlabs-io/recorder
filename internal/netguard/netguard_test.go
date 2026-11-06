@@ -1,6 +1,7 @@
 package netguard
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -8,8 +9,31 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"sync/atomic"
 	"testing"
 )
+
+// fakeLookup answers proxied-host lookups from names, and fails for any other
+// name as a machine without DNS does. It returns the number of lookups made.
+func fakeLookup(t *testing.T, names map[string][]string) *atomic.Int32 {
+	t.Helper()
+	var n atomic.Int32
+	prev := lookupNetIP
+	lookupNetIP = func(_ context.Context, _, host string) ([]netip.Addr, error) {
+		n.Add(1)
+		raw, ok := names[host]
+		if !ok {
+			return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+		}
+		addrs := make([]netip.Addr, len(raw))
+		for i, a := range raw {
+			addrs[i] = netip.MustParseAddr(a)
+		}
+		return addrs, nil
+	}
+	t.Cleanup(func() { lookupNetIP = prev })
+	return &n
+}
 
 func TestBlockedAddr(t *testing.T) {
 	blocked := []string{
@@ -63,6 +87,7 @@ func TestDialControlRefusesLoopback(t *testing.T) {
 // A proxy the user runs on loopback, as a sandbox's egress proxy does, is
 // reached, while a direct dial to loopback, the proxy's included, is refused.
 func TestTransportReachesLoopbackProxy(t *testing.T) {
+	fakeLookup(t, map[string][]string{"example.com": {"93.184.215.14"}})
 	target := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("through the proxy"))
 	}))
@@ -122,5 +147,59 @@ func TestTransportReachesLoopbackProxy(t *testing.T) {
 	// The proxy would resolve a private host itself, so it is never asked.
 	if _, err := client(true).Get("http://10.0.0.1/"); !errors.Is(err, ErrPrivateAddress) {
 		t.Errorf("proxied 10.0.0.1: error = %v, want %v", err, ErrPrivateAddress)
+	}
+}
+
+// The proxy resolves a proxied host itself, so a name that resolves somewhere
+// private here never reaches it. A name this machine cannot resolve does.
+func TestTransportRefusesProxiedPrivateName(t *testing.T) {
+	lookups := fakeLookup(t, map[string][]string{
+		"public.example":   {"93.184.215.14"},
+		"internal.example": {"10.1.2.3"},
+		"mixed.example":    {"93.184.215.14", "127.0.0.1"},
+	})
+	var hits atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		io.WriteString(w, "ok")
+	}))
+	defer proxy.Close()
+	proxyURL, _ := url.Parse(proxy.URL)
+	client := &http.Client{Transport: Transport(&http.Transport{
+		Proxy:       http.ProxyURL(proxyURL),
+		DialContext: (&net.Dialer{ControlContext: ControlContext}).DialContext,
+	})}
+
+	for host, wantRefused := range map[string]bool{
+		"public.example":     false,
+		"unresolved.example": false,
+		"internal.example":   true,
+		"Mixed.Example.":     true,
+	} {
+		before := hits.Load()
+		resp, err := client.Get("http://" + host + "/")
+		if resp != nil {
+			resp.Body.Close()
+		}
+		reached := hits.Load() > before
+		if wantRefused && (!errors.Is(err, ErrPrivateAddress) || reached) {
+			t.Errorf("%s: error = %v, reached proxy = %v; want %v, not reached", host, err, reached, ErrPrivateAddress)
+		}
+		if !wantRefused && (err != nil || !reached) {
+			t.Errorf("%s: error = %v, reached proxy = %v; want it proxied", host, err, reached)
+		}
+	}
+
+	// A name is looked up once, not on every request.
+	n := lookups.Load()
+	for range 3 {
+		resp, err := client.Get("http://public.example/segment.ts")
+		if err != nil {
+			t.Fatalf("repeat request: %v", err)
+		}
+		resp.Body.Close()
+	}
+	if got := lookups.Load(); got != n {
+		t.Errorf("repeat requests made %d more lookups, want 0", got-n)
 	}
 }
