@@ -15,6 +15,7 @@ import (
 	"github.com/vodlabs-io/recorder/internal/webm"
 	"github.com/vodlabs-io/recorder/internal/writer/flv"
 	"github.com/vodlabs-io/recorder/internal/writer/hls"
+	"github.com/vodlabs-io/recorder/internal/writer/hlsingest"
 )
 
 // Config holds configuration for recording writers
@@ -65,11 +66,34 @@ type Config struct {
 // locking.
 type Carryover struct {
 	flvHandoff *flv.Handoff
+	// hlsTail is what the HLS writer recorded last, so a part starting at the
+	// live edge skips what the part before it already holds.
+	hlsTail *hlsingest.Tail
 }
 
 // NewCarryover returns the per-Session writer state.
 func NewCarryover() *Carryover {
-	return &Carryover{flvHandoff: &flv.Handoff{}}
+	return &Carryover{flvHandoff: &flv.Handoff{}, hlsTail: hlsingest.NewTail(nil)}
+}
+
+// HLSTail returns the hashes of the segments the HLS writer recorded last,
+// oldest first, for a Session to keep across a restart.
+func (c *Carryover) HLSTail() []string {
+	if c == nil {
+		return nil
+	}
+	return c.hlsTail.Hashes()
+}
+
+// SeedHLSTail adds segments recorded before this Carryover existed (by an
+// earlier run of the Session), oldest first.
+func (c *Carryover) SeedHLSTail(hashes []string) {
+	if c == nil {
+		return
+	}
+	for _, h := range hashes {
+		c.hlsTail.Add(h)
+	}
 }
 
 // Close releases anything still held open. Safe on a nil Carryover, so a
@@ -169,6 +193,9 @@ func (h *hlsWriter) Record(
 		MouflonKeys:   cfg.MouflonKeys,
 		SegmentRename: cfg.SegmentRename,
 		Provenance:    cfg.Provenance,
+	}
+	if cfg.Carryover != nil {
+		hlsConfig.Tail = cfg.Carryover.hlsTail
 	}
 
 	return hls.Record(ctx, hlsConfig, client, logger, progressCh)

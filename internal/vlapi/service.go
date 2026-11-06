@@ -136,6 +136,7 @@ func Init(
 	streamersGroup.AddEndpoint("record_on", micro.HandlerFunc(vs.handleRecordOn))
 	streamersGroup.AddEndpoint("record_on_all", micro.HandlerFunc(vs.handleRecordOnAll))
 	streamersGroup.AddEndpoint("check", micro.HandlerFunc(vs.handleCheckStreamer))
+	streamersGroup.AddEndpoint("finish_recording", micro.HandlerFunc(vs.handleFinishRecording))
 	streamersGroup.AddEndpoint("set_variant", micro.HandlerFunc(vs.handleSetStreamerVariant))
 	streamersGroup.AddEndpoint("set_options", micro.HandlerFunc(vs.handleSetStreamerOptions))
 	configGroup := ms.AddGroup("config")

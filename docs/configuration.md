@@ -42,6 +42,7 @@ with `vod config edit`. The main settings:
 | `session.variant` | `best` | The quality to record: `best`, `worst`, or a named one such as `720p`. |
 | `session.split_size`<br>`session.split_duration` | off | Start a new file at a size (`"2GB"`) or a length (`"1h30m"`). |
 | `session.sanitize_flv` | `true` | Repair unstable FLV streams while recording. |
+| `session.resume_window` | `15m` | When a recording stops while the stream is still live (an update, a restart or crash, or switching Record off), continue it in the same VOD if recording restarts within this long. `"off"` finishes it at once. |
 | `processing.archive_dir` | off | Move each finished recording to this folder, for example an external drive. |
 | `processing.scan_dirs` | none | Extra folders, such as an old drive, to list in the VOD Archive. They are only read. |
 | `processing.delete_part_files` | `true` | Delete a recording's parts once they are turned into the finished video. |

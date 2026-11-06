@@ -52,6 +52,11 @@ func (a *App) start(ctx context.Context) (err error) {
 		}
 	}
 
+	if _, err := vlconfig.ParseResumeWindow(a.appCfg.Session.ResumeWindow); err != nil {
+		a.log.Warn("Ignoring invalid [session] resume_window", "value", a.appCfg.Session.ResumeWindow, "error", err)
+		a.appCfg.Session.ResumeWindow = vlconfig.DefaultResumeWindow
+	}
+
 	// Validate the global archive folder; an invalid or overlapping path is
 	// disabled rather than fatal.
 	if a.appCfg.Processing.ArchiveDir != "" {

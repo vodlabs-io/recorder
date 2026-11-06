@@ -49,6 +49,33 @@ func ParseSplitSize(raw string) (int64, error) {
 	return int64(n), nil
 }
 
+// DefaultResumeWindow covers a daemon update and most reboots.
+const DefaultResumeWindow = "15m"
+
+// maxResumeWindow bounds the resume window: a gap longer than this is better
+// read as two broadcasts than as one.
+const maxResumeWindow = 24 * time.Hour
+
+// ParseResumeWindow parses a resume_window value. Empty or an off-token
+// returns (0, nil): sessions are not resumed.
+func ParseResumeWindow(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || IsSplitOff(raw) {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid resume_window %q: %w", raw, err)
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("resume_window %q must not be negative", raw)
+	}
+	if d > maxResumeWindow {
+		return 0, fmt.Errorf("resume_window %q is above the maximum of 24h", raw)
+	}
+	return d, nil
+}
+
 // ParseSplitDuration parses a Go duration string (e.g. "1h30m", "45m").
 // Empty string or an off-token returns (0, nil). Values below minSplitDuration
 // return an error.

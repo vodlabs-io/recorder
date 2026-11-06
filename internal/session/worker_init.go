@@ -42,6 +42,20 @@ func (w *worker) initSession(str streamer.StreamerState) error {
 		rel := renderOutputDir(w.config.OutputTemplate, platform, username, sessionID, time.Now())
 		w.output.BaseOutDir = filepath.Join(w.config.DownloadDir, rel)
 	}
+	w.started = time.Now()
+	return w.openSession(false)
+}
+
+// adopt makes the worker carry on an interrupted session, recording on into
+// its folder, parts and groups as though it had never stopped.
+func (w *worker) adopt(cp *checkpoint) error {
+	w.restore(cp)
+	return w.openSession(true)
+}
+
+// openLog creates the session's folder and opens its log, which a resumed
+// session appends to.
+func (w *worker) openLog() error {
 	outDir := w.output.BaseOutDir
 	w.pubOutDir.Store(&outDir)
 
@@ -61,9 +75,21 @@ func (w *worker) initSession(str streamer.StreamerState) error {
 	})
 	w.logger = slog.New(textHandler).With("service", "session")
 
-	w.logger = w.logger.With("session_id", sessionID)
+	w.logger = w.logger.With("session_id", w.SessionID)
+	return nil
+}
 
-	w.metaLog = vodmeta.NewLog(w.output.BaseOutDir, platform, username, sessionID)
+// openSession readies the worker to record into its session folder.
+func (w *worker) openSession(resumed bool) error {
+	if err := w.openLog(); err != nil {
+		return err
+	}
+	platform, username, sessionID := w.output.Platform, w.output.Username, w.SessionID
+	if resumed {
+		w.metaLog = vodmeta.ResumeLog(w.output.BaseOutDir, platform, username, sessionID)
+	} else {
+		w.metaLog = vodmeta.NewLog(w.output.BaseOutDir, platform, username, sessionID)
+	}
 
 	if strings.Contains(w.output.BaseOutDir, "{") {
 		w.logger.Warn("Output directory contains unrecognized template placeholders",
@@ -86,6 +112,14 @@ func (w *worker) initSession(str streamer.StreamerState) error {
 		}
 	}
 
+	if resumed {
+		w.logger.Info("Resumed interrupted session",
+			"gap", time.Since(w.priorLastByte).Round(time.Second),
+			"next_part_index", w.output.PartIndex,
+			"total_bytes", w.output.Stats.TotalBytes,
+			"variant", w.config.Variant)
+		return nil
+	}
 	w.logger.Info("Initialized session",
 		"out_dir", w.output.BaseOutDir,
 		"variant", w.config.Variant,
@@ -93,6 +127,20 @@ func (w *worker) initSession(str streamer.StreamerState) error {
 		"split_duration", w.config.SplitDuration)
 
 	return nil
+}
+
+// writerFor names the writer that records s.
+func writerFor(s *stream.Stream) string {
+	switch {
+	case s == nil:
+		return ""
+	case s.IsHLS():
+		return "hlswriter"
+	case s.IsVP8():
+		// Neither FLV nor MP4 carries VP8 through ffmpeg; WebM does.
+		return "webmwriter"
+	}
+	return "flvwriter"
 }
 
 // initStream initializes/logs stream information and selects the writer
@@ -118,13 +166,8 @@ func (w *worker) initStream(str streamer.StreamerState) error {
 		w.selectedHTTPClient = guardedFLVClient
 	}
 
-	writerName := "flvwriter"
-	if selectedStream.IsVP8() {
-		// Neither FLV nor MP4 carries VP8 through ffmpeg; WebM does.
-		writerName = "webmwriter"
-	}
-	if selectedStream.IsHLS() {
-		writerName = "hlswriter"
+	writerName := writerFor(selectedStream)
+	if writerName == "hlswriter" {
 		w.selectedHTTPClient = w.basicHTTPClient
 		if local {
 			w.selectedHTTPClient = guardedHLSClient

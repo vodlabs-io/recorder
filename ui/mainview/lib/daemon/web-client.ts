@@ -344,6 +344,8 @@ export class WebDaemonClient implements DaemonClient {
   enableStreamer = (ref: Parameters<DaemonClient["enableStreamer"]>[0]) =>
     this.mutate(Subjects.streamerRecordOn, refPayload(ref))
   enableAllStreamers = () => this.mutate(Subjects.streamerRecordOnAll, {})
+  finishRecording = (ref: Parameters<DaemonClient["finishRecording"]>[0]) =>
+    this.mutate(Subjects.streamerFinishRecording, refPayload(ref))
   checkStreamer = (ref: Parameters<DaemonClient["checkStreamer"]>[0]) =>
     this.session.request<string>(
       Subjects.streamerCheck,

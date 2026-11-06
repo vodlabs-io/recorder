@@ -875,3 +875,25 @@ func streamName(video bool) string {
 	}
 	return "audio"
 }
+
+// ConfigKeyOf reads the first limit bytes of an FLV stream, as a sanitizer's
+// output or a raw pull, and returns the key ConfigKey would report for it.
+// It is for a recording whose writer stopped before reporting a key, such as a
+// part cut off by a crash. Empty when no configuration was found.
+func ConfigKeyOf(r io.Reader, limit int64) string {
+	s := New(io.Discard, nil, Options{NoResume: true})
+	buf := make([]byte, 64<<10)
+	lr := io.LimitReader(r, limit)
+	for {
+		n, err := lr.Read(buf)
+		if n > 0 {
+			if _, werr := s.Write(buf[:n]); werr != nil {
+				break
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+	return s.ConfigKey()
+}

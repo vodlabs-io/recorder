@@ -240,6 +240,9 @@ export interface DaemonClient {
   disableAllStreamers(): Promise<string>;
   enableStreamer(ref: StreamerRef): Promise<string>;
   enableAllStreamers(): Promise<string>;
+  // finishRecording finishes an interrupted recording now, so its VOD is
+  // processed without waiting for the recording to resume.
+  finishRecording(ref: StreamerRef): Promise<string>;
   // checkStreamer asks for a streamer's status now. On a retired streamer the
   // daemon upgrades this to a re-check that also clears the retirement, which
   // is the only way back from "defunct" — so it can take a few seconds.

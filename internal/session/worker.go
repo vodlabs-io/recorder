@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/vodlabs-io/recorder/internal/flvfix"
 	"github.com/vodlabs-io/recorder/internal/platformauth"
 	"github.com/vodlabs-io/recorder/internal/progress"
 	"github.com/vodlabs-io/recorder/internal/recording"
@@ -86,6 +87,232 @@ type worker struct {
 	// metaLog archives what the platform said about the broadcast, as the
 	// session sees it change.
 	metaLog *vodmeta.Log
+	// started is when the session began: the recording clock's anchor, which a
+	// resumed session keeps.
+	started time.Time
+	// stop holds the stopReason a cancelled session was stopped for.
+	stop atomic.Int32
+	// resume keeps the session's checkpoint; nil disables resuming.
+	resume       *resumeStore
+	resumeWindow time.Duration
+	// interrupted is set by Run when the session stops while its stream is
+	// live and could resume; finishSession then keeps it instead.
+	interrupted bool
+	// priorLastByte is when a resumed session last recorded before it stopped.
+	priorLastByte time.Time
+	// afterConfigChange marks the next part as starting on a codec change.
+	afterConfigChange bool
+	// endedAt is when a session finished from its checkpoint last recorded;
+	// zero for a session that runs to its end.
+	endedAt time.Time
+}
+
+// stopWith cancels the session for reason.
+func (w *worker) stopWith(reason stopReason) {
+	w.stop.Store(int32(reason))
+	w.cancelSession()
+}
+
+func (w *worker) stopReason() stopReason {
+	return stopReason(w.stop.Load())
+}
+
+// resumable reports whether a cancelled session can be interrupted rather
+// than finished: it kept something, its stream was live when it stopped, and
+// it was not stopped because its streamer is gone.
+func (w *worker) resumable() bool {
+	if w.resume == nil || w.resumeWindow <= 0 || w.stopReason() == stopRemoved || len(w.output.Parts) == 0 {
+		return false
+	}
+	str := w.str.Load()
+	return str != nil && (str.Status == streamer.StatusLive || str.Status == streamer.StatusPaused)
+}
+
+// checkpoint captures the session as it stands. Called from the run loop
+// between parts, or on a worker that is not running.
+func (w *worker) checkpoint(current *currentPart) *checkpoint {
+	cp := &checkpoint{
+		Platform:      w.strKey.Platform,
+		Username:      w.strKey.Username,
+		SessionID:     w.SessionID,
+		BaseOutDir:    w.output.BaseOutDir,
+		Writer:        w.output.WriterName,
+		Variant:       w.config.Variant,
+		SplitSize:     w.config.SplitSize,
+		SplitDuration: w.config.SplitDuration,
+		Sanitize:      w.config.SanitizeFLV,
+		Started:       w.started,
+		LastByteAt:    w.lastByteTime(),
+		TotalBytes:    w.output.Stats.TotalBytes,
+		Parts:         append([]recording.Part(nil), w.output.Parts...),
+		PartIndex:     w.output.PartIndex,
+		Current:       current,
+		HLSTail:       w.carryover.HLSTail(),
+	}
+	if cp.LastByteAt.IsZero() {
+		cp.LastByteAt = w.priorLastByte
+	}
+	if str := w.str.Load(); str != nil {
+		cp.LiveStart = str.LastLiveStart
+	}
+	w.groupsMu.Lock()
+	cp.GroupSeq = w.groupSeq
+	if g := w.group; g != nil {
+		cp.Group = &groupState{
+			Index: g.index,
+			Key:   g.key,
+			Stems: append([]string(nil), g.stems...),
+			Bytes: g.bytes,
+			Start: g.start,
+		}
+	}
+	w.groupsMu.Unlock()
+	return cp
+}
+
+// saveCheckpoint writes the session's checkpoint, naming current as the part
+// in progress (nil between parts).
+func (w *worker) saveCheckpoint(current *currentPart) {
+	if w.resume == nil || w.SessionID == "" {
+		return
+	}
+	if err := w.resume.save(w.checkpoint(current)); err != nil {
+		w.logger.Warn("Failed to save the session checkpoint", "error", err)
+	}
+}
+
+// restore loads an interrupted session into the worker: its identity, folder,
+// settings, parts, groups and clock.
+func (w *worker) restore(cp *checkpoint) {
+	w.strKey = cp.key()
+	w.SessionID = cp.SessionID
+	w.output.SessionID = cp.SessionID
+	w.output.Platform = cp.Platform
+	w.output.Username = cp.Username
+	w.output.BaseOutDir = cp.BaseOutDir
+	w.output.WriterName = cp.Writer
+	if wr, ok := writer.Get(cp.Writer); ok {
+		w.writer = wr
+	}
+	w.output.Variant = cp.Variant
+	w.output.Parts = append([]recording.Part(nil), cp.Parts...)
+	w.output.PartIndex = cp.PartIndex
+	w.output.CurrentPart = recording.Part{Index: cp.PartIndex}
+	w.output.Stats.TotalBytes = cp.TotalBytes
+	w.config.Variant = cp.Variant
+	w.config.SplitSize = cp.SplitSize
+	w.config.SplitDuration = cp.SplitDuration
+	w.config.SanitizeFLV = cp.Sanitize
+	w.started = cp.Started
+	w.Tracker = progress.NewTrackerFrom(cp.Started, cp.TotalBytes)
+	w.priorLastByte = cp.lastByte()
+	w.carryover = writer.NewCarryover()
+	w.carryover.SeedHLSTail(cp.HLSTail)
+	w.groupsMu.Lock()
+	w.groupSeq = cp.GroupSeq
+	if g := cp.Group; g != nil {
+		w.group = &partGroup{
+			index: g.Index,
+			key:   g.Key,
+			stems: append([]string(nil), g.Stems...),
+			bytes: g.Bytes,
+			start: g.Start,
+		}
+		w.curPartKey = g.Key
+	}
+	w.groupsMu.Unlock()
+}
+
+// foldCrashedPart keeps the part a crashed daemon was recording, measured from
+// disk, as the run loop would have kept it had the part ended normally.
+func (w *worker) foldCrashedPart(cur *currentPart) {
+	if cur == nil {
+		return
+	}
+	size, mod := measurePart(cur.Path)
+	if mod.After(w.priorLastByte) {
+		w.priorLastByte = mod
+	}
+	if w.output.WriterName == "hlswriter" {
+		// What the resumed part must not record again.
+		w.carryover.SeedHLSTail(hlsPartHashes(cur.Path))
+	}
+	w.output.PartIndex = cur.Index + 1
+	defer func() { w.output.CurrentPart = recording.Part{Index: w.output.PartIndex} }()
+	if size < recording.MinPartBytes {
+		if wr, ok := writer.Get(w.output.WriterName); ok {
+			_ = wr.DiscardPart(writer.PartSpec{Path: cur.Path})
+		}
+		return
+	}
+	part := recording.Part{Index: cur.Index, Bytes: size, StartTime: cur.Start, EndTime: mod, Path: cur.Path}
+	w.output.CurrentPart = part
+	w.output.Parts = append(w.output.Parts, part)
+	w.output.Stats.TotalBytes += size
+	w.curStem = cur.Stem
+	key := w.crashedPartKey(cur)
+	w.groupsMu.Lock()
+	w.curPartKey = key
+	w.groupsMu.Unlock()
+	w.recordGroupPart()
+	w.logger.Info("Kept the part a crashed recorder was writing",
+		"part_index", cur.Index, "part_bytes", size, "part_path", cur.Path)
+}
+
+// crashedPartKey works out the codec configuration key of a part whose writer
+// never reported one. An FLV part's is read back from its file. Otherwise a
+// part that did not start on a codec change continues its group's.
+func (w *worker) crashedPartKey(cur *currentPart) string {
+	if w.output.WriterName == "flvwriter" && w.config.SanitizeFLV {
+		if f, err := os.Open(cur.Path); err == nil {
+			key := flvfix.ConfigKeyOf(f, 16<<20)
+			f.Close()
+			if key != "" {
+				return key
+			}
+		}
+	}
+	if cur.AfterConfigChange {
+		return "crashed:" + cur.Stem
+	}
+	w.groupsMu.Lock()
+	defer w.groupsMu.Unlock()
+	if w.group != nil {
+		return w.group.key
+	}
+	return w.curPartKey
+}
+
+// closeLog closes the session log.
+func (w *worker) closeLog() {
+	if w.sessionLogFile != nil {
+		_ = w.sessionLogFile.Close()
+		w.sessionLogFile = nil
+	}
+}
+
+// interruptSession keeps a stopped session for a resume: the checkpoint is
+// marked interrupted and handed to the store, and nothing is sent for
+// processing.
+func (w *worker) interruptSession() error {
+	w.observeMetadata()
+	cp := w.checkpoint(nil)
+	cp.InterruptedAt = time.Now()
+	cp.Reason = w.stopReason().String()
+	if err := w.resume.hold(cp); err != nil {
+		return err
+	}
+	if w.kv != nil && w.output.Stats.TotalBytes > 0 {
+		stats := w.Tracker.GetStats(w.SessionID)
+		stats.Speed = w.Tracker.GetOverallAverageSpeed()
+		vlstate.PutSessionStats(context.Background(), w.kv, w.strKey, stats)
+	}
+	w.logger.Info("Session interrupted; it resumes into the same VOD if recording restarts in time",
+		"reason", cp.Reason,
+		"resume_by", cp.resumeBy(w.resumeWindow).Format(time.RFC3339),
+		"total_bytes", cp.TotalBytes)
+	w.closeLog()
+	return nil
 }
 
 // runMetadataLog archives what the platform says about the broadcast, for as
@@ -193,10 +420,10 @@ func (w *worker) cancelSession() {
 	})
 }
 
-func (w *worker) logFinalStats(sessionStart time.Time) {
+func (w *worker) logFinalStats() {
 	w.logger.Info("Session stats",
 		"total_bytes", w.output.Stats.TotalBytes,
-		"duration_ms", time.Since(sessionStart).Milliseconds(),
+		"duration_ms", time.Since(w.started).Milliseconds(),
 		"speed", w.Tracker.GetOverallAverageSpeed())
 }
 
@@ -482,6 +709,14 @@ func (w *worker) emitGroup(g *partGroup, sessionEnd bool) {
 }
 
 func (w *worker) finishSession() {
+	if w.interrupted {
+		err := w.interruptSession()
+		if err == nil {
+			return
+		}
+		w.interrupted = false
+		w.logger.Warn("Could not keep the session for a resume; finishing it", "error", err)
+	}
 	w.output.SessionState = recording.SessionFinished
 
 	// One last reading, so whatever arrived as the session was winding down is
@@ -491,10 +726,20 @@ func (w *worker) finishSession() {
 	if w.output.Stats.TotalBytes >= recording.MinPartBytes {
 		stats := w.Tracker.GetStats(w.SessionID)
 		stats.Speed = w.Tracker.GetOverallAverageSpeed()
+		if !w.endedAt.IsZero() {
+			// Finished from its checkpoint: the session ended when it last
+			// recorded, not now.
+			stats.Duration = w.endedAt.Sub(w.started)
+			if s := stats.Duration.Seconds(); s > 0 {
+				stats.Speed = float64(stats.TotalBytes) / s
+			}
+		}
 		w.output.Stats = stats
 
 		// Make sure speed in KV is overall average speed, not 0.0
-		vlstate.PutSessionStats(context.Background(), w.kv, w.strKey, stats)
+		if w.kv != nil {
+			vlstate.PutSessionStats(context.Background(), w.kv, w.strKey, stats)
+		}
 	}
 
 	// Flush the run still open. A session that only ever had one group
@@ -513,6 +758,9 @@ func (w *worker) finishSession() {
 	w.logger.Info("Sent final Recording info to processing service",
 		"total_bytes", w.output.Stats.TotalBytes,
 		"base_out_dir", w.output.BaseOutDir)
+	if w.resume != nil {
+		w.resume.remove(w.SessionID)
+	}
 
 	if w.sessionLogFile != nil {
 		_ = w.sessionLogFile.Close()

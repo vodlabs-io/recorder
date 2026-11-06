@@ -44,6 +44,7 @@ func (a *App) cloudStreamerFuncs() vlapi.StreamerFuncs {
 			key, err := a.pages.Preflight(ctx, rawURL)
 			return streamer.StreamerRef{StreamerKey: key}, err
 		},
-		ForgetPage: a.pages.Forget,
+		ForgetPage:        a.pages.Forget,
+		FinishInterrupted: a.sessionReg.FinishInterrupted,
 	}
 }

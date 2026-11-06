@@ -24,6 +24,8 @@ export const Subjects = {
   streamerRecordOn: "streamer.record_on",
   streamerRecordOnAll: "streamer.record_on_all",
   streamerCheck: "streamer.check",
+  // Finishes an interrupted recording now instead of holding it for a resume.
+  streamerFinishRecording: "streamer.finish_recording",
   streamerSetOptions: "streamer.set_options",
   vodsList: "vods.list",
   vodsThumbnail: "vods.thumbnail",

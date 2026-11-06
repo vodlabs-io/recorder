@@ -23,6 +23,9 @@ type UserConfig struct {
 	// SplitDuration is the global maximum duration per VOD file (e.g. "1h30m").
 	// Empty string means no duration-based splitting.
 	SplitDuration string `json:"split_duration"`
+	// ResumeWindow is the longest gap a restarted recording bridges into the
+	// same VOD (e.g. "15m"). "off" finishes an interrupted recording at once.
+	ResumeWindow string `json:"resume_window"`
 	// ArchiveDir is the Archive folder VODs are moved to after processing (e.g.
 	// a network drive). Empty means VODs stay in the Download folder.
 	ArchiveDir string `json:"archive_dir"`

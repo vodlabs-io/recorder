@@ -20,6 +20,10 @@ const DocSchema = 1
 //
 // blocked_no_space outranks all of them: a Streamer that would be recording
 // but for a full download folder is losing a Broadcast right now.
+//
+// interrupted, a session stopped while live that resumes if recording restarts
+// by ResumeBy, ranks just below an active session: its parts can still be
+// converting, and the session matters more than that.
 const (
 	activityMonitoring   = "monitoring"
 	activityIdle         = "idle"
@@ -30,6 +34,7 @@ const (
 	activityMoving       = "moving"
 	activityMovingRetry  = "moving_retrying"
 	activityBlockedSpace = "blocked_no_space"
+	activityInterrupted  = "interrupted"
 )
 
 // StreamerDoc is the consolidated per-streamer view document: identity, live
@@ -64,6 +69,9 @@ type StreamerDoc struct {
 	ArchiveDir       string              `json:"archive_dir,omitempty"`
 	Activity         string              `json:"activity"`
 	ActiveSessionID  string              `json:"active_session_id,omitempty"`
+	// ResumeBy is when an interrupted session stops waiting to resume and is
+	// finished (Unix timestamp). Set only while Activity is "interrupted".
+	ResumeBy int64 `json:"resume_by,omitempty"`
 }
 
 // docLiveMetadata mirrors streamer.LiveMetadata, pinning the doc's field names

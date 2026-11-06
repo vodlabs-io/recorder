@@ -44,6 +44,9 @@ type StreamerFuncs struct {
 	ResolvePage func(ctx context.Context, rawURL string) (streamer.StreamerRef, error)
 	// ForgetPage drops what ResolvePage kept about a removed streamer.
 	ForgetPage func(key streamer.StreamerKey)
+	// FinishInterrupted finishes a streamer's interrupted recording now instead
+	// of holding it for a resume, and reports whether there was one.
+	FinishInterrupted func(key streamer.StreamerKey) bool
 }
 
 // handleCloudIntervals returns the estimated per-platform polling intervals,

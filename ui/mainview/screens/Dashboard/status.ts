@@ -155,6 +155,11 @@ export function activityIndicator(activity: Activity): {
       return { state: "degraded", tooltip: "Live Paused" }
     case "moving_retrying":
       return { state: "degraded", tooltip: "Moving to destination (retrying)" }
+    case "interrupted":
+      return {
+        state: "degraded",
+        tooltip: "Recording interrupted; it resumes if recording restarts in time",
+      }
     case "idle":
     default:
       return { state: "idle", tooltip: "Idle" }

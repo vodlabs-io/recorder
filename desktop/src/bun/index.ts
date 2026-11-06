@@ -349,6 +349,8 @@ const rpc = BrowserView.defineRPC<AppRPCType>({
       enableStreamer: (ref: StreamerRef) =>
         mutate(Subjects.streamerRecordOn, refPayload(ref)),
       enableAllStreamers: () => mutate(Subjects.streamerRecordOnAll, {}),
+      finishRecording: (ref: StreamerRef) =>
+        mutate(Subjects.streamerFinishRecording, refPayload(ref)),
       checkStreamer: (ref: StreamerRef) =>
         session.request<string>(
           Subjects.streamerCheck,

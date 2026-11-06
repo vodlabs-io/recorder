@@ -139,6 +139,12 @@ type SessionConfig struct {
 	// new Part and each configuration produces its own VOD file.
 	// Default true; set false to dump the raw stream bytes unmodified.
 	SanitizeFLV bool `koanf:"sanitize_flv"`
+	// ResumeWindow is the longest gap in a recording that a restarted recorder
+	// bridges (e.g. "15m"). A session stopped by a shutdown, a crash or the
+	// record switch while its stream is live carries on into the same VOD if
+	// recording restarts within this long of its last recorded byte. "off" or
+	// "0" finishes every stopped session at once.
+	ResumeWindow string `koanf:"resume_window"`
 }
 
 type ProcessingConfig struct {
