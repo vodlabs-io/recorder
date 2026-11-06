@@ -268,15 +268,16 @@ func (c *Client) handleStatusUpdate(ctx context.Context, str streamer.StreamerSt
 		// request runs from this machine and returns URLs for a nearby edge.
 		c.StatusReqPriCh <- str.StreamerRef
 	case streamer.StatusRestricted:
-		// A restricted room is only recordable with a platform login. If we hold
-		// one for this platform, re-check it authenticated (attaching our local
-		// cookies) to try to unlock it; otherwise fall through to a normal
-		// dispatch (which won't record).
+		// With a platform login, re-check it authenticated (attaching our local
+		// cookies) to try to unlock it. Without one, re-check it plainly from
+		// this machine: some platforms withhold a live stream's URL by caller
+		// address, so a room restricted to the service's check may answer here.
+		// A still-restricted result is dispatched (see handleFetchResult).
 		if c.cookies != nil && c.cookies.Has(str.Platform) {
 			c.recordWall(ctx, str)
 			c.authStatusReqCh <- str.StreamerRef
 		} else {
-			c.dispatchStreamer(ctx, str)
+			c.StatusReqPriCh <- str.StreamerRef
 		}
 	case streamer.StatusUnknown:
 		c.statusReqCh <- str.StreamerRef
