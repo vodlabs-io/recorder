@@ -50,7 +50,7 @@ func Download(ctx context.Context, repo string, expectedVersion, destDir string,
 		return "", fmt.Errorf("creating dest dir: %w", err)
 	}
 
-	fmt.Printf("Downloading %s %s for %s...\n", art.Name, expectedVersion, platform)
+	fmt.Fprintf(os.Stderr, "Downloading %s %s for %s...\n", art.Name, expectedVersion, platform)
 	archivePath := filepath.Join(destDir, archiveName+".tmp")
 	if err := downloadAndVerify(ctx, archiveURL, archivePath, expectedSum); err != nil {
 		os.Remove(archivePath)
@@ -72,7 +72,7 @@ func Download(ctx context.Context, repo string, expectedVersion, destDir string,
 	if err := os.Rename(tmpBin, finalPath); err != nil {
 		return "", fmt.Errorf("installing binary: %w", err)
 	}
-	fmt.Printf("Downloaded %s to %s\n", art.Name, finalPath)
+	fmt.Fprintf(os.Stderr, "Downloaded %s to %s\n", art.Name, finalPath)
 	return finalPath, nil
 }
 

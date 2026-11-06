@@ -29,6 +29,18 @@ func (a *App) recordCommand() *cli.Command {
 				Aliases: []string{"1"},
 				Usage:   "Record the streamer once (don't monitor/auto-record)",
 			},
+			&cli.DurationFlag{
+				Name:  "wait",
+				Usage: "With --once, how long to wait for the stream to go live (default 15s)",
+			},
+			&cli.DurationFlag{
+				Name:  "duration",
+				Usage: "With --once, stop the recording after this long",
+			},
+			&cli.BoolFlag{
+				Name:  "json",
+				Usage: "With --once, print the result as JSON when the recording ends",
+			},
 			variantFlag(),
 		},
 		Arguments: streamerArgs(),
@@ -38,10 +50,17 @@ func (a *App) recordCommand() *cli.Command {
 }
 
 func (a *App) recordAction(ctx context.Context, cmd *cli.Command) error {
-	if cmd.Bool("once") {
-		return a.recordOnce(ctx, cmd)
+	unattended := cmd.IsSet("wait") || cmd.IsSet("duration") || cmd.Bool("json")
+	if !cmd.Bool("once") {
+		if unattended {
+			return errors.New("--wait, --duration and --json need --once")
+		}
+		return a.addStreamerWithStatus(ctx, cmd)
 	}
-	return a.addStreamerWithStatus(ctx, cmd)
+	if unattended || !stdoutIsTerminal() {
+		return a.runRecordJob(ctx, cmd)
+	}
+	return a.recordOnce(ctx, cmd)
 }
 
 func (a *App) addStreamerWithStatus(ctx context.Context, cmd *cli.Command) error {

@@ -40,6 +40,7 @@ func (a *App) Commands() []*cli.Command {
 		a.loginCommand(),
 		a.infoCommand(),
 		a.healthCommand(),
+		a.doctorCommand(),
 		a.webCommand(),
 		a.flvFixCommand(),
 		a.updateCommand(),

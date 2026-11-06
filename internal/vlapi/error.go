@@ -15,15 +15,19 @@ var (
 	// ErrMonitorUnsupported refuses to monitor a streamer on a platform whose
 	// streamers can only be recorded once. Clients offer to record it once.
 	ErrMonitorUnsupported = errors.New("monitor_unsupported")
+	// ErrPlatformUnreachable is a check that failed on this machine's own
+	// network, which retrying from here will not fix.
+	ErrPlatformUnreachable = errors.New("platform_unreachable")
 )
 
 var errByCode = map[string]error{
-	ErrNotFound.Error():           ErrNotFound,
-	errInvalidArg.Error():         errInvalidArg,
-	errInternal.Error():           errInternal,
-	ErrConflict.Error():           ErrConflict,
-	errUnavailable.Error():        errUnavailable,
-	ErrMonitorUnsupported.Error(): ErrMonitorUnsupported,
+	ErrNotFound.Error():            ErrNotFound,
+	errInvalidArg.Error():          errInvalidArg,
+	errInternal.Error():            errInternal,
+	ErrConflict.Error():            ErrConflict,
+	errUnavailable.Error():         errUnavailable,
+	ErrMonitorUnsupported.Error():  ErrMonitorUnsupported,
+	ErrPlatformUnreachable.Error(): ErrPlatformUnreachable,
 }
 
 type Err struct {

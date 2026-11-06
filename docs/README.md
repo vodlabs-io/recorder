@@ -10,6 +10,7 @@
 - [Signing in to platforms](platform-sign-in.md): record streams that need an
   account.
 - [Command-line reference](cli.md): every `vod` command.
+- [Using the recorder from an AI agent or a script](agents.md)
 - [Configuration](configuration.md): settings, the config files, and where
   everything is stored.
 - [Troubleshooting](troubleshooting.md)

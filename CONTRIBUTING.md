@@ -42,7 +42,9 @@ bun install
 ```
 
 Builds from source talk to the production VodLabs service, the same as the
-released app. Please be gentle with it: no load tests or scripted floods.
+released app. Please be gentle with it: no load tests or scripted floods. Build
+from a full clone: without its tags, a build has no version number and the service
+refuses it.
 
 ## Running the desktop app
 

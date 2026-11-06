@@ -5,8 +5,16 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v3"
 )
+
+// stdoutIsTerminal reports whether a person is watching stdout. Views that
+// redraw or never exit run only then.
+func stdoutIsTerminal() bool {
+	fd := os.Stdout.Fd()
+	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
+}
 
 // jsonFlag is carried by every read command. The daemon answers in JSON and the
 // CLI reformats it into aligned columns that nothing can parse back; --json

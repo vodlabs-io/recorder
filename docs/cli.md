@@ -5,7 +5,8 @@ daemon is running, `vod` starts one. The desktop app talks to the same daemon,
 so changes made with `vod` show up in the app and the other way round.
 
 Every command takes `--help`. Most listing commands take `--json` for output
-you can script against.
+you can script against. To run `vod` without a person watching, see
+[Using the recorder from an AI agent or a script](agents.md).
 
 ```text
 vod [--config <file>] <command> [options]
@@ -20,9 +21,14 @@ vod [--config <file>] <command> [options]
 | --- | --- |
 | `vod record <url>`<br>`vod record <platform> <username>` | Track a streamer, record them whenever they are live, and follow their status. Aliases: `rec`, `r`. |
 | `vod record --once <url>` | Record one broadcast, then stop tracking the streamer. |
+| `vod record --once --wait 30m --duration 1h --json <url>` | The same, unattended: wait up to 30 minutes for the stream, stop after an hour, and print one JSON result. Exits with 0 if it recorded, 2 if the stream never went live, 1 otherwise, including when this machine cannot reach the platform. See [the result](agents.md#the-result). |
 | `vod record --variant 720p <url>` | Record at a given quality instead of the default. |
-| `vod status` | Show what is being recorded, with live statistics. |
+| `vod status` | Show what is being recorded, with live statistics. `--json` prints it once as JSON. |
 | `vod status filter -p <platform> [-u <username>]` | The same, for one platform or streamer. |
+
+`vod`, `vod status` and `vod record` keep a live view open in a terminal. When
+stdout is not a terminal they print the current state once and exit, and
+`vod record --once` runs unattended, as if given `--json` without the JSON.
 
 ## Streamers
 
@@ -33,7 +39,7 @@ vod [--config <file>] <command> [options]
 | `vod streamer remove <url>` | Stop tracking a streamer. Alias: `rm`. |
 | `vod streamer disable <url>` | Stop recording a streamer, but keep watching whether they are live. |
 | `vod streamer enable <url>` | Record a disabled streamer again. |
-| `vod streamer check <url>` | Check a streamer's status now. |
+| `vod streamer check <url>` | Check a streamer's status now and print it, or why the check failed. With a platform login stored, the check runs in the background instead. |
 | `vod streamer variant <url> [variant]` | Set a streamer's quality, or clear it when no variant is given. |
 | `vod streamer config path`<br>`vod streamer config edit` | Print or edit the streamers file. |
 
@@ -69,6 +75,7 @@ Every command that takes `<url>` also accepts `<platform> <username>`.
 | `vod report [--logs] <what went wrong>` | Send a bug report to VodLabs. `--logs` attaches the end of each log file. Prints a report ID to quote in a GitHub issue. |
 | `vod info` | Print the daemon's settings and the paths of its files and logs. |
 | `vod health` | Exit with 0 if the daemon is running and answering, 1 if not. Never starts a daemon. For scripts and container health checks. |
+| `vod doctor [<url> \| <platform> [<username>]]` | Check that this machine can record: the daemon, its connection to the VodLabs service, and whether this machine reaches the service and GitHub. Given a platform, also whether the service offers it and this machine reaches its site; given a streamer this recorder tracks, it runs a real status check. `--json` for scripts. Exits 1 if any check fails. Never starts a daemon. |
 | `vod web url`<br>`vod web token [--rotate]` | Print a sign-in link for the [Web UI](docker.md#signing-in), or its token. `--rotate` replaces the token and signs every browser out. |
 | `vod update` | Update the daemon and `vod` to the latest release. |
 | `vod restart` | Restart the daemon. |

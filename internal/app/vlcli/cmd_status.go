@@ -21,6 +21,7 @@ func (a *App) statusCommand() *cli.Command {
 		Name:   "status",
 		Usage:  "View current daemon status with real-time recording statistics",
 		Before: a.connectDaemon,
+		Flags:  []cli.Flag{jsonFlag()},
 		Commands: []*cli.Command{
 			a.statusFilterCommand(),
 		},
@@ -34,6 +35,7 @@ func (a *App) statusFilterCommand() *cli.Command {
 		Aliases: []string{"fil", "f"},
 		Usage:   "Filter status entries by platform, username, or both",
 		Flags: []cli.Flag{
+			jsonFlag(),
 			&cli.StringFlag{Name: "platform", Aliases: []string{"p"},
 				Usage: "Only show entries for this platform"},
 			&cli.StringFlag{Name: "username", Aliases: []string{"u"},
@@ -55,7 +57,8 @@ func (a *App) runStatus(ctx context.Context, cmd *cli.Command) error {
 }
 
 // runStatusFor renders the live status view, narrowed to `only` when it names a
-// streamer and to the --platform/--username flags otherwise.
+// streamer and to the --platform/--username flags otherwise. With --json, or
+// when stdout is not a terminal, it prints the current state once and returns.
 //
 // Callers that just added a streamer pass the identity the add resolved to,
 // rather than the URL the user typed: a URL is not stored anywhere, so it can
@@ -118,6 +121,29 @@ func (a *App) runStatusFor(
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 
+	displayState := func() progress.DisplayState {
+		displayRows := make([]progress.StreamerRow, 0, len(recordingRows)+len(processingRows))
+		for _, r := range recordingRows {
+			if r.Label == "" {
+				// No session_state yet — skip until we know what to label it.
+				continue
+			}
+			displayRows = append(displayRows, *r)
+		}
+		for _, r := range processingRows {
+			displayRows = append(displayRows, *r)
+		}
+		return progress.DisplayState{
+			Uptime:            time.Since(startTime),
+			RecordingCount:    workerCount,
+			SubscriptionCount: subscriptionCount,
+			Filtered:          filtered,
+			Rows:              displayRows,
+		}
+	}
+	asJSON := cmd.Bool("json")
+	once := asJSON || !stdoutIsTerminal()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -128,6 +154,14 @@ func (a *App) runStatusFor(
 				return nil
 			}
 			if entry == nil {
+				// The watch has replayed the current values.
+				if asJSON {
+					return emitJSON(newStatusSnapshot(displayState()))
+				}
+				if once {
+					display.Render(displayState())
+					return nil
+				}
 				continue
 			}
 			kvKey := entry.Key()
@@ -223,25 +257,49 @@ func (a *App) runStatusFor(
 			}
 
 		case <-ticker.C:
-			displayRows := make([]progress.StreamerRow, 0, len(recordingRows)+len(processingRows))
-			for _, r := range recordingRows {
-				if r.Label == "" {
-					// No session_state yet — skip until we know what to label it.
-					continue
-				}
-				displayRows = append(displayRows, *r)
+			if !once {
+				display.Render(displayState())
 			}
-			for _, r := range processingRows {
-				displayRows = append(displayRows, *r)
-			}
-			display.Render(progress.DisplayState{
-				Uptime:            time.Since(startTime),
-				RecordingCount:    workerCount,
-				SubscriptionCount: subscriptionCount,
-				Filtered:          filtered,
-				Rows:              displayRows,
-			})
 		}
+	}
+}
+
+// statusSnapshot is what `vod status --json` prints.
+type statusSnapshot struct {
+	UptimeSec         int64           `json:"uptime_sec"`
+	RecordingCount    int             `json:"recording_count"`
+	SubscriptionCount int             `json:"subscription_count"`
+	Sessions          []statusSession `json:"sessions"`
+}
+
+type statusSession struct {
+	Platform    string  `json:"platform"`
+	Username    string  `json:"username"`
+	SessionID   string  `json:"session_id,omitempty"`
+	State       string  `json:"state"`
+	DurationSec float64 `json:"duration_sec"`
+	TotalBytes  int64   `json:"total_bytes"`
+	SpeedBps    float64 `json:"speed_bps"`
+}
+
+func newStatusSnapshot(d progress.DisplayState) statusSnapshot {
+	sessions := make([]statusSession, 0, len(d.Rows))
+	for _, r := range d.Rows {
+		sessions = append(sessions, statusSession{
+			Platform:    r.Platform,
+			Username:    r.Username,
+			SessionID:   r.Stats.SessionID,
+			State:       r.Label,
+			DurationSec: r.Stats.Duration.Seconds(),
+			TotalBytes:  r.Stats.TotalBytes,
+			SpeedBps:    r.Stats.Speed,
+		})
+	}
+	return statusSnapshot{
+		UptimeSec:         int64(d.Uptime.Seconds()),
+		RecordingCount:    d.RecordingCount,
+		SubscriptionCount: d.SubscriptionCount,
+		Sessions:          sessions,
 	}
 }
 
