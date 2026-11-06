@@ -304,18 +304,41 @@ jobs:
       # runner's OS/arch and emits artifacts/<os>-<arch>-* (installer) and
       # artifacts/stable-<os>-<arch>-* (.app.tar.zst, update.json).
       - name: Build desktop app
+        if: runner.os != 'macOS'
         run: bun run build:stable
         env:
           ELECTROBUN_APP_VERSION: ${{ steps.version.outputs.value }}
 
+      # Stapling fetches the ticket from Apple's ticket service, which macOS
+      # runners sometimes lose the connection to, so a failed build is retried.
+      - name: Build desktop app
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            bun run build:stable && exit 0
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::Desktop build attempt $attempt failed; retrying in $((attempt * 180)) s"
+              sleep $((attempt * 180))
+            fi
+          done
+          exit 1
+        env:
+          ELECTROBUN_APP_VERSION: ${{ steps.version.outputs.value }}
+
       # Electrobun fails the build only on an "Invalid" notarization verdict,
-      # so confirm the DMG users download passes Gatekeeper.
+      # so confirm the DMG users download passes Gatekeeper. Validation also
+      # reaches Apple's ticket service, so it is retried.
       - name: Verify macOS notarization
         if: steps.signing.outputs.signed == 'true'
         run: |
           set -euo pipefail
           for dmg in artifacts/*.dmg; do
-            xcrun stapler validate "$dmg"
+            for attempt in 1 2 3 4 5; do
+              xcrun stapler validate "$dmg" && break
+              [ "$attempt" -lt 5 ] || exit 1
+              sleep 60
+            done
             spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
           done
 
