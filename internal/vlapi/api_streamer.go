@@ -643,6 +643,25 @@ func (s *Service) handleRecordOn(req micro.Request) {
 	respond(req, OK("recording on"))
 }
 
+// MARK: Finish
+// handleFinishRecording finishes a streamer's interrupted recording now, so its
+// VOD is processed without waiting out the resume window.
+func (s *Service) handleFinishRecording(req micro.Request) {
+	id, ok := parseStreamerID(req)
+	if !ok {
+		return
+	}
+	if !id.StreamerKey.Valid() {
+		respond(req, fail(errInvalidArg, "platform and username are required"))
+		return
+	}
+	if s.streamerFuncs.FinishInterrupted == nil || !s.streamerFuncs.FinishInterrupted(id.StreamerKey) {
+		respond(req, fail(ErrNotFound, "no interrupted recording for this streamer"))
+		return
+	}
+	respond(req, OK("recording finished"))
+}
+
 // MARK: Disable All
 // handleRecordOffAll adds a single record=false rule covering every streamer
 // still recording, then reloads the config once.

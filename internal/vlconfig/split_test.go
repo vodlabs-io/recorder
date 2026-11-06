@@ -100,3 +100,19 @@ func TestSplitLimitsEnabled(t *testing.T) {
 		}
 	}
 }
+
+func TestParseResumeWindow(t *testing.T) {
+	for raw, want := range map[string]time.Duration{"": 0, "off": 0, "0": 0, "15m": 15 * time.Minute, " 2h ": 2 * time.Hour} {
+		if got, err := ParseResumeWindow(raw); err != nil || got != want {
+			t.Errorf("ParseResumeWindow(%q) = %v, %v; want %v", raw, got, err, want)
+		}
+	}
+	for _, raw := range []string{"soon", "-5m", "25h"} {
+		if _, err := ParseResumeWindow(raw); err == nil {
+			t.Errorf("ParseResumeWindow(%q) accepted", raw)
+		}
+	}
+	if _, err := ParseResumeWindow(DefaultResumeWindow); err != nil {
+		t.Errorf("default %q rejected: %v", DefaultResumeWindow, err)
+	}
+}

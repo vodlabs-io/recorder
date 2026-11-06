@@ -20,6 +20,7 @@ function view(overrides: Partial<StreamerView>): StreamerView {
     addedAt: null,
     lastLiveStart: null,
     lastLiveDurationSec: null,
+    resumeBy: null,
     ...overrides,
   };
 }

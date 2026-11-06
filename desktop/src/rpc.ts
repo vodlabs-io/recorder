@@ -100,6 +100,7 @@ export type AppRPCType = {
       disableAllStreamers: { params: {}; response: string };
       enableStreamer: { params: StreamerRef; response: string };
       enableAllStreamers: { params: {}; response: string };
+      finishRecording: { params: StreamerRef; response: string };
       checkStreamer: { params: StreamerRef; response: string };
       setStreamerOptions: { params: SetStreamerOptionsParams; response: string };
       // VOD Archive. listVodsPage proxies one page of the daemon's listing

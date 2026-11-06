@@ -27,6 +27,7 @@ func (a *App) GetConfig() vlapi.UserConfig {
 		DeletePartFiles: a.appCfg.Processing.DeletePartFiles,
 		SplitSize:       a.appCfg.Session.SplitSize,
 		SplitDuration:   a.appCfg.Session.SplitDuration,
+		ResumeWindow:    displayResumeWindow(a.appCfg.Session.ResumeWindow),
 		ArchiveDir:      a.appCfg.Processing.ArchiveDir,
 		// Normalized on the way out, not just on the way in: a hand-edited
 		// config.toml holds whatever was typed, and clients match a listed VOD's
@@ -35,6 +36,15 @@ func (a *App) GetConfig() vlapi.UserConfig {
 		Encoder:        displayEncoder(a.appCfg.Processing.Encoder),
 		LowSpaceWarnGB: a.appCfg.Processing.LowSpaceWarnGB,
 	}
+}
+
+// displayResumeWindow maps the stored resume window to its API spelling: an
+// empty or zero value reads as "off".
+func displayResumeWindow(v string) string {
+	if d, err := vlconfig.ParseResumeWindow(v); err == nil && d == 0 {
+		return "off"
+	}
+	return v
 }
 
 // displayEncoder maps the stored encoder value to its API spelling: an unset
@@ -81,6 +91,13 @@ func (a *App) SetConfig(c vlapi.UserConfig) error {
 		if _, err := vlconfig.ParseSplitDuration(splitDuration); err != nil {
 			return fmt.Errorf("invalid split_duration: %w", err)
 		}
+	}
+
+	resumeWindow := strings.TrimSpace(c.ResumeWindow)
+	if d, err := vlconfig.ParseResumeWindow(resumeWindow); err != nil {
+		return err
+	} else if d == 0 {
+		resumeWindow = "off"
 	}
 
 	// Validate the archive folder. Global empty = disabled; an off-token also
@@ -147,6 +164,7 @@ func (a *App) SetConfig(c vlapi.UserConfig) error {
 		DeletePartFiles: c.DeletePartFiles,
 		SplitSize:       splitSize,
 		SplitDuration:   splitDuration,
+		ResumeWindow:    resumeWindow,
 		ArchiveDir:      archiveDir,
 		ScanDirs:        scanDirs,
 		Encoder:         encoder,
@@ -160,6 +178,7 @@ func (a *App) SetConfig(c vlapi.UserConfig) error {
 	a.appCfg.Processing.DeletePartFiles = applied.DeletePartFiles
 	a.appCfg.Session.SplitSize = applied.SplitSize
 	a.appCfg.Session.SplitDuration = applied.SplitDuration
+	a.appCfg.Session.ResumeWindow = applied.ResumeWindow
 	a.appCfg.Processing.ArchiveDir = applied.ArchiveDir
 	a.appCfg.Processing.ScanDirs = applied.ScanDirs
 	a.appCfg.Processing.Encoder = applied.Encoder
@@ -251,6 +270,7 @@ func writeUserConfig(path string, c vlapi.UserConfig) error {
 	k.Set("processing.delete_part_files", c.DeletePartFiles)
 	k.Set("session.split_size", c.SplitSize)
 	k.Set("session.split_duration", c.SplitDuration)
+	k.Set("session.resume_window", c.ResumeWindow)
 	k.Set("processing.archive_dir", c.ArchiveDir)
 	// Always written, even when empty: koanf keeps the file's previous value for
 	// a key that is not set, so clearing the last scan folder must write [].

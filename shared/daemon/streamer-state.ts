@@ -56,6 +56,7 @@ type StreamerDoc = {
   archive_dir?: string;
   activity?: Activity;
   active_session_id?: string;
+  resume_by?: number;
 };
 
 // Raw recording.Stats from KV `session.<id>.stats`.
@@ -194,6 +195,7 @@ export class StreamerState {
         addedAt: doc.added_at ?? null,
         lastLiveStart: doc.last_live_start ?? null,
         lastLiveDurationSec: doc.last_live_duration ?? null,
+        resumeBy: doc.resume_by ?? null,
       };
     });
     streamers.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));

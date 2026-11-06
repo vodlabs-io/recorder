@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/vodlabs-io/recorder/internal/diskspace"
@@ -42,6 +44,13 @@ type Registry struct {
 	// sampler reads free space at the download folder, gating session starts.
 	// Injected so an out-of-space disk is an ordinary test input.
 	sampler diskspace.Sampler
+	// resume keeps session checkpoints and the interrupted sessions; nil when
+	// its folder could not be opened, which disables resuming.
+	resume *resumeStore
+	// lifeMu and closed fence work that sends to pendingRecordingsCh outside a
+	// worker against Wait, after which the channel is closed.
+	lifeMu sync.Mutex
+	closed bool
 }
 
 // Init initializes the session registry and starts the dispatcher goroutine.
@@ -82,7 +91,9 @@ func Init(
 		streamersFile:       streamersFile,
 		sampler:             diskspace.System(),
 	}
+	reg.openResume(vlconfig.DefaultFilePath(checkpointDirName))
 	go reg.runDispatcher(ctx)
+	reg.wg.Go(func() { reg.runResumeSweep(ctx) })
 	logger.Info("Started dispatcher")
 	return reg, nil
 }
@@ -121,6 +132,8 @@ func (r *Registry) dispatch(ctx context.Context, str streamer.StreamerState) err
 
 	if !ok {
 		log.Debug("No worker found for streamer")
+
+		r.settleInterrupted(ctx, str)
 
 		if str.Status == streamer.StatusRemoved {
 			// No active session to cancel; just purge any lingering KV state so
@@ -183,23 +196,27 @@ func (r *Registry) dispatch(ctx context.Context, str streamer.StreamerState) err
 			cfg.SplitDuration = opts.SplitDuration
 		}
 
-		worker = newWorker(
-			cfg,
-			r.kv,
-			r.store,
-			r.lagReportCh,
-			r.streamReqCh,
-			r.pendingRecordingsCh,
-			r.basicHTTPClient,
-			r.flvHTTPClient,
-			r.cookies)
+		worker = r.newSessionWorker(cfg)
+		resumed := false
+		if cp := r.takeResumable(str); cp != nil {
+			if err := worker.adopt(cp); err != nil {
+				log.Warn("Could not resume the interrupted session; starting a new one", "error", err)
+				r.finishInterrupted(cp, "it could not be resumed: "+err.Error())
+				worker = r.newSessionWorker(cfg)
+			} else {
+				resumed = true
+				r.store.ClearInterrupted(ctx, str.StreamerKey, cp.SessionID)
+			}
+		}
 
 		workerCtx, cancel := context.WithCancel(ctx)
 		worker.setCancel(cancel)
 
-		if err := worker.initSession(str); err != nil {
-			worker.cancelSession()
-			return fmt.Errorf("failed to initialize session: %w", err)
+		if !resumed {
+			if err := worker.initSession(str); err != nil {
+				worker.cancelSession()
+				return fmt.Errorf("failed to initialize session: %w", err)
+			}
 		}
 		if err := r.register(ctx, worker, str.StreamerKey); err != nil {
 			worker.cancelSession()
@@ -210,7 +227,11 @@ func (r *Registry) dispatch(ctx context.Context, str streamer.StreamerState) err
 		vlstate.PersistOneShot(ctx, r.kv, worker.strKey)
 		r.wg.Go(func() { r.runWorker(workerCtx, worker) })
 
-		log.Info("Session started",
+		msg := "Session started"
+		if resumed {
+			msg = "Session resumed"
+		}
+		log.Info(msg,
 			"session_id", worker.SessionID,
 			"variant", worker.config.Variant,
 			"out_dir", worker.output.BaseOutDir,
@@ -220,7 +241,7 @@ func (r *Registry) dispatch(ctx context.Context, str streamer.StreamerState) err
 		// Record the removal so runWorker purges the streamer's KV once the
 		// worker has finished tearing down (after its final state writes).
 		worker.str.Store(&str)
-		worker.cancelSession()
+		worker.stopWith(stopRemoved)
 	} else {
 		worker.str.Store(&str)
 
@@ -258,6 +279,12 @@ func (r *Registry) runWorker(ctx context.Context, worker *worker) {
 
 	bgCtx := context.Background()
 	switch {
+	case ctx.Err() != nil && worker.interrupted:
+		log.Info("Session interrupted", "reason", worker.stopReason())
+		r.store.SetSessionState(bgCtx, worker.strKey, worker.SessionID, recording.SessionInterrupted)
+		if cp := r.resume.peek(worker.strKey); cp != nil {
+			r.store.SetInterrupted(bgCtx, worker.strKey, cp.SessionID, cp.resumeBy(r.resumeWindow()))
+		}
 	case ctx.Err() != nil:
 		if strStatus == streamer.StatusRemoved {
 			// Streamer was removed; its KV is purged below, so don't persist a
@@ -327,8 +354,12 @@ func (r *Registry) deregister(ctx context.Context, key streamer.StreamerKey) {
 	vlstate.PutCount(ctx, r.kv, "worker_count", workerCount)
 }
 
-// Wait blocks until all registered workers have completed
+// Wait blocks until all registered workers have completed. Nothing outside a
+// worker sends for processing once it is called.
 func (r *Registry) Wait() {
+	r.lifeMu.Lock()
+	r.closed = true
+	r.lifeMu.Unlock()
 	r.wg.Wait()
 	r.logger.Info("All workers have completed")
 }
@@ -365,6 +396,10 @@ func (r *Registry) ActiveSessionDirs() []string {
 			dirs = append(dirs, dir)
 		}
 	}
+	// An interrupted session's folder is a recording in progress too.
+	if r.resume != nil {
+		dirs = append(dirs, r.resume.heldDirs()...)
+	}
 	return dirs
 }
 
@@ -377,7 +412,196 @@ func (r *Registry) ApplyRecordState() {
 		id := streamer.StreamerRef{StreamerKey: key}
 		if !r.streamersFile.OptionsFor(id).Record {
 			r.logger.Info("Cancelling recording (switched off)", "streamer", key)
-			w.cancelSession()
+			w.stopWith(stopSwitchedOff)
 		}
 	}
+}
+
+// newSessionWorker builds a worker for a session about to start or resume.
+func (r *Registry) newSessionWorker(cfg vlconfig.SessionConfig) *worker {
+	w := newWorker(
+		cfg,
+		r.kv,
+		r.store,
+		r.lagReportCh,
+		r.streamReqCh,
+		r.pendingRecordingsCh,
+		r.basicHTTPClient,
+		r.flvHTTPClient,
+		r.cookies)
+	w.resume = r.resume
+	w.resumeWindow = r.resumeWindow()
+	return w
+}
+
+// resumeWindow is the configured resume window; zero disables resuming.
+func (r *Registry) resumeWindow() time.Duration {
+	d, err := vlconfig.ParseResumeWindow(r.sessionCfg().ResumeWindow)
+	if err != nil {
+		return 0
+	}
+	return d
+}
+
+// openResume opens the checkpoint folder and takes stock of the sessions it
+// holds: interrupted ones wait to resume, and one a crashed daemon left
+// recording is recovered first.
+func (r *Registry) openResume(dir string) {
+	store, cps, err := openResumeStore(dir)
+	if store == nil {
+		r.logger.Error("Recordings will not resume after an interruption", "error", err)
+		return
+	}
+	if err != nil {
+		r.logger.Warn("Some session checkpoints could not be read", "error", err)
+	}
+	r.resume = store
+	for _, cp := range cps {
+		if cp.InterruptedAt.IsZero() {
+			cp = r.recoverCrashed(cp)
+		}
+		if err := store.hold(cp); err != nil {
+			r.logger.Warn("Failed to keep an interrupted session", "session_id", cp.SessionID, "error", err)
+			continue
+		}
+		r.logger.Info("Interrupted session waiting to resume",
+			"streamer", cp.key(),
+			"session_id", cp.SessionID,
+			"reason", cp.Reason,
+			"resume_by", cp.resumeBy(r.resumeWindow()).Format(time.RFC3339))
+	}
+}
+
+// recoverCrashed turns the checkpoint of a session a daemon was recording when
+// it stopped without warning into an interrupted one, keeping the part it was
+// writing.
+func (r *Registry) recoverCrashed(cp *checkpoint) *checkpoint {
+	w := r.dormantWorker(cp)
+	w.foldCrashedPart(cp.Current)
+	out := w.checkpoint(nil)
+	out.InterruptedAt = out.lastByte()
+	out.Reason = reasonCrashed
+	w.logger.Info("Recovered a session the recorder stopped recording without warning",
+		"last_byte_at", out.LastByteAt.Format(time.RFC3339),
+		"total_bytes", out.TotalBytes)
+	w.closeLog()
+	return out
+}
+
+// dormantWorker builds a worker holding an interrupted session that is not
+// running, to finish it or recover it.
+func (r *Registry) dormantWorker(cp *checkpoint) *worker {
+	w := r.newSessionWorker(r.sessionCfg())
+	w.restore(cp)
+	if err := w.openLog(); err != nil {
+		w.logger = r.logger.With("session_id", cp.SessionID)
+	}
+	return w
+}
+
+// takeResumable hands out str's interrupted session if the new session should
+// carry it on, and finishes it otherwise.
+func (r *Registry) takeResumable(str streamer.StreamerState) *checkpoint {
+	if r.resume == nil {
+		return nil
+	}
+	cp := r.resume.take(str.StreamerKey)
+	if cp == nil {
+		return nil
+	}
+	ok, why := canResume(cp, str, writerFor(str.Streams.Select(cp.Variant)), r.resumeWindow(), time.Now())
+	if !ok {
+		r.logger.Info("Not resuming the interrupted session", "streamer", cp.key(), "session_id", cp.SessionID, "why", why)
+		r.finishInterrupted(cp, why)
+		return nil
+	}
+	return cp
+}
+
+// settleInterrupted finishes str's interrupted session when the update shows
+// its broadcast is over, and otherwise keeps it on the dashboard.
+func (r *Registry) settleInterrupted(ctx context.Context, str streamer.StreamerState) {
+	if r.resume == nil {
+		return
+	}
+	cp := r.resume.peek(str.StreamerKey)
+	if cp == nil {
+		return
+	}
+	if broadcastOver(cp, str) {
+		if cp = r.resume.take(str.StreamerKey); cp != nil {
+			r.finishInterrupted(cp, "the broadcast is over ("+string(str.Status)+")")
+		}
+		return
+	}
+	r.store.SetInterrupted(ctx, str.StreamerKey, cp.SessionID, cp.resumeBy(r.resumeWindow()))
+}
+
+// resumeSweepInterval is how often interrupted sessions are checked against
+// the resume window.
+const resumeSweepInterval = 10 * time.Second
+
+// runResumeSweep finishes interrupted sessions that run out of resume window,
+// starting with any that already have.
+func (r *Registry) runResumeSweep(ctx context.Context) {
+	if r.resume == nil {
+		return
+	}
+	t := time.NewTicker(resumeSweepInterval)
+	defer t.Stop()
+	for {
+		for _, cp := range r.resume.takeExpired(time.Now(), r.resumeWindow()) {
+			r.finishInterrupted(cp, "it did not resume within the resume window")
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// FinishInterrupted finishes key's interrupted session now rather than holding
+// it for a resume, and reports whether there was one.
+func (r *Registry) FinishInterrupted(key streamer.StreamerKey) bool {
+	if r.resume == nil {
+		return false
+	}
+	cp := r.resume.take(key)
+	if cp == nil {
+		return false
+	}
+	r.finishInterrupted(cp, "finished on request")
+	return true
+}
+
+// finishInterrupted sends an interrupted session for processing as it stands.
+// During shutdown it is left on disk instead, for the next start to resume or
+// finish.
+func (r *Registry) finishInterrupted(cp *checkpoint, why string) {
+	r.lifeMu.Lock()
+	if r.closed {
+		r.lifeMu.Unlock()
+		return
+	}
+	r.wg.Add(1)
+	r.lifeMu.Unlock()
+	defer r.wg.Done()
+
+	bgCtx := context.Background()
+	key := cp.key()
+	defer r.store.ClearInterrupted(bgCtx, key, cp.SessionID)
+	if fi, err := os.Stat(cp.BaseOutDir); err != nil || !fi.IsDir() {
+		r.logger.Warn("Dropping an interrupted session whose folder is gone",
+			"streamer", key, "session_id", cp.SessionID, "out_dir", cp.BaseOutDir)
+		r.resume.remove(cp.SessionID)
+		return
+	}
+	w := r.dormantWorker(cp)
+	w.endedAt = cp.lastByte()
+	w.logger.Info("Finishing interrupted session", "why", why)
+	w.finishSession()
+	r.store.SetSessionState(bgCtx, key, cp.SessionID, recording.SessionFinished)
+	r.logger.Info("Finished interrupted session",
+		"streamer", key, "session_id", cp.SessionID, "why", why, "out_dir", cp.BaseOutDir)
 }

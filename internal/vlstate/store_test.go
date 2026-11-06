@@ -434,3 +434,37 @@ type failingTracker struct{}
 func (failingTracker) Track(context.Context, []streamer.StreamerKey, time.Time) map[streamer.StreamerKey]int64 {
 	return nil
 }
+
+func TestInterruptedActivity(t *testing.T) {
+	ctx := context.Background()
+	kv := newFakeKV()
+	s := NewStore(kv)
+	s.Reconcile(ctx, []DocSeed{monitoredSeed(alice)})
+	resumeBy := time.Unix(1_800_000_000, 0)
+
+	s.SetSessionState(ctx, alice, "sess1", recording.SessionRecording)
+	s.SetSessionState(ctx, alice, "sess1", recording.SessionInterrupted)
+	s.SetInterrupted(ctx, alice, "sess1", resumeBy)
+	// Its parts still converting must not hide that it is waiting to resume.
+	s.SetProcessingState(ctx, alice, "sess1", recording.ProcessProcessing)
+	doc := kv.doc(t, aliceDoc)
+	if doc.Activity != activityInterrupted || doc.ActiveSessionID != "sess1" || doc.ResumeBy != resumeBy.Unix() {
+		t.Fatalf("got activity=%q session=%q resume_by=%d, want interrupted/sess1/%d",
+			doc.Activity, doc.ActiveSessionID, doc.ResumeBy, resumeBy.Unix())
+	}
+
+	// Resumed: recording again, and no deadline left on the doc.
+	s.ClearInterrupted(ctx, alice, "sess1")
+	s.SetSessionState(ctx, alice, "sess1", recording.SessionRecording)
+	if doc = kv.doc(t, aliceDoc); doc.Activity != activityRecording || doc.ResumeBy != 0 {
+		t.Fatalf("after resume: activity=%q resume_by=%d", doc.Activity, doc.ResumeBy)
+	}
+
+	// Clearing another session's interruption is a no-op.
+	s.SetSessionState(ctx, alice, "sess1", recording.SessionInterrupted)
+	s.SetInterrupted(ctx, alice, "sess1", resumeBy)
+	s.ClearInterrupted(ctx, alice, "other")
+	if doc = kv.doc(t, aliceDoc); doc.Activity != activityInterrupted {
+		t.Fatalf("activity = %q, want interrupted", doc.Activity)
+	}
+}

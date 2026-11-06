@@ -40,7 +40,11 @@ export type Activity =
   | "idle"
   // Live and set to record, but the download folder has no room. Outranks every
   // other activity: a Broadcast is being lost right now.
-  | "blocked_no_space";
+  | "blocked_no_space"
+  // A recording stopped while the stream was live (recorder restart, crash,
+  // record switch off). It resumes into the same VOD if recording restarts
+  // before resumeBy, and is finished then otherwise.
+  | "interrupted";
 
 // RecordingStats is the live progress of an active Session.
 export type RecordingStats = {
@@ -73,6 +77,9 @@ export type StreamerView = {
   addedAt: number | null; // unix seconds; when the streamer was first added
   lastLiveStart: number | null; // unix seconds
   lastLiveDurationSec: number | null;
+  // When an interrupted recording stops waiting to resume (unix seconds);
+  // null unless activity is "interrupted".
+  resumeBy: number | null;
 };
 
 export type ConnectionState =
@@ -318,6 +325,9 @@ export type UserConfig = {
   delete_part_files: boolean;
   split_size: string; // "" = no splitting
   split_duration: string; // "" = no splitting
+  // Longest gap a restarted recording bridges into the same VOD ("15m");
+  // "off" finishes an interrupted recording at once.
+  resume_window: string;
   archive_dir: string; // "" = keep VODs in the download folder
   // Read-only folders the VOD Archive also lists VODs from — an archive left on
   // a retired disk, a folder of imports. Never written to: no VOD is

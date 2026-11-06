@@ -714,3 +714,27 @@ func TestOpusSequenceStartIsAConfig(t *testing.T) {
 		t.Fatalf("stats %+v: want one pre-config drop and one duplicate config", st)
 	}
 }
+
+// A part's key read back from its file matches the one the sanitizer reported
+// while writing it, including from a file cut off mid-tag.
+func TestConfigKeyOfMatchesWriter(t *testing.T) {
+	src := stream(fileHeader(), scriptTag(), vCfgTag(0, 1, 0x1f), aCfgTag(0), gopSegment(0, 4000))
+	out, s, err := run(t, src)
+	if err != nil {
+		t.Fatalf("sanitize: %v", err)
+	}
+	want := s.ConfigKey()
+	if want == "" {
+		t.Fatal("sanitizer reported no key")
+	}
+	if got := ConfigKeyOf(bytes.NewReader(out.Bytes()), 1<<20); got != want {
+		t.Fatalf("ConfigKeyOf = %q, want %q", got, want)
+	}
+	cut := out.Bytes()[:out.Len()-7]
+	if got := ConfigKeyOf(bytes.NewReader(cut), 1<<20); got != want {
+		t.Fatalf("ConfigKeyOf truncated = %q, want %q", got, want)
+	}
+	if got := ConfigKeyOf(bytes.NewReader([]byte("not an flv")), 1<<20); got != "" {
+		t.Fatalf("ConfigKeyOf garbage = %q, want empty", got)
+	}
+}

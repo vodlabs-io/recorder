@@ -36,6 +36,7 @@ function streamer(over: Partial<StreamerView> = {}): StreamerView {
     addedAt: null,
     lastLiveStart: null,
     lastLiveDurationSec: null,
+    resumeBy: null,
     ...over,
   };
 }

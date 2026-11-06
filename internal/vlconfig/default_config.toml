@@ -55,6 +55,14 @@ split_duration = ""
 # each configuration produces its own VOD file.
 # Set false to record the raw stream bytes unmodified.
 sanitize_flv = true
+# Continue a recording interrupted while the stream was live — the recorder
+# restarting for an update, a reboot, a crash, or the record switch turned off
+# and back on — into the same VOD, if recording restarts within this long of
+# the last recorded byte (e.g. "15m"). The footage missed in between is a gap
+# in the VOD. A broadcast the VodLabs service saw end and start again in the
+# meantime is recorded as a new VOD. "off" finishes interrupted recordings at
+# once.
+resume_window = "15m"
 
 [processing]
 # Path to the processing queue database (processing.db), which tracks

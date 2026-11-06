@@ -25,6 +25,10 @@ const (
 	SessionInvalid    SessionState = "invalid"
 	SessionRestricted SessionState = "restricted"
 	SessionFailed     SessionState = "failed"
+	// SessionInterrupted is a session the recorder stopped while the stream
+	// was still live. It resumes into the same VOD if recording restarts
+	// within the resume window, and is finished as usual otherwise.
+	SessionInterrupted SessionState = "interrupted"
 )
 
 const MinPartBytes = 102400 // 100 KiB

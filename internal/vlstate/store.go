@@ -48,7 +48,11 @@ type docState struct {
 	moveRetrying  bool   // last move attempt failed and is backing off
 	// blockedNoSpace: live and recordable, but the download folder has no room.
 	blockedNoSpace bool
-	lastWritten    []byte // last JSON written to KV
+	// interruptedID is a session stopped while live and waiting to resume
+	// until resumeBy (Unix seconds); "" when none.
+	interruptedID string
+	resumeBy      int64
+	lastWritten   []byte // last JSON written to KV
 }
 
 // AddedTracker persists when each streamer was first tracked. The KV bucket
@@ -389,6 +393,46 @@ func (s *Store) SetMoveState(ctx context.Context, key streamer.StreamerKey, sess
 	s.flushLocked(ctx, kvKey, st)
 }
 
+// SetInterrupted marks sessionID as interrupted: stopped while its stream was
+// live, and waiting until resumeBy to resume. Doc-only, like the other activity
+// setters, so it never resurrects a purged row.
+func (s *Store) SetInterrupted(ctx context.Context, key streamer.StreamerKey, sessionID string, resumeBy time.Time) {
+	if !key.Valid() || sessionID == "" {
+		return
+	}
+	kvKey := DocKVKey(key)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.docs[kvKey]
+	if !ok {
+		return
+	}
+	st.interruptedID = sessionID
+	st.resumeBy = resumeBy.Unix()
+	st.visible = true
+	s.flushLocked(ctx, kvKey, st)
+}
+
+// ClearInterrupted ends sessionID's interrupted state: it resumed or was
+// finished.
+func (s *Store) ClearInterrupted(ctx context.Context, key streamer.StreamerKey, sessionID string) {
+	if !key.Valid() || sessionID == "" {
+		return
+	}
+	kvKey := DocKVKey(key)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, ok := s.docs[kvKey]
+	if !ok || st.interruptedID != sessionID {
+		return
+	}
+	st.interruptedID = ""
+	st.resumeBy = 0
+	s.flushLocked(ctx, kvKey, st)
+}
+
 // SetBlockedNoSpace marks a Streamer as live and recordable but not being
 // recorded because the download folder is out of space. Doc-only, like the other
 // activity setters, so it never resurrects a purged row.
@@ -430,6 +474,7 @@ func (s *Store) flushLocked(ctx context.Context, kvKey string, st *docState) {
 	if !st.visible {
 		return
 	}
+	st.doc.ResumeBy = 0
 	switch {
 	case st.blockedNoSpace:
 		st.doc.Activity = activityBlockedSpace
@@ -437,6 +482,10 @@ func (s *Store) flushLocked(ctx context.Context, kvKey string, st *docState) {
 	case st.sessionState != "":
 		st.doc.Activity = st.sessionState
 		st.doc.ActiveSessionID = st.sessionID
+	case st.interruptedID != "":
+		st.doc.Activity = activityInterrupted
+		st.doc.ActiveSessionID = st.interruptedID
+		st.doc.ResumeBy = st.resumeBy
 	case st.procSessionID != "":
 		st.doc.Activity = activityProcessing
 		st.doc.ActiveSessionID = st.procSessionID

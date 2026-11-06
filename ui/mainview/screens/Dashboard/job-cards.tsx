@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import {
   Accordion,
   AccordionContent,
@@ -7,25 +7,28 @@ import {
 } from "@/components/ui/accordion"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import RecordingTimer, { formatElapsed } from "@/components/recording-timer"
 import { STATUS_BADGE_CLASSES } from "@/components/ui/status-indicator"
 import { cn, formatBytes, formatSpeed } from "@/lib/utils"
 import { streamerInitials, streamerLabel } from "@shared/streamer-label"
 import { platformDisplayName } from "@/data/supported-platforms"
-import type { Activity, StreamerView } from "@/lib/daemon"
+import { getDaemonClient, type Activity, type StreamerView } from "@/lib/daemon"
+import { refPayload } from "@shared/daemon/subjects"
 import { appStore } from "@/state/app-state"
 import { activityIndicator } from "./status"
 import { ArrowDown, TriangleAlert } from "lucide-react"
 
 // hasCard is true for streamers whose session is actively writing data
-// (including the transient "lagging" state), post-processing a finished
-// recording (convert/concat), or moving the finished VOD to its destination.
-// These are the ones surfaced as cards.
+// (including the transient "lagging" state), interrupted and waiting to
+// resume, post-processing a finished recording (convert/concat), or moving the
+// finished VOD to its destination. These are the ones surfaced as cards.
 function hasCard(s: StreamerView): boolean {
   return (
     s.activity === "recording" ||
     s.activity === "lagging" ||
+    s.activity === "interrupted" ||
     s.activity === "processing" ||
     s.activity === "moving" ||
     s.activity === "moving_retrying"
@@ -38,11 +41,12 @@ function hasCard(s: StreamerView): boolean {
 // order (Array.sort is stable).
 const CARD_PRIORITY: Record<string, number> = {
   lagging: 0,
-  moving_retrying: 1,
-  paused: 2,
-  recording: 3,
-  processing: 4,
-  moving: 5,
+  interrupted: 1,
+  moving_retrying: 2,
+  paused: 3,
+  recording: 4,
+  processing: 5,
+  moving: 6,
 }
 
 // isWriting marks the states whose live stats are current; processing/moving
@@ -100,6 +104,51 @@ function RecordingTime({ id, frozen }: { id: string; frozen?: boolean }) {
       ) : (
         "—"
       )}
+    </div>
+  )
+}
+
+// formatCountdown renders seconds as M:SS, or H:MM:SS from an hour up.
+function formatCountdown(totalSeconds: number): string {
+  if (totalSeconds >= 3600) return formatElapsed(totalSeconds)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`
+}
+
+// ResumeLine stands in for the stats line on an interrupted recording: how long
+// it waits for recording to restart before it is finished as it stands, and a
+// way to finish it now.
+function ResumeLine({ s }: { s: StreamerView }) {
+  const [now, setNow] = useState(() => Date.now() / 1000)
+  const [finishing, setFinishing] = useState(false)
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now() / 1000), 1000)
+    return () => clearInterval(interval)
+  }, [])
+  const left = s.resumeBy != null ? Math.max(0, Math.floor(s.resumeBy - now)) : null
+  return (
+    <div className="mt-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+      <span
+        className="truncate tabular-nums"
+        title="Recording that restarts in time continues in the same VOD. After that, the VOD is finished as it stands."
+      >
+        {left != null ? `Resumes within ${formatCountdown(left)}` : "Waiting to resume"}
+      </span>
+      <Button
+        variant="outline"
+        size="xs"
+        disabled={finishing}
+        title="Finish this VOD now instead of waiting for recording to restart"
+        onClick={() => {
+          setFinishing(true)
+          getDaemonClient()
+            .finishRecording(refPayload(s))
+            .catch(() => setFinishing(false))
+        }}
+      >
+        Finish
+      </Button>
     </div>
   )
 }
@@ -173,6 +222,7 @@ function JobCard({
   const moving = s.activity === "moving"
   const movingRetry = s.activity === "moving_retrying"
   const blockedNoSpace = s.activity === "blocked_no_space"
+  const interrupted = s.activity === "interrupted"
   const label = streamerLabel(s)
   return (
     <Card className="gap-0 p-3">
@@ -210,7 +260,7 @@ function JobCard({
       <div className="mt-2.5 flex items-center justify-between">
         <RecordingTime
           id={`${s.platform}/${s.username}`}
-          frozen={processing || moving || movingRetry}
+          frozen={processing || moving || movingRetry || interrupted}
         />
         {recording && (
           // Standard badge; the pulsing red dot is the app's recording motif —
@@ -239,12 +289,19 @@ function JobCard({
             No disk space
           </ActivityBadge>
         )}
+        {interrupted && (
+          <ActivityBadge activity="interrupted">Interrupted</ActivityBadge>
+        )}
       </div>
 
-      <StatsLine
-        id={`${s.platform}/${s.username}`}
-        lastLiveStart={s.lastLiveStart}
-      />
+      {interrupted ? (
+        <ResumeLine s={s} />
+      ) : (
+        <StatsLine
+          id={`${s.platform}/${s.username}`}
+          lastLiveStart={s.lastLiveStart}
+        />
+      )}
     </Card>
   )
 }
@@ -278,6 +335,9 @@ export function JobCards({
     .filter(isWriting)
     .map((s) => `${s.platform}/${s.username}`)
   const laggingCount = recording.filter((s) => s.activity === "lagging").length
+  const interruptedCount = recording.filter(
+    (s) => s.activity === "interrupted",
+  ).length
   const retryingCount = recording.filter(
     (s) => s.activity === "moving_retrying",
   ).length
@@ -303,13 +363,16 @@ export function JobCards({
             {writingIds.length > 0 && <TotalSpeed ids={writingIds} />}
             {/* Anomaly alert: only rendered when something needs attention,
                 so its mere presence is the signal. */}
-            {(laggingCount > 0 || retryingCount > 0) && (
+            {(laggingCount > 0 || interruptedCount > 0 || retryingCount > 0) && (
               <span className="flex items-center gap-1 text-xs font-medium text-amber-500">
                 <TriangleAlert className="size-3.5" />
-                {laggingCount > 0 &&
-                  `${laggingCount} lagging`}
-                {laggingCount > 0 && retryingCount > 0 && " · "}
-                {retryingCount > 0 && `${retryingCount} move retrying`}
+                {[
+                  laggingCount > 0 && `${laggingCount} lagging`,
+                  interruptedCount > 0 && `${interruptedCount} interrupted`,
+                  retryingCount > 0 && `${retryingCount} move retrying`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </span>
             )}
           </span>

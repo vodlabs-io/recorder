@@ -137,15 +137,16 @@ func (w *worker) Run(ctx context.Context) error {
 				}
 			}
 		case sessionCancelled:
-			w.logger.Info("Session cancelled")
+			w.interrupted = w.resumable()
+			w.logger.Info("Session cancelled", "reason", w.stopReason(), "resumable", w.interrupted)
 			if w.output.Stats.TotalBytes > 0 {
-				w.logFinalStats(sessionStart)
+				w.logFinalStats()
 			}
 			return nil
 		case streamerOffline:
 			if w.output.Stats.TotalBytes > 0 {
 				w.logger.Info("Stream has ended")
-				w.logFinalStats(sessionStart)
+				w.logFinalStats()
 				return nil
 			} else {
 				return fmt.Errorf("streamer is offline")
@@ -228,6 +229,15 @@ func (w *worker) Run(ctx context.Context) error {
 			wLogger := w.logger.With("writer", w.writer.Name())
 			recordCtx, cancelRecord := context.WithCancel(ctx)
 			w.output.CurrentPart.StartTime = time.Now()
+			// Written before the part records, so a recorder that dies mid-part
+			// leaves a checkpoint naming it.
+			w.saveCheckpoint(&currentPart{
+				Stem:              w.curStem,
+				Path:              w.curPart.Path,
+				Index:             w.output.PartIndex,
+				Start:             w.output.CurrentPart.StartTime,
+				AfterConfigChange: w.afterConfigChange,
+			})
 			// One channel per part, so no increment outlives the part that
 			// earned it.
 			progressCh := make(chan int64, progressBufSize)
@@ -292,6 +302,8 @@ func (w *worker) Run(ctx context.Context) error {
 			if splitKey != nil {
 				w.closeGroup(*splitKey, false)
 			}
+			w.afterConfigChange = configChange
+			w.saveCheckpoint(nil)
 			// After a split or config change the stream is still live: loop
 			// straight back into recording without the lag delay.
 			if (splitKey != nil || configChange) && ctx.Err() == nil {

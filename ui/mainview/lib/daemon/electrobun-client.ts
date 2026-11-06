@@ -190,6 +190,7 @@ const electrobunClient: DaemonClient = {
   disableAllStreamers: () => req.disableAllStreamers({}),
   enableStreamer: (ref) => req.enableStreamer(ref),
   enableAllStreamers: () => req.enableAllStreamers({}),
+  finishRecording: (ref) => req.finishRecording(ref),
   checkStreamer: (ref) => req.checkStreamer(ref),
   setStreamerOptions: (params) => req.setStreamerOptions(params),
 

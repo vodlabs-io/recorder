@@ -28,6 +28,7 @@ func Defaults() map[string]any {
 			"split_size":      "",
 			"split_duration":  "",
 			"sanitize_flv":    true,
+			"resume_window":   DefaultResumeWindow,
 		},
 		"processing": map[string]any{
 			"logger":            map[string]any{"file_name": "processing.log"},
