@@ -71,6 +71,8 @@ type Config struct {
 	SegmentRename *stream.SegmentRename
 	// Provenance is written as a playlist comment; see provenance.Record.
 	Provenance string
+	// Tail skips segments the Session already recorded; see hlsingest.Config.
+	Tail *hlsingest.Tail
 }
 
 func Record(
@@ -112,6 +114,7 @@ func Record(
 		RefreshURL:         cfg.RefreshURL,
 		MouflonKeys:        cfg.MouflonKeys,
 		SegmentRename:      cfg.SegmentRename,
+		Tail:               cfg.Tail,
 	}, client, logger, sink)
 }
 
