@@ -163,6 +163,20 @@ func NewLog(dir, platform, username, sessionID string) *Log {
 	}
 }
 
+// ResumeLog continues the metadata log of a session already recording into
+// dir, keeping the readings its sidecar holds. A missing or unreadable sidecar
+// starts afresh, as NewLog does.
+func ResumeLog(dir, platform, username, sessionID string) *Log {
+	l := NewLog(dir, platform, username, sessionID)
+	d, err := Read(dir)
+	if err != nil || d.SessionID != sessionID || len(d.Observations) == 0 {
+		return l
+	}
+	l.doc.Observations = d.Observations
+	l.last = d.Observations[len(d.Observations)-1].LiveMetadata
+	return l
+}
+
 // Observe records a reading and returns whether it was new. Repeats of the
 // reading already held are dropped, so callers are free to offer every status
 // update they receive — most of a session's updates say nothing new.

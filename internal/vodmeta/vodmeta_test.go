@@ -138,3 +138,29 @@ func TestObservationJSONIsFlat(t *testing.T) {
 		}
 	}
 }
+
+func TestResumeLogKeepsReadings(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLog(dir, "twitch", "alice", "sess1")
+	t0 := time.Now().Add(-time.Hour)
+	if _, err := l.Observe(streamer.LiveMetadata{Title: "first"}, t0); err != nil {
+		t.Fatal(err)
+	}
+
+	r := ResumeLog(dir, "twitch", "alice", "sess1")
+	if recorded, _ := r.Observe(streamer.LiveMetadata{Title: "first"}, time.Now()); recorded {
+		t.Fatal("a repeat of the last reading before the interruption is not new")
+	}
+	if _, err := r.Observe(streamer.LiveMetadata{Title: "second"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	d, err := Read(dir)
+	if err != nil || len(d.Observations) != 2 || d.Observations[0].Title != "first" {
+		t.Fatalf("sidecar after resume: %+v, %v", d.Observations, err)
+	}
+
+	// Another session's sidecar is not continued.
+	if got := ResumeLog(dir, "twitch", "alice", "sess2").Snapshot(); len(got.Observations) != 0 {
+		t.Fatalf("continued another session's readings: %+v", got.Observations)
+	}
+}
