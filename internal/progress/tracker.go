@@ -27,9 +27,16 @@ type Tracker struct {
 
 // NewTracker creates a new progress tracker
 func NewTracker() *Tracker {
-	now := time.Now()
+	return NewTrackerFrom(time.Now(), 0)
+}
+
+// NewTrackerFrom creates a tracker for a recording that started at start and
+// has already recorded totalBytes, so a resumed session keeps its clock and
+// its overall average speed.
+func NewTrackerFrom(start time.Time, totalBytes int64) *Tracker {
 	return &Tracker{
-		startTime:    now,
+		startTime:    start,
+		totalBytes:   totalBytes,
 		maxSamples:   10, // Keep 10 samples for 5-second sliding window at 0.5s intervals
 		speedSamples: make([]speedSample, 0, 10),
 	}
