@@ -450,7 +450,7 @@ export async function refreshPlatformLogin(
           await view.navigate(login.refresh_url || login.url, REFRESH_NAV_TIMEOUT_MS);
         } catch (err) {
           // Offline, or the platform is down. Not a login failure.
-          console.error(`login refresh (${platform}): page did not load`, err);
+          console.warn(`login refresh (${platform}): page did not load`, err);
           return "failed";
         }
 

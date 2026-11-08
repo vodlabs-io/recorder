@@ -72,9 +72,17 @@ function followAnswer() {
     // Session tracking would keep reporting after the user turns reports off.
     integrations: (defaults) => defaults.filter((i) => i.name !== "BrowserSession"),
     initialScope: { tags: { component: web ? "ui-web" : "ui-desktop" } },
-    beforeSend: (ev: ErrorEvent) => (state?.enabled === true ? scrubEvent(ev) : null),
+    beforeSend: (ev: ErrorEvent) =>
+      state?.enabled === true && !fromInjectedScript(ev) ? scrubEvent(ev) : null,
     beforeBreadcrumb: (b) => scrubBreadcrumb(b),
   })
+}
+
+// fromInjectedScript reports an error thrown only by script with no source URL,
+// which the webview itself injects (WebView2 on Windows): none of it is the UI's.
+export function fromInjectedScript(ev: ErrorEvent): boolean {
+  const frames = ev.exception?.values?.flatMap((v) => v.stacktrace?.frames ?? []) ?? []
+  return frames.length > 0 && frames.every((f) => !f.filename || f.filename === "<anonymous>")
 }
 
 // buildInfo names the build the UI belongs to: the desktop app's version, or

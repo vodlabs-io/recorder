@@ -83,6 +83,9 @@ func (s *Service) queuePendingJobs(ctx context.Context) {
 
 	for vod := range s.PendingRecordings {
 		if err := s.enqueueJob(ctx, vod); err != nil {
+			if ctx.Err() != nil {
+				continue // shutting down
+			}
 			s.logger.Error("Failed to enqueue job", "error", err)
 		}
 		select {
