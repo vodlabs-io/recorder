@@ -465,13 +465,20 @@ const streamRefreshWait = 10 * time.Second
 // is what lets an Origin whose grant expires mid-recording carry on through the
 // swap instead of ending the part and leaving a hole in it.
 func (w *worker) refreshStreamURL(ctx context.Context) (string, error) {
+	before := w.str.Load()
 	w.requestFreshStreams()
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case <-w.notifyCh:
-	case <-time.After(streamRefreshWait):
-		return "", errors.New("no fresh stream URLs arrived in time")
+	timeout := time.After(streamRefreshWait)
+	// A notification can predate the request: nothing reads notifyCh while a
+	// part records, so an earlier update leaves one behind. Only a new record
+	// answers this request.
+	for w.str.Load() == before {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-w.notifyCh:
+		case <-timeout:
+			return "", errors.New("no fresh stream URLs arrived in time")
+		}
 	}
 	str := w.str.Load()
 	if str == nil || str.Status != streamer.StatusLive {
