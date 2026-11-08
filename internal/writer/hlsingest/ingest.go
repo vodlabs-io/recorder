@@ -377,20 +377,28 @@ func segmentFetchBudget(window, segment time.Duration) time.Duration {
 	return max(time.Duration(float64(segment)*segmentFetchShare), minSegmentFetchBudget)
 }
 
+// refreshRetryInterval is how long to wait before retrying a failed refresh: a
+// quarter of the life the URL has left once a refresh is due. A refresh blocks
+// the poll while it waits for an answer, so retrying any faster would lose
+// segments to the retries.
+func (o *ingest) refreshRetryInterval() time.Duration {
+	return max((o.cfg.URLTTL-o.refreshInterval())/4, o.pollInterval())
+}
+
 // refreshPlaylistURL re-resolves the Origin's playlist URL, returning the URL
 // to poll from now on and when to ask again. A refresh that fails is not fatal
 // — the current URL may have life left in it — so it keeps the old URL and
-// comes back on the next poll.
+// tries again after refreshRetryInterval.
 func (o *ingest) refreshPlaylistURL(ctx context.Context, current string) (string, time.Duration) {
 	next, err := o.cfg.RefreshURL(ctx)
 	if err != nil || next == "" {
 		o.logger.Warn("Playlist URL refresh failed, keeping the current one", "error", err)
-		return current, o.pollInterval()
+		return current, o.refreshRetryInterval()
 	}
 	resolved, err := o.resolveMediaPlaylist(next)
 	if err != nil {
 		o.logger.Warn("Refreshed playlist URL did not resolve", "error", err)
-		return current, o.pollInterval()
+		return current, o.refreshRetryInterval()
 	}
 	o.logger.Debug("Refreshed the Origin playlist URL")
 	return resolved, o.refreshInterval()
