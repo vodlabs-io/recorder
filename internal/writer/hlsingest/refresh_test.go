@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -225,5 +226,31 @@ func TestRefreshFailureKeepsTheCurrentURL(t *testing.T) {
 
 	if got := len(sink.bodies()); got < 10 {
 		t.Errorf("recorded %d segments, want the ingest to have carried on with the URL it had", got)
+	}
+}
+
+// TestFailedRefreshRetriesAtAMeasuredPace pins that failed refreshes do not
+// take over the poll: each one can block it for seconds, and on an Origin with
+// a short window that loses segments.
+func TestFailedRefreshRetriesAtAMeasuredPace(t *testing.T) {
+	o := newGrantOrigin(t, 20*time.Millisecond, 10*time.Second, 4)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	var refreshes atomic.Int32
+	_ = Run(ctx, Config{
+		URL:          o.mint(),
+		PollInterval: 10 * time.Millisecond,
+		Retries:      2,
+		// Due at 600 ms, then retried every 100 ms: about four in the 400 ms left.
+		URLTTL: time.Second,
+		RefreshURL: func(context.Context) (string, error) {
+			refreshes.Add(1)
+			return "", fmt.Errorf("cloud is unreachable")
+		},
+	}, o.srv.Client(), slog.New(slog.DiscardHandler), &capture{})
+
+	if got := refreshes.Load(); got < 2 || got > 8 {
+		t.Errorf("refresh tried %d times, want about four", got)
 	}
 }
