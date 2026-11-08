@@ -70,6 +70,26 @@ func Client(base *http.Client, m *Mint) *http.Client {
 	return &c
 }
 
+// Renew makes c, a client Client built, mint from m from now on. The set it
+// holds stays in use until it ages. A re-resolved stream can come with a new
+// mint when the one it started on has a shorter life than the stream. It does
+// nothing when c does not mint, or when m is nil, unusable or for another site.
+func Renew(c *http.Client, m *Mint) {
+	if c == nil || m == nil {
+		return
+	}
+	t, ok := c.Transport.(*transport)
+	if !ok {
+		return
+	}
+	if site, err := m.site(); err != nil || site != t.site {
+		return
+	}
+	t.minter.mu.Lock()
+	defer t.minter.mu.Unlock()
+	t.minter.mint = m
+}
+
 // site returns the domain the minted cookies may be sent to: the mint host's
 // parent (tango.me for gateway.tango.me), or the host itself when it has no
 // subdomain to drop.

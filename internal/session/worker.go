@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/vodlabs-io/recorder/internal/cookiemint"
 	"github.com/vodlabs-io/recorder/internal/flvfix"
 	"github.com/vodlabs-io/recorder/internal/platformauth"
 	"github.com/vodlabs-io/recorder/internal/progress"
@@ -481,6 +482,7 @@ func (w *worker) refreshStreamURL(ctx context.Context) (string, error) {
 		return "", errors.New("no stream variant to record")
 	}
 	w.selectedStream = selected
+	cookiemint.Renew(w.selectedHTTPClient, str.CookieMint)
 	return selected.URL, nil
 }
 
