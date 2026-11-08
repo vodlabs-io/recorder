@@ -132,6 +132,53 @@ func TestClientIgnoresUnusableMints(t *testing.T) {
 	}
 }
 
+// TestRenewMintsFromTheNewDescription pins that a running client takes up a
+// re-resolved stream's mint when its current set ages, and keeps that set until
+// then.
+func TestRenewMintsFromTheNewDescription(t *testing.T) {
+	origin := &fakeOrigin{cookies: map[string]string{}}
+	old := testMint()
+	old.Headers = map[string]string{"Cookie": "VT=refused"}
+	c := Client(&http.Client{Transport: origin}, old)
+
+	if _, err := c.Get("https://cinema.example.me/a.m3u8"); err == nil {
+		t.Fatal("a refused mint served the request")
+	}
+	Renew(c, testMint())
+	get(t, c, "https://cinema.example.me/a.m3u8")
+	if got := origin.cookies["cinema.example.me"]; got != "tt=abc; tte=1791410552; ttu=u1" {
+		t.Errorf("Cookie = %q", got)
+	}
+
+	before := origin.mints.Load()
+	Renew(c, testMint())
+	get(t, c, "https://cinema.example.me/a.m3u8")
+	if n := origin.mints.Load(); n != before {
+		t.Errorf("minted %d more times, want the fresh set kept across a renewal", n-before)
+	}
+}
+
+func TestRenewIgnoresWhatItCannotUse(t *testing.T) {
+	origin := &fakeOrigin{cookies: map[string]string{}}
+	c := Client(&http.Client{Transport: origin}, testMint())
+	want := c.Transport.(*transport).minter.mint
+
+	otherSite := testMint()
+	otherSite.URL = "https://gateway.elsewhere.test/token"
+	unusable := testMint()
+	unusable.TTL = 0
+	for _, m := range []*Mint{nil, otherSite, unusable} {
+		Renew(c, m)
+		if got := c.Transport.(*transport).minter.mint; got != want {
+			t.Errorf("Renew(%+v) replaced the mint", m)
+		}
+	}
+
+	// A client that does not mint, and no client at all.
+	Renew(&http.Client{}, testMint())
+	Renew(nil, testMint())
+}
+
 func TestRenderRejectsMissingFields(t *testing.T) {
 	if _, err := render([]byte(`{"token":"abc"}`), map[string]string{"tt": "token", "tte": "expireAt"}); err == nil {
 		t.Error("a reply missing a field rendered")
