@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -49,7 +52,7 @@ func (c *Client) connect() error {
 			}
 		}),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-			log.Error("NATS error", "error", err)
+			log.Log(context.Background(), natsErrorLevel(err), "NATS error", "error", err)
 			if errors.Is(err, nats.ErrAuthRevoked) {
 				onRevoked()
 			}
@@ -83,12 +86,23 @@ func (c *Client) onDisconnect(nc *nats.Conn, err error) {
 	}
 	cause := ""
 	if err != nil {
-		c.logger.With("func", "connect").Error("NATS disconnected", "error", err)
+		// nats.go reconnects on its own, and the outage is published below.
+		c.logger.With("func", "connect").Warn("NATS disconnected", "error", err)
 		cause = err.Error()
 	}
 	// Nothing is checked while this is down, so say so: an outage is
 	// otherwise indistinguishable from every streamer being offline.
 	c.publishServiceState(context.Background(), false, cause)
+}
+
+// natsErrorLevel is Warn for a dropped socket, which nats.go recovers from by
+// reconnecting, and Error for anything else.
+func natsErrorLevel(err error) slog.Level {
+	var netErr net.Error
+	if errors.As(err, &netErr) || errors.Is(err, io.EOF) {
+		return slog.LevelWarn
+	}
+	return slog.LevelError
 }
 
 // closeConnection closes the NATS connection

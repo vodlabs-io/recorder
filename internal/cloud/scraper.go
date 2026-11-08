@@ -380,7 +380,8 @@ func (h *scrapeHandler) fetchDirect(msg *nats.Msg, scrapeReq scrapeRequest, pars
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		log.Error("Request failed", "error", err)
+		// This network or the platform failed it; the backend gets the reason.
+		log.Warn("Request failed", "error", err)
 		h.respondWithError(msg, fmt.Sprintf("request failed: %v", err))
 		return
 	}
