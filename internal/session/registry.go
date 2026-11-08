@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"sync"
@@ -262,6 +263,20 @@ func (r *Registry) dispatch(ctx context.Context, str streamer.StreamerState) err
 	return nil
 }
 
+// sessionFailureLevel is Warn for a session the streamer's own status ended (a
+// private show, a banned account), which is an outcome rather than a fault.
+func sessionFailureLevel(err error, status streamer.LiveStatus) slog.Level {
+	if errors.Is(err, vlerror.ErrWriteFailed) {
+		return slog.LevelError
+	}
+	switch status {
+	case streamer.StatusRestricted, streamer.StatusInvalid,
+		streamer.StatusUnavailable, streamer.StatusDefunct:
+		return slog.LevelWarn
+	}
+	return slog.LevelError
+}
+
 func (r *Registry) runWorker(ctx context.Context, worker *worker) {
 	err := worker.Run(ctx)
 
@@ -295,7 +310,7 @@ func (r *Registry) runWorker(ctx context.Context, worker *worker) {
 			r.store.SetSessionState(bgCtx, worker.strKey, worker.SessionID, recording.SessionCancelled)
 		}
 	case err != nil:
-		log.Error("Session failed", "error", err)
+		log.Log(bgCtx, sessionFailureLevel(err, strStatus), "Session failed", "error", err)
 		if errors.Is(err, vlerror.ErrWriteFailed) {
 			// Likely disk full or permission error. Signal the daemon to shut down.
 			select {
