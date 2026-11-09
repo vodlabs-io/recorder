@@ -569,6 +569,8 @@ func (c *Client) handleFetchResult(ctx context.Context, str streamer.StreamerSta
 		default:
 			// Queue full — dispatch the restricted state rather than block.
 		}
+	} else {
+		c.scheduleRestrictedRecheck(ctx, str)
 	}
 	c.dispatchStreamer(ctx, str)
 }

@@ -79,7 +79,8 @@ type Client struct {
 	statusReqCh     chan streamer.StreamerRef   // Queue for outgoing streamer status requests
 	StatusReqPriCh  chan streamer.StreamerRef   // High-priority queue for streamer status requests
 	authStatusReqCh chan streamer.StreamerRef   // Queue for authenticated re-checks of restricted streamers we hold a login for
-	sweep           *loginSweep                 // Schedule for platforms this daemon must poll itself (see status_sweep.go)
+	restricted      restrictedRechecks          // Rooms waiting on a further plain re-check
+	sweep           *loginSweep                 // Schedule for platforms this daemon must poll itself(see status_sweep.go)
 	StreamReqCh     chan streamer.StreamerRef   // Queue for mid-recording stream re-signs (paced apart from status checks)
 	limiterMu       sync.Mutex                  // Guards limiters
 	limiters        map[string]*platformLimiter // Per-platform outgoing request pacing, created on first use
