@@ -298,17 +298,6 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
 
-      # build:stable = `electrobun prepare && vite build && electrobun build
-      # --env=stable`; prepare projects the SDK Vite resolves electrobun/view
-      # from. Bun runs the script cross-platform; Electrobun builds for this
-      # runner's OS/arch and emits artifacts/<os>-<arch>-* (installer) and
-      # artifacts/stable-<os>-<arch>-* (.app.tar.zst, update.json).
-      - name: Build desktop app
-        if: runner.os != 'macOS'
-        run: bun run build:stable
-        env:
-          ELECTROBUN_APP_VERSION: ${{ steps.version.outputs.value }}
-
       # Stapling fetches the ticket from Apple's ticket service, which
       # advertises HTTP/3. QUIC connections from GitHub's macOS runners drop
       # (actions/runner-images#14924), so UDP 443 is refused for this job and
@@ -319,9 +308,15 @@ jobs:
           echo "block return out quick proto udp from any to any port 443" | sudo pfctl -f -
           sudo pfctl -E
 
-      # A build that still fails to staple is retried.
+      # build:stable = `electrobun prepare && vite build && electrobun build
+      # --env=stable`; prepare projects the SDK Vite resolves electrobun/view
+      # from. Bun runs the script cross-platform; Electrobun builds for this
+      # runner's OS/arch and emits artifacts/<os>-<arch>-* (installer) and
+      # artifacts/stable-<os>-<arch>-* (.app.tar.zst, update.json).
+      # Retried because the build downloads its toolchain from GitHub releases
+      # and staples through Apple's ticket service, and either can fail briefly.
       - name: Build desktop app
-        if: runner.os == 'macOS'
+        shell: bash
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
