@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/vodlabs-io/recorder/internal/agora"
 	"github.com/vodlabs-io/recorder/internal/cookiemint"
 	"github.com/vodlabs-io/recorder/internal/flvfix"
 	"github.com/vodlabs-io/recorder/internal/platformauth"
@@ -106,6 +107,16 @@ type worker struct {
 	// endedAt is when a session finished from its checkpoint last recorded;
 	// zero for a session that runs to its end.
 	endedAt time.Time
+	// agoraCodec, once agoraCodecSet, is the codec (as agora names it) the
+	// session joins an Agora channel in, whatever the stream URL says: the one
+	// its broadcaster was found to send, or its writer's.
+	agoraCodec    string
+	agoraCodecSet bool
+	// codecMismatched marks a last part that ended on a codec mismatch.
+	codecMismatched bool
+	// restart asks for a fresh check once the session has ended, so a new
+	// session takes over the broadcast this one could not record.
+	restart bool
 }
 
 // stopWith cancels the session for reason.
@@ -194,6 +205,13 @@ func (w *worker) restore(cp *checkpoint) {
 	w.output.WriterName = cp.Writer
 	if wr, ok := writer.Get(cp.Writer); ok {
 		w.writer = wr
+	}
+	// The parts so far fix the format, and with it the codec to join in.
+	switch cp.Writer {
+	case "webmwriter":
+		w.agoraCodec, w.agoraCodecSet = agora.CodecVP8, true
+	case "flvwriter":
+		w.agoraCodec, w.agoraCodecSet = "", true
 	}
 	w.output.Variant = cp.Variant
 	w.output.Parts = append([]recording.Part(nil), cp.Parts...)
@@ -484,7 +502,7 @@ func (w *worker) refreshStreamURL(ctx context.Context) (string, error) {
 	if str == nil || str.Status != streamer.StatusLive {
 		return "", errors.New("streamer is no longer live")
 	}
-	selected := str.Streams.Select(w.config.Variant)
+	selected := w.inSessionCodec(str.Streams.Select(w.config.Variant))
 	if selected == nil {
 		return "", errors.New("no stream variant to record")
 	}
