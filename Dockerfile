@@ -18,7 +18,7 @@ COPY . .
 RUN bun run web:build
 
 # Cross-compiles natively on the build platform; the binaries are pure Go.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-trixie@sha256:c65ecfe613b539ac74c62a4c3b2c27e8f8a6076384c8f27e8a3c0f3be17cc385 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-trixie@sha256:af1bfc2614ebb1dbd31af514b78740fd678850e76498762b425ecee4c5c6ea80 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=docker
@@ -58,7 +58,7 @@ RUN mkdir -p /rootfs/config /rootfs/recordings /rootfs/cache \
 # The embedded ffmpeg is dynamically linked against glibc 2.38 or later, and
 # on amd64 against libstdc++ too; distroless cc-debian13 has both, plus CA
 # certificates and tzdata, and no shell or package manager.
-FROM gcr.io/distroless/cc-debian13@sha256:58e12be899275afaa05f1b03051ab19037ed7f252528e57a3a9ad7e220a62578
+FROM gcr.io/distroless/cc-debian13@sha256:e1f5543d45a2cd7c02a5b43dda5f0ff30729b4832113759d01ed39b0b152cddb
 
 ARG VERSION=docker
 ARG COMMIT=unknown
