@@ -65,10 +65,10 @@ func (m *superliveMinter) mint(ctx context.Context, client *http.Client, ch Chan
 			ch.Room = room
 		}
 	}
+	if reason := withheld(d, reason); reason != "" {
+		return Channel{}, &RefusedError{Platform: "superlive", Reason: reason}
+	}
 	if d.Token == "" || d.AgoraID <= 0 {
-		if reason != "" {
-			return Channel{}, fmt.Errorf("superlive refused the broadcast: %s", reason)
-		}
 		return Channel{}, errors.New("superlive returned no token")
 	}
 	ch.Token, ch.UID = d.Token, uint32(d.AgoraID)
@@ -78,10 +78,64 @@ func (m *superliveMinter) mint(ctx context.Context, client *http.Client, ch Chan
 	return ch, nil
 }
 
+// superliveWatchInterval is how often a joined Superlive broadcast is re-read.
+const superliveWatchInterval = 30 * time.Second
+
+// watch re-reads the broadcast ch names until Superlive stops offering it to
+// this device: ErrChannelEnded once it has finished, a RefusedError once it is
+// withheld (a private show). A failed read is retried at the next interval.
+func (m *superliveMinter) watch(ctx context.Context, client *http.Client, ch Channel, every time.Duration) error {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+		device, err := m.deviceID(ctx, client)
+		if err != nil {
+			continue
+		}
+		d, reason, err := m.retrieve(ctx, client, device, ch.Room)
+		if err != nil {
+			continue
+		}
+		switch reason := withheld(d, reason); reason {
+		case "":
+		case "finished":
+			return ErrChannelEnded
+		default:
+			return &RefusedError{Platform: "superlive", Reason: reason}
+		}
+	}
+}
+
+// withheld returns why Superlive does not offer d to this device, or empty
+// when it does.
+func withheld(d superliveStream, reason string) string {
+	if d.FinishedAt != nil {
+		return "finished"
+	}
+	return reason
+}
+
+// watcher returns a function that blocks while ch's platform still offers its
+// broadcast, or nil for a platform this package cannot ask.
+func watcher(client *http.Client, ch Channel) func(context.Context) error {
+	if ch.Mint != "superlive" || ch.Room == "" {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		return superlive.watch(ctx, client, ch, superliveWatchInterval)
+	}
+}
+
 type superliveStream struct {
-	ChannelID string `json:"channel_id"`
-	Token     string `json:"agora_channel_token"`
-	AgoraID   int64  `json:"agora_id"`
+	ChannelID  string `json:"channel_id"`
+	Token      string `json:"agora_channel_token"`
+	AgoraID    int64  `json:"agora_id"`
+	FinishedAt *int64 `json:"finished_at"`
 }
 
 // retrieve reads a broadcast's join credentials as device sees them, with the

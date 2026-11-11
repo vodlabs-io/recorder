@@ -31,6 +31,34 @@ const pingInterval = 3 * time.Second
 // broadcast is over, or at least this stream of it.
 var ErrChannelEnded = errors.New("agora: broadcaster left the channel")
 
+// CodecError ends a session whose broadcaster sends video in the other codec
+// than the one joined with. Codec is the one to rejoin with: CodecVP8, or empty
+// for H.264.
+type CodecError struct {
+	Codec string
+}
+
+func (e *CodecError) Error() string {
+	if e.Codec == CodecVP8 {
+		return "agora: the broadcaster sends VP8 video"
+	}
+	return "agora: the broadcaster sends H.264 video"
+}
+
+// RefusedError is the platform's answer that a broadcast is not open to this
+// viewer: it has finished, or gone private.
+type RefusedError struct {
+	Platform string
+	Reason   string
+}
+
+func (e *RefusedError) Error() string {
+	if e.Reason == "" {
+		return e.Platform + " withholds the broadcast"
+	}
+	return e.Platform + " refused the broadcast: " + e.Reason
+}
+
 // gatewayError is a refusal the gateway sent in reply to a request or as a
 // notification, with the gateway's own code.
 type gatewayError struct {

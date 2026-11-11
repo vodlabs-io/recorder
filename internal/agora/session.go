@@ -45,10 +45,16 @@ func Open(ctx context.Context, u string, client *http.Client, logger *slog.Logge
 	}
 	if ch.Mint != "" {
 		minted, err := mint(ctx, client, ch)
-		if err != nil {
+		var refused *RefusedError
+		switch {
+		case errors.As(err, &refused):
+			// The shared token still joins the channel, but only to what the
+			// platform just refused: a broadcast's leftovers or a private show.
+			return nil, err
+		case err != nil:
 			logger.Warn("Agora token mint failed, joining with the shared token",
 				"mint", ch.Mint, "error", err)
-		} else {
+		default:
 			ch = minted
 		}
 	}
@@ -60,6 +66,7 @@ func Open(ctx context.Context, u string, client *http.Client, logger *slog.Logge
 		logger: logger.With("agora_channel", ch.Name),
 		cancel: cancel,
 		out:    pw,
+		watch:  watcher(client, ch),
 	}
 	if err := s.connect(ctx, client); err != nil {
 		s.teardown()
@@ -94,6 +101,10 @@ type session struct {
 
 	// publisher is the uid whose streams are being received.
 	publisher atomic.Uint32
+
+	// watch, when the platform can say, blocks until it stops offering the
+	// broadcast and returns why; nil otherwise.
+	watch func(context.Context) error
 
 	endOnce sync.Once
 }
@@ -205,6 +216,12 @@ func (s *session) joinMessage(sid string, grant apGrant, offer localParams) map[
 // the session ends.
 func (s *session) supervise(ctx context.Context) {
 	go s.sig.keepalive(ctx)
+	withdrawn := make(chan error, 1)
+	if s.watch != nil {
+		// A channel can carry media after its broadcast stopped being public,
+		// so the platform's word ends the session, not the media.
+		go func() { withdrawn <- s.watch(ctx) }()
+	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	for {
@@ -212,6 +229,12 @@ func (s *session) supervise(ctx context.Context) {
 		case <-ctx.Done():
 			s.finish(ctx.Err())
 			return
+		case err := <-withdrawn:
+			if ctx.Err() == nil {
+				s.logger.Info("Platform no longer offers the broadcast", "reason", err)
+				s.finish(err)
+				return
+			}
 		case <-s.sig.done:
 			s.finish(fmt.Errorf("agora gateway closed: %w", s.sig.err))
 			return
@@ -239,12 +262,22 @@ func (s *session) onNotification(n notification) error {
 		UID       uint32 `json:"uid"`
 		ErrorCode int    `json:"error_code"`
 		Reason    int    `json:"reason"`
+		PT        *int   `json:"pt"`
 	}
 	_ = json.Unmarshal(n.Message, &m)
 	switch n.Type {
 	case "on_add_video_stream", "on_add_audio_stream":
 		if s.publisher.CompareAndSwap(0, m.UID) {
 			s.logger.Debug("Receiving broadcaster", "uid", m.UID)
+		}
+		if n.Type == "on_add_video_stream" && m.PT != nil && *m.PT == 0 && m.UID == s.publisher.Load() {
+			// Payload type 0: the video is in a codec this audience did not
+			// join with, and only the audio is forwarded.
+			want := CodecVP8
+			if s.ch.Codec == CodecVP8 {
+				want = ""
+			}
+			return &CodecError{Codec: want}
 		}
 	case "on_user_offline", "on_remove_stream":
 		if p := s.publisher.Load(); p != 0 && m.UID == p {

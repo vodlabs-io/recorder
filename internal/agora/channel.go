@@ -84,6 +84,26 @@ func Parse(raw string) (Channel, error) {
 	return c, nil
 }
 
+// WithCodec returns the agora:// URL raw with its codec set to codec: CodecVP8,
+// or empty for H.264.
+func WithCodec(raw, codec string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("parse agora url: %w", err)
+	}
+	if u.Scheme != Scheme {
+		return "", fmt.Errorf("not an agora url: scheme %q", u.Scheme)
+	}
+	q := u.Query()
+	if codec == "" {
+		q.Del("codec")
+	} else {
+		q.Set("codec", codec)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
 // URL encodes c as an agora:// URL.
 func (c Channel) URL() string {
 	q := url.Values{}
