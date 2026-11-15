@@ -373,6 +373,7 @@ func TestServeRequeuesCheckFailedDuringHold(t *testing.T) {
 	id := streamer.StreamerRef{
 		StreamerKey: streamer.StreamerKey{Platform: "niconico", Username: "595347"},
 	}
+	other := streamer.StreamerKey{Platform: "niconico", Username: "124519"}
 	newLimiter := func() *platformLimiter {
 		return &platformLimiter{
 			platform: "niconico",
@@ -404,9 +405,10 @@ func TestServeRequeuesCheckFailedDuringHold(t *testing.T) {
 
 	t.Run("failureThatStartsTheHold", func(t *testing.T) {
 		l := newLimiter()
-		// One failure short of a hold, so the served check is the one that trips it.
+		// One failure short of a hold, from another streamer, so the served
+		// check is the one that trips it.
 		for range laneFailureThreshold - 1 {
-			l.noteFailure(time.Now())
+			l.noteFailure(time.Now(), other)
 		}
 		c.serve(t.Context(), log, l, id, kindStatus)
 		c.waitFetches()
@@ -415,9 +417,10 @@ func TestServeRequeuesCheckFailedDuringHold(t *testing.T) {
 
 	t.Run("retryThatHitsTheHold", func(t *testing.T) {
 		l := newLimiter()
-		// The first attempt failed outside a hold; a retry is the one that trips it.
+		// Earlier failures, another streamer's among them, came outside a
+		// hold; a retry is the one that trips it.
 		for range laneFailureThreshold - 1 {
-			l.noteFailure(time.Now())
+			l.noteFailure(time.Now(), other)
 		}
 		c.retryStatusFetch(t.Context(), log, l, id, kindAuthed)
 		requeued(t, l, l.authPri)

@@ -229,18 +229,19 @@ func TestAccountLoginFlow(t *testing.T) {
 
 	// Signing in must nudge exactly the tracked streamers stuck at a login wall
 	// (a re-check that escalates to an authed one) — not the already-live one.
+	// The nudge runs after the reply, so it is waited for.
 	select {
 	case id := <-statusReqPriCh:
 		if id.StreamerKey != restrictedKey {
 			t.Fatalf("nudged wrong streamer: %v, want %v", id.StreamerKey, restrictedKey)
 		}
-	default:
+	case <-time.After(5 * time.Second):
 		t.Fatal("sign-in did not nudge the restricted streamer for a re-check")
 	}
 	select {
 	case id := <-statusReqPriCh:
 		t.Fatalf("unexpected extra nudge: %v (live streamers must be left alone)", id)
-	default:
+	case <-time.After(200 * time.Millisecond):
 	}
 
 	// PRIVACY: the account KV doc must carry only non-secret status.

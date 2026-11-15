@@ -1,9 +1,18 @@
 package cloud
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/vodlabs-io/recorder/internal/streamer"
 )
+
+// failKey names one of two streamers on the platform, so a run of failures
+// spread over them reads as a broken path rather than one bad streamer.
+func failKey(i int) streamer.StreamerKey {
+	return streamer.StreamerKey{Platform: "twitch", Username: fmt.Sprint("s", i%2)}
+}
 
 // A network outage is answered by holding off, not by retrying: the cloud runs
 // every check back out through this daemon, so retrying every streamer would
@@ -16,8 +25,8 @@ func TestPlatformLimiterHold(t *testing.T) {
 	trip := func(t *testing.T, l *platformLimiter, now time.Time) time.Duration {
 		t.Helper()
 		var started time.Duration
-		for range laneFailureThreshold {
-			d, _ := l.noteFailure(now)
+		for i := range laneFailureThreshold {
+			d, _ := l.noteFailure(now, failKey(i))
 			started = d
 		}
 		return started
@@ -27,16 +36,33 @@ func TestPlatformLimiterHold(t *testing.T) {
 		l := newLimiter()
 		now := time.Now()
 		for i := range laneFailureThreshold - 1 {
-			if started, holding := l.noteFailure(now); holding || started != 0 {
+			if started, holding := l.noteFailure(now, failKey(i)); holding || started != 0 {
 				t.Fatalf("failure %d put the platform on hold: started=%v, holding=%v; "+
 					"a whole cycle of retries has to fail first", i, started, holding)
 			}
 		}
-		if started, holding := l.noteFailure(now); !holding || started != laneHoldBase {
+		if started, holding := l.noteFailure(now, failKey(laneFailureThreshold-1)); !holding || started != laneHoldBase {
 			t.Fatalf("a whole failed cycle did not start a hold: started=%v, holding=%v", started, holding)
 		}
 		if wait, _ := l.hold(now); wait != laneHoldBase {
 			t.Fatalf("hold left %v, want %v", wait, laneHoldBase)
+		}
+	})
+
+	t.Run("oneStreamerFailingAloneNeverHoldsThePlatform", func(t *testing.T) {
+		l := newLimiter()
+		now := time.Now()
+		for i := range 3 * laneFailureThreshold {
+			if started, holding := l.noteFailure(now, failKey(0)); holding || started != 0 {
+				t.Fatalf("failure %d of one streamer put the platform on hold: started=%v; "+
+					"its other streamers' checks must carry on", i, started)
+			}
+		}
+		if wait, _ := l.hold(now); wait != 0 {
+			t.Fatalf("holding for %v after one streamer's failures", wait)
+		}
+		if l.noteSuccess() {
+			t.Fatal("a success after failures that never held reported a recovery")
 		}
 	})
 
@@ -46,7 +72,7 @@ func TestPlatformLimiterHold(t *testing.T) {
 		trip(t, l, now)
 
 		// The stream lane fails against the same broken path a moment later.
-		started, holding := l.noteFailure(now.Add(time.Second))
+		started, holding := l.noteFailure(now.Add(time.Second), failKey(0))
 		if !holding {
 			t.Fatal("a lane failing during a hold was told to retry")
 		}
@@ -66,7 +92,7 @@ func TestPlatformLimiterHold(t *testing.T) {
 				t.Fatalf("hold was %v, want %v", got, want)
 			}
 			now = now.Add(got) // the hold expires and the lane's probe fails again
-			got, _ = l.noteFailure(now)
+			got, _ = l.noteFailure(now, failKey(0))
 			want = min(2*want, laneHoldMax)
 		}
 		if got != laneHoldMax {
