@@ -2,8 +2,10 @@ package cloud
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,6 +71,29 @@ func TestRetryStatusFetch(t *testing.T) {
 		}
 	})
 
+	t.Run("givingUpReportsTheLastError", func(t *testing.T) {
+		l := newLimiter(statusFetchRetries)
+		h := &recordingHandler{}
+		c.retryStatusFetch(context.Background(), slog.New(h), l, id, kindStatus)
+
+		rec, ok := h.find("Giving up on status fetch")
+		if !ok {
+			t.Fatal("no give-up record")
+		}
+		var got error
+		rec.Attrs(func(a slog.Attr) bool {
+			if e, ok := a.Value.Any().(error); ok {
+				got = e
+				return false
+			}
+			return true
+		})
+		// The Sentry bridge titles the event by the first error attr.
+		if got == nil || got.Error() == "" {
+			t.Fatal("give-up carries no error, so Sentry titles it \"None\"")
+		}
+	})
+
 	t.Run("stopsOnContextCancel", func(t *testing.T) {
 		l := newLimiter(statusFetchRetries)
 		ctx, cancel := context.WithCancel(context.Background())
@@ -85,4 +110,31 @@ func TestRetryStatusFetch(t *testing.T) {
 			t.Fatal("retry kept going after its context was cancelled")
 		}
 	})
+}
+
+// recordingHandler keeps every record logged through it.
+type recordingHandler struct {
+	mu   sync.Mutex
+	recs []slog.Record
+}
+
+func (h *recordingHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.recs = append(h.recs, r.Clone())
+	return nil
+}
+func (h *recordingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithGroup(string) slog.Handler      { return h }
+
+func (h *recordingHandler) find(msg string) (slog.Record, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, r := range h.recs {
+		if r.Message == msg {
+			return r, true
+		}
+	}
+	return slog.Record{}, false
 }
