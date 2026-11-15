@@ -148,6 +148,15 @@ func (j *job) concatGroup(ctx context.Context, logger *slog.Logger, inputs []str
 		if err != nil {
 			return fmt.Errorf("split part %s at init segments: %w", filepath.Base(in), err)
 		}
+		if len(partRuns) == 1 && partRuns[0].init == nil {
+			if partRuns, err = tsResetRuns(playlist); err != nil {
+				return fmt.Errorf("split part %s at clock restarts: %w", filepath.Base(in), err)
+			}
+			if len(partRuns) > 1 {
+				logger.Info("Stream clock restarts within the part; joining each stretch on its own",
+					"part", filepath.Base(in), "stretches", len(partRuns))
+			}
+		}
 		for _, r := range partRuns {
 			if r.playlist != playlist {
 				defer os.Remove(r.playlist)
