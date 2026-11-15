@@ -511,6 +511,7 @@ func (c *Client) retryStatusFetch(
 	id streamer.StreamerRef,
 	kind requestKind,
 ) {
+	var lastErr error
 	for attempt := 1; attempt <= statusFetchRetries; attempt++ {
 		select {
 		case <-time.After(time.Duration(attempt) * statusFetchRetryBackoff):
@@ -533,6 +534,7 @@ func (c *Client) retryStatusFetch(
 			}
 			log.Debug("Status fetch retry failed",
 				"id", id, "kind", kind, "attempt", attempt, "error", err)
+			lastErr = err
 			continue
 		}
 		l.noteSuccess()
@@ -541,8 +543,10 @@ func (c *Client) retryStatusFetch(
 		c.handleFetchResult(ctx, str, kind == kindAuthed)
 		return
 	}
+	// The error is what Sentry titles the event by; without it every give-up
+	// reads "None", whatever went wrong.
 	log.Error("Giving up on status fetch",
-		"id", id, "kind", kind, "attempts", statusFetchRetries)
+		"id", id, "kind", kind, "attempts", statusFetchRetries, "error", lastErr)
 }
 
 // handleFetchResult routes a completed on-demand status fetch. A plain fetch
