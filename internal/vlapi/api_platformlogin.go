@@ -110,11 +110,15 @@ func (s *Service) handlePlatformLoginSet(req micro.Request) {
 	s.logger.With("func", "handlePlatformLoginSet").Info("Stored platform login",
 		"platform", payload.Platform, "cookie_count", len(cookies))
 
+	// Reply before the nudge: it reads every tracked streamer doc of the
+	// platform, and the desktop app's periodic login refresh gives up on this
+	// request after 5s, logging the refresh as failed though the login was
+	// stored.
+	respond(req, OK(sess.Status()))
+
 	// A fresh login should unlock tracked streamers already stuck at a login
 	// wall, without waiting for the next poll or a daemon restart.
 	s.nudgeRestrictedStreamers(context.Background(), payload.Platform)
-
-	respond(req, OK(sess.Status()))
 }
 
 // keepHealth carries prev's health over to sess when both hold the same
