@@ -549,6 +549,12 @@ func (w *flvWriter) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil
 			}
+			// Rejoining in the same codec cannot receive the video; the
+			// session rejoins in the codec named.
+			var codecErr *agora.CodecError
+			if errors.As(err, &codecErr) {
+				return err
+			}
 			if isRecoverableError(err) {
 				w.logger.Debug("Segment completed, continuing stream")
 				continue

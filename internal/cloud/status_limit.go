@@ -34,16 +34,26 @@ type platformLimiter struct {
 	// they are holding off while it is broken. Guarded apart from the buckets:
 	// a lane holding off must not stand in the way of a retune.
 	pauseMu  sync.Mutex
-	fails    int           // consecutive failed fetches, counted across both lanes
-	cooldown time.Duration // the current hold, doubled each time it is extended
-	until    time.Time     // lanes hold until this
-	resumed  chan struct{} // closed to release a hold early
+	fails    int                               // consecutive failed fetches, counted across both lanes
+	failing  map[streamer.StreamerKey]struct{} // the streamers behind those failures
+	cooldown time.Duration                     // the current hold, doubled each time it is extended
+	until    time.Time                         // lanes hold until this
+	resumed  chan struct{}                     // closed to release a hold early
 }
 
 // A platform's lanes hold off once a first attempt and all its retries have
 // failed: by then the path to the cloud is broken, and since this daemon serves
 // the scrapes behind its own checks, retrying would only add load to an outage.
 var laneFailureThreshold = statusFetchRetries + 1
+
+// laneHoldStreamers is how many different streamers must be among those
+// failures before the platform holds off. One streamer the cloud keeps refusing
+// (a stream whose re-sign errors, an account it cannot read) says nothing about
+// the path to the cloud: it exhausts its own retries alone, and the platform's
+// other checks carry on. Holding the platform on its say-so stopped every other
+// check behind it, so live streamers went unseen and ended ones stayed
+// "recording" until the hold lifted.
+const laneHoldStreamers = 2
 
 // The hold doubles while the failures continue, so a blip costs one short wait
 // and an outage settles at one probe every few minutes. The cap is only what an
@@ -53,16 +63,20 @@ const (
 	laneHoldMax  = 5 * time.Minute
 )
 
-// noteFailure records a failed fetch, reporting the hold it started or extended
-// and whether the platform is holding off at all. A caller that is must not
-// retry — the retries are the storm.
-func (l *platformLimiter) noteFailure(now time.Time) (started time.Duration, holding bool) {
+// noteFailure records a failed fetch for key, reporting the hold it started or
+// extended and whether the platform is holding off at all. A caller that is
+// must not retry — the retries are the storm.
+func (l *platformLimiter) noteFailure(now time.Time, key streamer.StreamerKey) (started time.Duration, holding bool) {
 	l.pauseMu.Lock()
 	defer l.pauseMu.Unlock()
 
 	l.fails++
+	if l.failing == nil {
+		l.failing = make(map[streamer.StreamerKey]struct{})
+	}
+	l.failing[key] = struct{}{}
 	switch {
-	case l.fails < laneFailureThreshold:
+	case l.fails < laneFailureThreshold, len(l.failing) < laneHoldStreamers:
 		return 0, false
 	case now.Before(l.until):
 		return 0, true // the other lane's probe already extended the hold
@@ -77,8 +91,8 @@ func (l *platformLimiter) noteFailure(now time.Time) (started time.Duration, hol
 func (l *platformLimiter) noteSuccess() (recovered bool) {
 	l.pauseMu.Lock()
 	defer l.pauseMu.Unlock()
-	recovered = l.fails >= laneFailureThreshold
-	l.fails, l.cooldown, l.until = 0, 0, time.Time{}
+	recovered = !l.until.IsZero()
+	l.fails, l.failing, l.cooldown, l.until = 0, nil, 0, time.Time{}
 	return recovered
 }
 
@@ -102,7 +116,7 @@ func (l *platformLimiter) resume() {
 	if l.until.IsZero() {
 		return
 	}
-	l.fails, l.cooldown, l.until = 0, 0, time.Time{}
+	l.fails, l.failing, l.cooldown, l.until = 0, nil, 0, time.Time{}
 	close(l.resumed)
 	l.resumed = make(chan struct{})
 }
@@ -370,7 +384,7 @@ func (c *Client) serve(
 			return // every status is fetched again once the block lifts
 		}
 		if err != nil {
-			started, holding := l.noteFailure(time.Now())
+			started, holding := l.noteFailure(time.Now(), id.StreamerKey)
 			if holding {
 				logHold(log, id, kind, started, err)
 			}
@@ -511,6 +525,7 @@ func (c *Client) retryStatusFetch(
 	id streamer.StreamerRef,
 	kind requestKind,
 ) {
+	var lastErr error
 	for attempt := 1; attempt <= statusFetchRetries; attempt++ {
 		select {
 		case <-time.After(time.Duration(attempt) * statusFetchRetryBackoff):
@@ -526,13 +541,14 @@ func (c *Client) retryStatusFetch(
 			return
 		}
 		if err != nil {
-			if started, holding := l.noteFailure(time.Now()); holding {
+			if started, holding := l.noteFailure(time.Now(), id.StreamerKey); holding {
 				logHold(log, id, kind, started, err)
 				requeueHeld(log, l, id, kind)
 				return
 			}
 			log.Debug("Status fetch retry failed",
 				"id", id, "kind", kind, "attempt", attempt, "error", err)
+			lastErr = err
 			continue
 		}
 		l.noteSuccess()
@@ -541,8 +557,10 @@ func (c *Client) retryStatusFetch(
 		c.handleFetchResult(ctx, str, kind == kindAuthed)
 		return
 	}
+	// The error is what Sentry titles the event by; without it every give-up
+	// reads "None", whatever went wrong.
 	log.Error("Giving up on status fetch",
-		"id", id, "kind", kind, "attempts", statusFetchRetries)
+		"id", id, "kind", kind, "attempts", statusFetchRetries, "error", lastErr)
 }
 
 // handleFetchResult routes a completed on-demand status fetch. A plain fetch
