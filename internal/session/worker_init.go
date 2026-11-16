@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gonanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/vodlabs-io/recorder/internal/agora"
 	"github.com/vodlabs-io/recorder/internal/cookiemint"
 	"github.com/vodlabs-io/recorder/internal/platformauth"
 	"github.com/vodlabs-io/recorder/internal/provenance"
@@ -143,10 +144,46 @@ func writerFor(s *stream.Stream) string {
 	return "flvwriter"
 }
 
+// inSessionCodec returns s with an Agora channel's codec set to the session's
+// own, once it has one.
+func (w *worker) inSessionCodec(s *stream.Stream) *stream.Stream {
+	if s == nil || !w.agoraCodecSet || !agora.IsURL(s.URL) {
+		return s
+	}
+	u, err := agora.WithCodec(s.URL, w.agoraCodec)
+	if err != nil {
+		return s
+	}
+	c := *s
+	c.URL = u
+	return &c
+}
+
+// adoptCodec makes the session join its Agora channel in codec, the one the
+// broadcaster turned out to send, with the writer for it, and reports whether
+// it could. A session records in one writer's format, so only one that has
+// recorded nothing can switch.
+func (w *worker) adoptCodec(codec string) bool {
+	if w.output.Stats.TotalBytes > 0 || w.selectedStream == nil {
+		return false
+	}
+	w.agoraCodec, w.agoraCodecSet = codec, true
+	w.selectedStream = w.inSessionCodec(w.selectedStream)
+	name := writerFor(w.selectedStream)
+	wr, ok := writer.Get(name)
+	if !ok {
+		return false
+	}
+	w.writer = wr
+	w.output.WriterName = name
+	w.logger.Info("Rejoining in the broadcaster's video codec", "writer", name)
+	return true
+}
+
 // initStream initializes/logs stream information and selects the writer
 func (w *worker) initStream(str streamer.StreamerState) error {
 	// Select the stream based on the variant preference
-	selectedStream := str.Streams.Select(w.config.Variant)
+	selectedStream := w.inSessionCodec(str.Streams.Select(w.config.Variant))
 
 	if w.selectedStream == nil && selectedStream == nil {
 		return fmt.Errorf("stream not found")
@@ -212,9 +249,10 @@ func (w *worker) initPart() error {
 	w.curPart = part
 
 	// An attempt that recorded nothing points at the stream rather than the
-	// writer, so the next one fails fast instead of spending the writer's budget.
+	// writer, so the next one fails fast instead of spending the writer's budget
+	// — unless it was joined in the wrong codec, which this one is not.
 	retries := part.Retries
-	if w.lastRecordingWasEmpty() {
+	if w.lastRecordingWasEmpty() && !w.codecMismatched {
 		retries = 0
 	}
 

@@ -332,6 +332,11 @@ func (r *Registry) runWorker(ctx context.Context, worker *worker) {
 	}
 
 	r.deregister(bgCtx, worker.strKey)
+	if worker.restart {
+		// The answer reaches the dispatcher with no worker left to take it,
+		// so it starts a new session.
+		worker.requestFreshStreams()
+	}
 
 	// Purge the streamer's KV last — after every session-state/stats write above
 	// — so a removed streamer leaves no lingering state behind.

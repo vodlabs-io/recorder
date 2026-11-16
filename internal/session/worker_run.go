@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/vodlabs-io/recorder/internal/agora"
 	"github.com/vodlabs-io/recorder/internal/flvfix"
 	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/streamer"
@@ -264,6 +265,11 @@ func (w *worker) Run(ctx context.Context) error {
 			// A codec configuration change ends the part cleanly; the next
 			// part records the new config and opens a group of its own.
 			configChange := errors.Is(err, flvfix.ErrConfigChange)
+			// An Agora broadcaster sending the other video codec: rejoin in it.
+			var codecErr *agora.CodecError
+			codecMismatch := errors.As(err, &codecErr)
+			prevMismatch := w.codecMismatched
+			w.codecMismatched = codecMismatch
 			refreshAfterPart, skipLagDelay = reconnectPlan(err, w.output.CurrentPart.Bytes)
 			if errors.Is(err, vlerror.ErrWriteFailed) {
 				return err
@@ -311,6 +317,20 @@ func (w *worker) Run(ctx context.Context) error {
 					"next_part_index", w.output.PartIndex,
 					"config_change", configChange)
 				continue
+			}
+			// Straight after a switch, a mismatch means neither codec carries
+			// the video, so the session does not flip back.
+			if codecMismatch && !prevMismatch && ctx.Err() == nil {
+				if w.adoptCodec(codecErr.Codec) {
+					continue
+				}
+				if w.output.Stats.TotalBytes > 0 {
+					w.logger.Info("Broadcaster switched video codec; ending the session so a new one records it",
+						"error", err)
+					w.restart = true
+					state = streamerOffline
+					continue
+				}
 			}
 			state = streamLagging
 		}
