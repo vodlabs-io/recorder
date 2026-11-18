@@ -485,8 +485,8 @@ func replyHeaders(h http.Header, extracted bool) map[string]string {
 }
 
 // errTooLargeToRelay starts the refusal sent for a reply over the cloud
-// connection's payload limit. Keep it in step with tooLargeRefusal in the
-// backend's proxy package, which matches on it.
+// connection's payload limit. The service matches on this prefix, so it must
+// not change.
 const errTooLargeToRelay = "response too large to relay"
 
 // respond replies to a scrape request, and reports whether the reply was sent.
@@ -502,10 +502,10 @@ func (h *scrapeHandler) respond(msg *nats.Msg, host string, resp scrapeResponse)
 	}
 
 	if max := h.maxPayload(); max > 0 && int64(len(respData)) > max {
-		// The backend reads this refusal (by its prefix, tooLargeRefusal in its
-		// proxy package) as "this client can't relay that answer" and moves the
-		// check to another egress, so nothing is lost here: it is the expected
-		// answer to a page the backend asked for untrimmed. A warning keeps it a
+		// The service reads this refusal (by its prefix) as "this client can't
+		// relay that answer" and checks the page another way, so nothing is lost
+		// here: it is the expected answer to a page the service asked for
+		// untrimmed. A warning keeps it a
 		// breadcrumb rather than an error report, and the host says which
 		// platform's request needs an extractor.
 		refusal := fmt.Sprintf("%s: %d bytes (max %d)", errTooLargeToRelay, len(respData), max)
