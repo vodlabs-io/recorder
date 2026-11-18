@@ -2,7 +2,8 @@
 
 The recorder records live broadcasts from these platforms. **Sign-in** marks
 the ones where [signing in](platform-sign-in.md) lets you record streams that
-need an account.
+need an account. **Required** marks a platform that shows nothing without an
+account: the recorder can follow streamers there only while you are signed in.
 
 | Platform | Sign-in |
 | --- | --- |
@@ -13,6 +14,7 @@ need an account.
 | BongaCams | |
 | BuzzCast | |
 | CAM4 | |
+| CameraPrive | Yes |
 | CamSoda | |
 | Cams.com | |
 | Chaturbate | Yes |
@@ -21,10 +23,12 @@ need an account.
 | Douyu | |
 | Dreamcam | |
 | ePlay | |
+| Fansly | Yes |
 | FC2 Live | |
 | Flirt4Free | |
 | Huya | |
 | ImLive | |
+| Instagram | Required |
 | Kick | |
 | Kwai | |
 | LiveJasmin | |
@@ -36,13 +40,17 @@ need an account.
 | Niconico | |
 | Nimo TV | |
 | PandaLive | |
+| Peeks | |
+| PopkonTV | |
 | RPLAY | |
 | Rumble | |
+| RUTUBE | |
 | Sexchat | |
 | SOOP | |
 | Streamate | |
 | Stripchat | Yes |
 | Superlive | |
+| Tango | |
 | TiLive | Yes |
 | TikTok | Yes |
 | TwitCasting | |
@@ -50,6 +58,7 @@ need an account.
 | VK Video Live | |
 | X | Yes |
 | XCams | |
+| Xiaohongshu | |
 | XLoveCam | |
 | YouNow | Yes |
 | YouTube | Yes |
