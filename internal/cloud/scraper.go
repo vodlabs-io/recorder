@@ -449,7 +449,7 @@ func (h *scrapeHandler) fetchDirect(msg *nats.Msg, scrapeReq scrapeRequest, pars
 		Body:    string(body),
 	}
 
-	if h.respond(msg, scrapeResp) {
+	if h.respond(msg, parsedURL.Host, scrapeResp) {
 		log.Info("Scrape response",
 			"status", resp.StatusCode,
 			"status_text", http.StatusText(resp.StatusCode),
@@ -484,8 +484,14 @@ func replyHeaders(h http.Header, extracted bool) map[string]string {
 	return headers
 }
 
+// errTooLargeToRelay starts the refusal sent for a reply over the cloud
+// connection's payload limit. Keep it in step with tooLargeRefusal in the
+// backend's proxy package, which matches on it.
+const errTooLargeToRelay = "response too large to relay"
+
 // respond replies to a scrape request, and reports whether the reply was sent.
-func (h *scrapeHandler) respond(msg *nats.Msg, resp scrapeResponse) bool {
+// host is the scraped URL's host, for the log line when the reply is refused.
+func (h *scrapeHandler) respond(msg *nats.Msg, host string, resp scrapeResponse) bool {
 	log := h.logger.With("func", "respond")
 
 	respData, err := json.Marshal(resp)
@@ -496,11 +502,19 @@ func (h *scrapeHandler) respond(msg *nats.Msg, resp scrapeResponse) bool {
 	}
 
 	if max := h.maxPayload(); max > 0 && int64(len(respData)) > max {
-		log.Error("Scrape response exceeds NATS max payload",
+		// The backend reads this refusal (by its prefix, tooLargeRefusal in its
+		// proxy package) as "this client can't relay that answer" and moves the
+		// check to another egress, so nothing is lost here: it is the expected
+		// answer to a page the backend asked for untrimmed. A warning keeps it a
+		// breadcrumb rather than an error report, and the host says which
+		// platform's request needs an extractor.
+		refusal := fmt.Sprintf("%s: %d bytes (max %d)", errTooLargeToRelay, len(respData), max)
+		log.Warn("Scrape response exceeds NATS max payload",
+			"error", errors.New(refusal),
+			"host", host,
 			"response_bytes", len(respData), "max_payload", max,
 			"body_length", len(resp.Body))
-		h.respondWithError(msg, fmt.Sprintf(
-			"response too large to relay: %d bytes (max %d)", len(respData), max))
+		h.respondWithError(msg, refusal)
 		return false
 	}
 
@@ -612,7 +626,7 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest,
 	// and all a plugin needs of it is that it was sent away. Nothing of it travels.
 	failed := bfResp.Status < 200 || bfResp.Status >= 300
 	if bfResp.RedirectedTo != "" || (failed && !gjson.Valid(bfResp.Body)) {
-		h.respond(msg, scrapeResponse{Status: bfResp.Status, Headers: headers})
+		h.respond(msg, parsedURL.Host, scrapeResponse{Status: bfResp.Status, Headers: headers})
 		return
 	}
 
@@ -638,7 +652,7 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest,
 		"body_length", len(bfResp.Body),
 		"extracted_length", len(extracted))
 
-	h.respond(msg, scrapeResponse{
+	h.respond(msg, parsedURL.Host, scrapeResponse{
 		Status:  bfResp.Status,
 		Headers: headers,
 		Body:    extracted,
