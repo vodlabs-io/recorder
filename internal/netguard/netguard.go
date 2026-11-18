@@ -205,3 +205,30 @@ func (g *transport) checkProxied(ctx context.Context, host string) error {
 }
 
 func (g *transport) CloseIdleConnections() { g.t.CloseIdleConnections() }
+
+// HTTP1Only returns a copy of rt that speaks only HTTP/1.1: a clone of an
+// *http.Transport, or of the one a Transport wraps, guarded and proxied as
+// before. Any other RoundTripper is returned as is.
+func HTTP1Only(rt http.RoundTripper) http.RoundTripper {
+	switch t := rt.(type) {
+	case *http.Transport:
+		return http1Clone(t)
+	case *transport:
+		return &transport{t: http1Clone(t.t), pick: t.pick, names: map[string]nameCheck{}}
+	}
+	return rt
+}
+
+func http1Clone(t *http.Transport) *http.Transport {
+	c := t.Clone()
+	var p http.Protocols
+	p.SetHTTP1(true)
+	c.Protocols = &p
+	c.ForceAttemptHTTP2 = false
+	// A transport that has served HTTP/2 lists "h2" in its TLS config's ALPN,
+	// which the clone would still offer.
+	if c.TLSClientConfig != nil {
+		c.TLSClientConfig.NextProtos = nil
+	}
+	return c
+}
