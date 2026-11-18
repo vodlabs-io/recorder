@@ -9,7 +9,7 @@ account: the recorder can follow streamers there only while you are signed in.
 | --- | --- |
 | 17LIVE | |
 | AsianCamModels | |
-| Bigo | Yes |
+| Bigo | Required |
 | Bilibili | |
 | BongaCams | |
 | BuzzCast | |
