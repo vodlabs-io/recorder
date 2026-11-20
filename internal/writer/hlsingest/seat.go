@@ -63,7 +63,8 @@ func isSeatURL(u string) bool {
 }
 
 // openSeat takes a seat on the broadcast u names. login signs a Fansly seat's
-// channel reads, or a CameraPrive seat's room reads, in as the recorder's user.
+// channel reads, a CameraPrive seat's room reads, or an FC2 Live seat's channel
+// reads and control socket, in as the recorder's user.
 func openSeat(ctx context.Context, u string, client *http.Client, userAgent string, login map[string]string, logger *slog.Logger) (seat, error) {
 	if instagram.IsURL(u) {
 		s, err := instagram.Open(ctx, u, client, userAgent, logger)
@@ -94,7 +95,7 @@ func openSeat(ctx context.Context, u string, client *http.Client, userAgent stri
 		return peeksSeat{s}, nil
 	}
 	if fc2live.IsURL(u) {
-		s, err := fc2live.Open(ctx, u, client, userAgent, logger)
+		s, err := fc2live.Open(ctx, u, client, userAgent, login, logger)
 		if err != nil {
 			return nil, err
 		}
