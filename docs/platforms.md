@@ -18,13 +18,13 @@ account: the recorder can follow streamers there only while you are signed in.
 | CamSoda | |
 | Cams.com | |
 | Chaturbate | Yes |
-| CHZZK | |
+| CHZZK | Yes |
 | Douyin | |
 | Douyu | |
 | Dreamcam | |
 | ePlay | |
 | Fansly | Yes |
-| FC2 Live | |
+| FC2 Live | Yes |
 | Flirt4Free | |
 | Huya | |
 | ImLive | |
@@ -46,7 +46,7 @@ account: the recorder can follow streamers there only while you are signed in.
 | Rumble | |
 | RUTUBE | |
 | Sexchat | |
-| SOOP | |
+| SOOP | Yes |
 | Streamate | |
 | Stripchat | Yes |
 | Superlive | |
