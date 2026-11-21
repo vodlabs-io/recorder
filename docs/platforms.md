@@ -63,6 +63,10 @@ account: the recorder can follow streamers there only while you are signed in.
 | YouNow | Yes |
 | YouTube | Yes |
 
+On Bigo, the recorder sees when a streamer goes live without an account, but
+Bigo shows the stream itself only to signed-in viewers. To record Bigo streams,
+[sign in](platform-sign-in.md) to Bigo.
+
 `vod platforms` lists the platforms your installed version supports. A newly
 added platform can need an app update before it appears.
 
