@@ -329,6 +329,9 @@ export class ShowcaseDaemonClient implements DaemonClient {
   }
   onQuitRequested = () => () => {}
   onUpdateStateChanged = () => () => {}
+  // No tray, so nothing ever asks for a screen.
+  takeAppIntent = () => Promise.resolve(null)
+  onAppIntentPending = () => () => {}
   onVodsChanged = (cb: () => void) => {
     this.vodsListeners.add(cb)
     return () => {
