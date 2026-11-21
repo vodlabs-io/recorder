@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { hostAllowed, storageCookieScript } from "./platform-login";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import type { DaemonSession } from "../../../shared/daemon/session";
+import { Subjects } from "../../../shared/daemon/subjects";
+import { hostAllowed, refreshPlatformLogin, storageCookieScript } from "./platform-login";
 
 // hostAllowed is the capture-side half of the cookie guard: it decides which of
 // a login partition's cookies are stored at all. It matters most where a
@@ -77,5 +79,66 @@ describe("storageCookieScript", () => {
     expect(js).toContain('"cookie":"vl_session_token"');
     // It must parse as a script the page can run.
     expect(() => new Function(js)).not.toThrow();
+  });
+});
+
+// fakeDaemon answers the two requests a refresh makes before it opens a page:
+// the stored logins, and the daemon's current platform list.
+function fakeDaemon(
+  stored: string[],
+  platforms: () => Promise<unknown>,
+): DaemonSession {
+  return {
+    request: async (subject: string) => {
+      if (subject === Subjects.platformLoginList) {
+        return stored.map((platform) => ({ platform, captured_at: 1 }));
+      }
+      if (subject === Subjects.platforms) return platforms();
+      throw new Error(`unexpected request ${subject}`);
+    },
+  } as unknown as DaemonSession;
+}
+
+// A stored login can outlive its platform's place in the daemon's list (the
+// list follows the service). The refresh sweep must pass over it quietly: as an
+// error it went to the error reports on every sweep (Sentry RECORDER-N).
+describe("refreshPlatformLogin without a login descriptor", () => {
+  afterEach(() => {
+    (console.error as unknown as { mockRestore?: () => void }).mockRestore?.();
+    (console.warn as unknown as { mockRestore?: () => void }).mockRestore?.();
+  });
+
+  test("skips a stored login the platform list offers no login for, warning once", async () => {
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    const warns = spyOn(console, "warn").mockImplementation(() => {});
+    const session = fakeDaemon(["instagram"], async () => [
+      { name: "instagram", display_name: "Instagram" },
+      { name: "twitch", display_name: "Twitch", login: { url: "https://www.twitch.tv/login" } },
+    ]);
+
+    expect(await refreshPlatformLogin(session, "instagram")).toBe("skipped");
+    expect(await refreshPlatformLogin(session, "instagram")).toBe("skipped");
+
+    expect(errors).not.toHaveBeenCalled();
+    expect(warns).toHaveBeenCalledTimes(1);
+  });
+
+  test("skips a stored login whose platform the list no longer names", async () => {
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    spyOn(console, "warn").mockImplementation(() => {});
+    const session = fakeDaemon(["oldplatform"], async () => [{ name: "twitch" }]);
+
+    expect(await refreshPlatformLogin(session, "oldplatform")).toBe("skipped");
+    expect(errors).not.toHaveBeenCalled();
+  });
+
+  test("still reports a platform list the daemon could not send", async () => {
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    const session = fakeDaemon(["youtube"], async () => {
+      throw new Error("timeout");
+    });
+
+    expect(await refreshPlatformLogin(session, "youtube")).toBe("failed");
+    expect(errors).toHaveBeenCalledTimes(1);
   });
 });
