@@ -8,6 +8,7 @@ import (
 
 	"github.com/vodlabs-io/recorder/internal/cameraprive"
 	"github.com/vodlabs-io/recorder/internal/fansly"
+	"github.com/vodlabs-io/recorder/internal/fc2live"
 	"github.com/vodlabs-io/recorder/internal/instagram"
 )
 
@@ -48,14 +49,16 @@ func (s Stream) IsHLS() bool {
 
 // SeatLoginHost names the platform host a stream's seat reads it from as the
 // recorder's user, where a login for the platform may sign the seat in: a
-// Fansly channel's API, a CameraPrive room's page. Empty for every other
-// stream.
+// Fansly channel's API, a CameraPrive room's page, an FC2 Live channel's site.
+// Empty for every other stream.
 func (s Stream) SeatLoginHost() string {
 	switch {
 	case fansly.IsURL(s.URL):
 		return fansly.APIHost
 	case cameraprive.IsURL(s.URL):
 		return cameraprive.SiteHost
+	case fc2live.IsURL(s.URL):
+		return fc2live.SiteHost
 	}
 	return ""
 }

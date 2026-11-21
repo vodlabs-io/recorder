@@ -8,6 +8,17 @@ record those, sign the recorder in to the platform with your own account.
 and the few that record nothing without it. You don't need it for anything
 else.
 
+## What signing in unlocks
+
+A login lets the recorder see what that account may watch, no more:
+
+- **CHZZK**: 19+ broadcasts, with a Naver account that has completed CHZZK's
+  identity verification. A signed-in account without it still can't watch them.
+- **SOOP**: adults-only broadcasts, with an age-verified account, and
+  subscriber-only broadcasts of the streamers that account subscribes to.
+- **FC2 Live**: channels open only to signed-in viewers. Paid, premium and
+  ticketed broadcasts stay locked.
+
 ## What happens to your login
 
 Your login stays on this device. The recorder stores it encrypted, in your

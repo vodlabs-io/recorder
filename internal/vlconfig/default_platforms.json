@@ -75,12 +75,26 @@
 	{
 		"name": "soop",
 		"display_name": "SOOP",
-		"channel_url": "https://play.sooplive.com/{username}"
+		"channel_url": "https://play.sooplive.com/{username}",
+		"login": {
+			"url": "https://login.sooplive.com/afreeca/login.php?szFrom=full&request_uri=https%3A%2F%2Fwww.sooplive.com%2F",
+			"refresh_url": "https://www.sooplive.com/",
+			"cookie_domains": ["sooplive.com"],
+			"success_url_pattern": "^https://www\\.sooplive\\.com/",
+			"session_cookie": "AuthTicket"
+		}
 	},
 	{
 		"name": "chzzk",
 		"display_name": "CHZZK",
-		"channel_url": "https://chzzk.naver.com/live/{username}"
+		"channel_url": "https://chzzk.naver.com/live/{username}",
+		"login": {
+			"url": "https://nid.naver.com/nidlogin.login?url=https%3A%2F%2Fchzzk.naver.com%2F",
+			"refresh_url": "https://chzzk.naver.com/",
+			"cookie_domains": ["naver.com"],
+			"success_url_pattern": "^https://chzzk\\.naver\\.com/",
+			"session_cookie": "NID_AUT"
+		}
 	},
 	{
 		"name": "bilibili",
@@ -212,7 +226,14 @@
 	{
 		"name": "fc2live",
 		"display_name": "FC2 Live",
-		"channel_url": "https://live.fc2.com/{username}/"
+		"channel_url": "https://live.fc2.com/{username}/",
+		"login": {
+			"url": "https://live.fc2.com/login/?done=livechat",
+			"refresh_url": "https://live.fc2.com/",
+			"cookie_domains": ["fc2.com"],
+			"success_url_pattern": "^https://live\\.fc2\\.com/",
+			"session_cookie": "fcus"
+		}
 	},
 	{
 		"name": "flirt4free",

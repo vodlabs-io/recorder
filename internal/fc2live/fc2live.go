@@ -28,8 +28,12 @@ import (
 // Scheme names a channel to record.
 const Scheme = "fc2live"
 
+// SiteHost is the site the seat reads the channel from, and the one host a
+// login's cookies may go to.
+const SiteHost = "live.fc2.com"
+
 const (
-	siteOrigin  = "https://live.fc2.com"
+	siteOrigin  = "https://" + SiteHost
 	memberPath  = "/api/memberApi.php"
 	controlPath = "/api/getControlServer.php"
 	// ageCheck is the cookie the site's age gate sets; adult channels turn an
@@ -88,10 +92,11 @@ type Seat struct {
 	err error
 }
 
-// Open takes a seat on the channel raw names, as an anonymous viewer, and
-// holds it until ctx ends or Close is called. client makes the API calls and
-// dials the socket.
-func Open(ctx context.Context, raw string, client *http.Client, userAgent string, logger *slog.Logger) (*Seat, error) {
+// Open takes a seat on the channel raw names and holds it until ctx ends or
+// Close is called. client makes the API calls and dials the socket. login,
+// when it holds the user's FC2 cookies, takes the seat signed in, which is what
+// a login-only channel admits; without it the seat is an anonymous viewer's.
+func Open(ctx context.Context, raw string, client *http.Client, userAgent string, login map[string]string, logger *slog.Logger) (*Seat, error) {
 	id, err := Parse(raw)
 	if err != nil {
 		return nil, err
@@ -108,19 +113,24 @@ func Open(ctx context.Context, raw string, client *http.Client, userAgent string
 	dialClient.Timeout = 0
 	dialClient.Jar = nil
 
+	cookie := ageCheck
+	if c := login["Cookie"]; c != "" {
+		cookie += "; " + c
+	}
+
 	openCtx, cancelOpen := context.WithTimeout(ctx, openTimeout)
 	defer cancelOpen()
-	version, err := broadcastVersion(openCtx, &dialClient, id, userAgent)
+	version, err := broadcastVersion(openCtx, &dialClient, id, userAgent, cookie)
 	if err != nil {
 		return nil, err
 	}
-	wsURL, err := controlSocket(openCtx, &dialClient, id, version, userAgent)
+	wsURL, err := controlSocket(openCtx, &dialClient, id, version, userAgent, cookie)
 	if err != nil {
 		return nil, err
 	}
 	conn, _, err := websocket.Dial(openCtx, wsURL, &websocket.DialOptions{
 		HTTPClient: &dialClient,
-		HTTPHeader: http.Header{"Origin": {siteOrigin}, "User-Agent": {userAgent}},
+		HTTPHeader: http.Header{"Origin": {siteOrigin}, "User-Agent": {userAgent}, "Cookie": {cookie}},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("dial fc2 live control socket: %w", err)
@@ -135,7 +145,7 @@ func Open(ctx context.Context, raw string, client *http.Client, userAgent string
 	}
 	holdCtx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
-	logger.Info("Took an FC2 Live seat", "channel", id)
+	logger.Info("Took an FC2 Live seat", "channel", id, "signed_in", login["Cookie"] != "")
 	go s.hold(holdCtx, logger)
 	return s, nil
 }
@@ -316,8 +326,8 @@ func readMessage(ctx context.Context, conn *websocket.Conn) (socketMsg, error) {
 }
 
 // broadcastVersion reads the channel for its current broadcast's version.
-func broadcastVersion(ctx context.Context, client *http.Client, id, userAgent string) (string, error) {
-	body, err := post(ctx, client, memberPath, id, userAgent, url.Values{
+func broadcastVersion(ctx context.Context, client *http.Client, id, userAgent, cookie string) (string, error) {
+	body, err := post(ctx, client, memberPath, id, userAgent, cookie, url.Values{
 		"channel": {"1"}, "profile": {"1"}, "user": {"1"}, "streamid": {id},
 	})
 	if err != nil {
@@ -341,8 +351,8 @@ func broadcastVersion(ctx context.Context, client *http.Client, id, userAgent st
 }
 
 // controlSocket asks for the channel's control socket.
-func controlSocket(ctx context.Context, client *http.Client, id, version, userAgent string) (string, error) {
-	body, err := post(ctx, client, controlPath, id, userAgent, url.Values{
+func controlSocket(ctx context.Context, client *http.Client, id, version, userAgent, cookie string) (string, error) {
+	body, err := post(ctx, client, controlPath, id, userAgent, cookie, url.Values{
 		"channel_id": {id}, "mode": {"play"}, "orz": {""}, "channel_version": {version},
 		"client_version": {clientVersion}, "client_type": {"pc"}, "client_app": {"browser_hls"}, "ipv6": {""},
 	})
@@ -366,7 +376,8 @@ func controlSocket(ctx context.Context, client *http.Client, id, version, userAg
 	return u.String(), nil
 }
 
-func post(ctx context.Context, client *http.Client, path, id, userAgent string, form url.Values) ([]byte, error) {
+// post sends a form to the site with cookie, the age gate's and any login's.
+func post(ctx context.Context, client *http.Client, path, id, userAgent, cookie string, form url.Values) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, siteOrigin+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
@@ -374,7 +385,7 @@ func post(ctx context.Context, client *http.Client, path, id, userAgent string, 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Referer", siteOrigin+"/"+id+"/")
-	req.Header.Set("Cookie", ageCheck)
+	req.Header.Set("Cookie", cookie)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
