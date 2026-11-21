@@ -38,6 +38,8 @@ jobs:
       WINDOWS_SIGN_ENDPOINT: ${{ vars.WINDOWS_SIGN_ENDPOINT }}
       WINDOWS_SIGN_ACCOUNT: ${{ vars.WINDOWS_SIGN_ACCOUNT }}
       WINDOWS_SIGN_PROFILE: ${{ vars.WINDOWS_SIGN_PROFILE }}
+      # Creates the Sentry release; those steps are skipped while unset.
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
     steps:
       # A tag push publishes, so check before anything is built.
       # macOS builds are never published unsigned; Windows ones are, with a
@@ -94,6 +96,28 @@ jobs:
             dist/checksums.txt
             scripts/install.sh
             scripts/install.ps1
+
+      # Creates the Sentry release with its commits and a production deploy.
+      # The name must match the daemon's error-report release, recorder@<version>
+      # (the tag without its v). Never fails the run: docker and desktop need
+      # this job.
+      - name: Name the Sentry release
+        id: sentry_version
+        if: github.event_name == 'push' && env.SENTRY_AUTH_TOKEN != ''
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Sentry release
+        if: steps.sentry_version.outcome == 'success'
+        continue-on-error: true
+        uses: getsentry/action-release@e6703d0b00208e0b3687ba660d18ab5af7892821 # v3.7.2
+        env:
+          SENTRY_ORG: vodlabs
+          SENTRY_PROJECT: recorder
+        with:
+          release: recorder@${{ steps.sentry_version.outputs.version }}
+          environment: production
+          set_commits: auto
+          ignore_missing: true
 
       - name: Upload snapshot artifacts
         if: github.event_name == 'workflow_dispatch'
