@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/vodlabs-io/recorder/internal/netguard"
 )
 
 // Mint describes how to mint a platform's stream cookies: a GET of URL, with
@@ -63,8 +65,11 @@ func Client(base *http.Client, m *Mint) *http.Client {
 		base: inner,
 		site: site,
 		minter: &minter{
-			mint:   m,
-			client: &http.Client{Transport: inner, Timeout: mintTimeout},
+			mint: m,
+			// A mint is one small request, and from datacenter addresses
+			// Tango's front end answers 502 to Go's HTTP/2 while serving
+			// HTTP/1.1.
+			client: &http.Client{Transport: netguard.HTTP1Only(inner), Timeout: mintTimeout},
 		},
 	}
 	return &c

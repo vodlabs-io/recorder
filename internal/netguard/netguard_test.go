@@ -203,3 +203,55 @@ func TestTransportRefusesProxiedPrivateName(t *testing.T) {
 		t.Errorf("repeat requests made %d more lookups, want 0", got-n)
 	}
 }
+
+func TestHTTP1Only(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, r.Proto)
+	}))
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+
+	base := srv.Client().Transport.(*http.Transport)
+	base.ForceAttemptHTTP2 = true
+	proto := func(rt http.RoundTripper) string {
+		resp, err := (&http.Client{Transport: rt}).Get(srv.URL)
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return string(b)
+	}
+	if got := proto(base); got != "HTTP/2.0" {
+		t.Fatalf("base spoke %s, want HTTP/2.0", got)
+	}
+	if got := proto(HTTP1Only(base)); got != "HTTP/1.1" {
+		t.Errorf("HTTP1Only spoke %s, want HTTP/1.1", got)
+	}
+	if got := proto(base); got != "HTTP/2.0" {
+		t.Errorf("base spoke %s after HTTP1Only, want HTTP/2.0", got)
+	}
+
+	// A guarded transport stays guarded: the test server is on loopback.
+	guarded := Transport(&http.Transport{
+		DialContext:     (&net.Dialer{ControlContext: ControlContext}).DialContext,
+		TLSClientConfig: base.TLSClientConfig,
+	})
+	h1, ok := HTTP1Only(guarded).(*transport)
+	if !ok || h1.t.Protocols == nil || h1.t.Protocols.HTTP2() {
+		t.Fatalf("HTTP1Only(guarded) = %#v, want an HTTP/1.1 guarded transport", h1)
+	}
+	if _, err := (&http.Client{Transport: h1}).Get(srv.URL); !errors.Is(err, ErrPrivateAddress) {
+		t.Errorf("guarded HTTP/1.1 copy: error = %v, want %v", err, ErrPrivateAddress)
+	}
+
+	other := roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") })
+	if _, ok := HTTP1Only(other).(roundTripFunc); !ok {
+		t.Error("an unknown RoundTripper was replaced")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
