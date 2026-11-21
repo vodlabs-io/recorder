@@ -75,21 +75,36 @@ const lastRefreshAt = new Map<string, number>();
 // it again only reloads the platform's page for nothing, so refreshes skip it
 // until a new login (a different captured_at) replaces it.
 const loggedOutLogins = new Map<string, number>();
+// Platforms whose stored login a refresh found no descriptor for, so the skip
+// is logged once until a descriptor comes back.
+const noDescriptorWarned = new Set<string>();
 
 function partitionFor(platform: string): string {
   return `persist:${platform}`;
+}
+
+// findLoginDescriptor returns the platform's login descriptor from the daemon's
+// current platform list, or null when that list offers the platform no login.
+// A request failure still throws: that is not an answer about the platform.
+async function findLoginDescriptor(
+  session: DaemonSession,
+  platform: string,
+): Promise<{ login: LoginFlow; label: string } | null> {
+  const platforms = await session.request<PlatformInfo[] | null>(Subjects.platforms);
+  const info = (platforms ?? []).find((p) => p.name === platform);
+  if (!info?.login) return null;
+  return { login: info.login, label: info.display_name || platform };
 }
 
 async function loginDescriptor(
   session: DaemonSession,
   platform: string,
 ): Promise<{ login: LoginFlow; label: string }> {
-  const platforms = await session.request<PlatformInfo[]>(Subjects.platforms);
-  const info = platforms.find((p) => p.name === platform);
-  if (!info?.login) {
+  const found = await findLoginDescriptor(session, platform);
+  if (!found) {
     throw new Error(`platform "${platform}" does not support login`);
   }
-  return { login: info.login, label: info.display_name || platform };
+  return found;
 }
 
 // hostAllowed mirrors vlconfig.loginFlow.AllowsHost: a cookie is kept only if
@@ -397,7 +412,8 @@ export type RefreshResult = "refreshed" | "logged_out" | "skipped" | "failed";
 //                  signal TikTok gives us, so it flips the Accounts row to
 //                  "Expired" via platformlogin.health;
 //   "skipped"    — interactive login open, refresh already running, ran too
-//                  recently, the login was already found logged out, or the
+//                  recently, the login was already found logged out, the
+//                  daemon's platform list offers the platform no login, or the
 //                  shared login view was busy with a signed fetch;
 //   "failed"     — the page never loaded (offline, platform down). Changes
 //                  nothing: a network failure is not a login failure.
@@ -423,11 +439,27 @@ export async function refreshPlatformLogin(
     return "skipped";
   }
 
+  // A stored login can outlive the platform's place in the daemon's list: the
+  // list follows the service (which can offer a platform only from some daemon
+  // version on), while the login store stays on disk across daemon builds and
+  // runs. With no descriptor there is no page to refresh and the daemon does
+  // not use the login, so this is a skip, not an error report on every sweep.
   let login: LoginFlow;
   try {
-    ({ login } = await loginDescriptor(session, platform));
+    const found = await findLoginDescriptor(session, platform);
+    if (!found) {
+      if (!noDescriptorWarned.has(platform)) {
+        noDescriptorWarned.add(platform);
+        console.warn(
+          `login refresh (${platform}): the daemon's platform list offers no login for it; skipping`,
+        );
+      }
+      return "skipped";
+    }
+    noDescriptorWarned.delete(platform);
+    ({ login } = found);
   } catch (err) {
-    console.error(`login refresh (${platform}): no descriptor`, err);
+    console.error(`login refresh (${platform}): platform list request failed`, err);
     return "failed";
   }
 
