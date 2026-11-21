@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nkeys"
+
 	"github.com/vodlabs-io/recorder/internal/streamer"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
 	"github.com/vodlabs-io/recorder/internal/vllog"
@@ -34,10 +36,20 @@ func TestRetryStatusFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("logger: %v", err)
 	}
+	// Requests are signed, so the Client needs a key to reach the stand-in.
+	key, err := nkeys.CreateUser()
+	if err != nil {
+		t.Fatalf("create user key: %v", err)
+	}
+	seed, err := key.Seed()
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 	// A retry passes the daemon-wide ceiling like any other request, so the
 	// Client under test needs one that is not in the way.
 	c := &Client{
 		logger:     logger,
+		nkeySeed:   string(seed),
 		httpClient: srv.Client(),
 		ceiling:    newTokenBucket(t.Context(), vlconfig.RateLimit{Burst: 64, Interval: time.Millisecond}),
 	}
@@ -91,6 +103,43 @@ func TestRetryStatusFetch(t *testing.T) {
 		// The Sentry bridge titles the event by the first error attr.
 		if got == nil || got.Error() == "" {
 			t.Fatal("give-up carries no error, so Sentry titles it \"None\"")
+		}
+	})
+
+	t.Run("givingUpOnAnotherFailureIsAnError", func(t *testing.T) {
+		l := newLimiter(statusFetchRetries)
+		h := &recordingHandler{}
+		c.retryStatusFetch(context.Background(), slog.New(h), l, id, kindStatus)
+
+		rec, ok := h.find("Giving up on status fetch")
+		if !ok {
+			t.Fatal("no give-up record")
+		}
+		if rec.Level != slog.LevelError {
+			t.Fatalf("level = %v, want ERROR", rec.Level)
+		}
+	})
+
+	// The user's own network failing is theirs to fix: the give-up is only a
+	// warning, so the Sentry bridge (which reports ERROR) leaves it out.
+	t.Run("givingUpOnThisMachinesNetworkIsAWarning", func(t *testing.T) {
+		unreachable := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "This recorder could not reach Twitch: no such host.", http.StatusFailedDependency)
+		}))
+		defer unreachable.Close()
+		apiBaseURL = unreachable.URL
+		defer func() { apiBaseURL = srv.URL }()
+
+		l := newLimiter(statusFetchRetries)
+		h := &recordingHandler{}
+		c.retryStatusFetch(context.Background(), slog.New(h), l, id, kindStatus)
+
+		rec, ok := h.find("Giving up on status fetch")
+		if !ok {
+			t.Fatal("no give-up record")
+		}
+		if rec.Level != slog.LevelWarn {
+			t.Fatalf("level = %v, want WARN", rec.Level)
 		}
 	})
 

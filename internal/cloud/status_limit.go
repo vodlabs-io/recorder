@@ -558,8 +558,15 @@ func (c *Client) retryStatusFetch(
 		return
 	}
 	// The error is what Sentry titles the event by; without it every give-up
-	// reads "None", whatever went wrong.
-	log.Error("Giving up on status fetch",
+	// reads "None", whatever went wrong. A failure of this machine's own
+	// network (DNS, a reset, a timeout) is the user's to fix, so it is only a
+	// warning and stays out of error reports.
+	level := slog.LevelError
+	var unreachable *PlatformUnreachableError
+	if errors.As(lastErr, &unreachable) {
+		level = slog.LevelWarn
+	}
+	log.Log(ctx, level, "Giving up on status fetch",
 		"id", id, "kind", kind, "attempts", statusFetchRetries, "error", lastErr)
 }
 
