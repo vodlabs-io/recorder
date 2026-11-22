@@ -1,0 +1,33 @@
+# The home page's three steps: the Add Streamer dialog with a channel link
+# pasted, and the recording that follows. Render with:
+#   bun tools/showcase/harness/render.ts tools/showcase/shots/home-steps.yaml
+dataset: hero
+now: 2026-09-24T20:30:00-07:00
+timezone: America/Los_Angeles
+app_version: 1.0.0
+
+defaults:
+  size: [770, 620]
+  scale: 2
+  themes: [light, dark]
+  prefs:
+    dashboard_column_visibility: { vods: false, monitor: false }
+
+scenes:
+  - name: add-streamer
+    route: /dashboard
+    steps:
+      - wait: text=lanternfox_tv
+      - click: '[data-sidebar="trigger"]'
+      - click: 'main button:has(svg.lucide-plus)'
+      - fill: { selector: 'input[placeholder="https://…"]', text: "https://www.twitch.tv/lanternfox_tv" }
+      - wait: 400
+    clip: { selector: '[role="dialog"]' }
+
+  - name: recording
+    route: /dashboard
+    steps:
+      - wait: text=lanternfox_tv
+      - click: '[data-sidebar="trigger"]'
+      - wait: 400
+    clip: { selector: '[data-slot="card"]:has-text("lanternfox_tv")' }
