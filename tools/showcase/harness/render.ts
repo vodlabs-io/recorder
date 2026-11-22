@@ -8,6 +8,7 @@
 // Outputs, per Scene and theme, in --out (default tools/showcase/out/<list>):
 //   <scene>-<theme>.png          the window with chrome and shadow, transparent
 //   <scene>-<theme>.content.png  the window's content alone
+//   <scene>-<theme>.clip.png     one element of it, for a Scene with `clip`
 // and for a Scene with `video`, instead of the PNGs: the content as
 // <scene>-<theme>.mp4 (H.264) and .webm (AV1), with its first frame as
 // <scene>-<theme>.content.png.
@@ -44,6 +45,7 @@ type Step =
   | { click: string }
   | { hover: string }
   | { press: string }
+  | { fill: { selector: string; text: string } }
   | { scroll: { selector: string; y: number } }
   | { eval: string }
   | { script: string };
@@ -55,6 +57,9 @@ type Scene = {
   themes?: Theme[];
   prefs?: Record<string, unknown>;
   steps?: Step[];
+  // Also writes <scene>-<theme>.clip.png: the first element matching
+  // `selector`, grown by `pad` points on each side.
+  clip?: { selector: string; pad?: number };
   // A video Take: after the steps, the Timeline starts and the content is
   // filmed for `seconds`, with the Demo daemon and the page clock running.
   video?: { seconds: number; fps?: number };
@@ -145,6 +150,7 @@ async function runStep(page: Page, step: Step): Promise<void> {
   } else if ("click" in step) await page.locator(step.click).first().click();
   else if ("hover" in step) await page.locator(step.hover).first().hover();
   else if ("press" in step) await page.keyboard.press(step.press);
+  else if ("fill" in step) await page.locator(step.fill.selector).first().fill(step.fill.text);
   else if ("scroll" in step)
     await page.locator(step.scroll.selector).first().evaluate((el, y) => el.scrollBy(0, y), step.scroll.y);
   else if ("eval" in step) await page.evaluate(step.eval);
@@ -193,6 +199,18 @@ async function main(): Promise<void> {
         const { ctx, page } = await openScene(scene, theme, PORTS);
         await page.screenshot({ path: content });
         contentShots.set(base, content);
+        if (scene.clip && wanted(scene.name)) {
+          const box = await page.locator(scene.clip.selector).first().boundingBox();
+          if (!box) throw new Error(`${base}: no ${scene.clip.selector} to clip`);
+          const pad = scene.clip.pad ?? 0;
+          // Rounded inward, so an element on a half point takes no backdrop.
+          const x = Math.max(0, Math.ceil(box.x - pad));
+          const y = Math.max(0, Math.ceil(box.y - pad));
+          const right = Math.min(w, Math.floor(box.x + box.width + pad));
+          const bottom = Math.min(h - TITLEBAR, Math.floor(box.y + box.height + pad));
+          const clip = { x, y, width: right - x, height: bottom - y };
+          await page.screenshot({ path: join(outDir, `${base}.clip.png`), clip });
+        }
         await ctx.close();
 
         if (wanted(scene.name)) {

@@ -80,9 +80,11 @@ scenes:
       - click: role=button[name="Status"]
       - hover: text=Juniper
       - press: Escape
+      - fill: { selector: input, text: "https://www.twitch.tv/lanternfox_tv" }
       - scroll: { selector: main, y: 400 }
       - eval: document.querySelector("main").scrollTo(0, 0)
       - script: ./my-step.ts     # default export: async (page) => {}
+    clip: { selector: '[role="dialog"]', pad: 0 }   # also write <scene>-<theme>.clip.png: that element alone
     video: { seconds: 8, fps: 30 }   # a Take instead of a Shot (fps defaults to 30)
 compositions:
   - name: hero
