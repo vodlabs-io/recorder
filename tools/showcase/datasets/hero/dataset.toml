@@ -1,0 +1,87 @@
+# The hero Take's Dataset: 5 fictional Streamers, 2 recording, and
+# kestrelsketchbook going live 3 s into the Take. Every time below is an
+# offset back from "now". Field reference: tools/showcase/README.md.
+#
+# Usernames are invented and confirmed absent from their Platform (see each
+# `verified`). Avatars are generated from their prompts.
+
+version = "1.0.0"
+uptime = "3d4h12m"
+download_dir = "/Users/demo/Movies/VodLabs Recorder"
+archive_dir = "/Volumes/Vault/VodLabs"
+
+[[root]]
+paths = ["/Users/demo/Movies/VodLabs Recorder"]
+download = true
+total = "1TB"
+free = "412GB"
+
+[[root]]
+paths = ["/Volumes/Vault/VodLabs"]
+total = "8TB"
+free = "5.3TB"
+
+# --- Live and recording ------------------------------------------------------
+
+[[streamer]]
+platform = "twitch"
+username = "lanternfox_tv"
+verified = "2026-09-24"
+status = "live"
+live_for = "2h14m"
+bitrate = "6Mbps"
+title = "Silksong any% — new route tonight"
+category = "Hollow Knight: Silksong"
+added = "88d"
+avatar_prompt = "a friendly orange fox holding a glowing lantern, flat vector illustration avatar, bold simple shapes, centered, solid deep navy background, no text"
+
+[[streamer]]
+platform = "tiktok"
+username = "juniper.bakes"
+verified = "2026-09-24"
+display_name = "Juniper 🍞"
+status = "live"
+live_for = "36m"
+bitrate = "4Mbps"
+title = "sourdough Q&A — ask me anything 🍞"
+category = "Food & Drink"
+added = "34d"
+avatar_prompt = "a cute smiling loaf of sourdough bread with a sprig of juniper, flat vector illustration avatar, bold simple shapes, centered, solid warm peach background, no text"
+
+[[streamer]]
+platform = "kick"
+username = "gritwave_es"
+verified = "2026-09-24"
+last_live = "6h"
+last_live_duration = "2h10m"
+bitrate = "8Mbps"
+added = "119d"
+avatar_prompt = "a stylized ocean wave shaped like a helmet visor, flat vector illustration avatar, bold simple shapes, centered, solid emerald green background, no text"
+
+[[streamer]]
+platform = "twitch"
+username = "mossbyte_beats"
+verified = "2026-09-24"
+status = "live"
+record = false
+live_for = "48m"
+bitrate = "6Mbps"
+title = "otter cam + beats from field recordings"
+category = "Animals, Aquariums, and Zoos"
+added = "142d"
+avatar_prompt = "a tiny round robot covered in green moss with a single glowing eye, flat vector illustration avatar, bold simple shapes, centered, solid charcoal background, no text"
+
+# --- Offline -------------------------------------------------------------------
+
+[[streamer]]
+platform = "twitch"
+username = "kestrelsketchbook"
+verified = "2026-09-24"
+goes_live = "3s"
+title = "sketching the feeder birds, live"
+category = "Art"
+last_live = "5h"
+last_live_duration = "3h12m"
+bitrate = "6Mbps"
+added = "77d"
+avatar_prompt = "a small kestrel bird holding a paintbrush in its beak, flat vector illustration avatar, bold simple shapes, centered, solid soft coral background, no text"

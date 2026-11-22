@@ -53,7 +53,11 @@ type streamerSpec struct {
 	// Offline Streamers: when their last Broadcast started, and how long it ran.
 	LastLive         string `toml:"last_live"`
 	LastLiveDuration string `toml:"last_live_duration"`
-	Added            string `toml:"added"`
+	// GoesLive takes an offline Streamer live this long after the Timeline
+	// starts, with Title and Category; a recorded one starts recording
+	// goLiveToRecording later.
+	GoesLive string `toml:"goes_live"`
+	Added    string `toml:"added"`
 	// AvatarPrompt is what images/avatars/<platform>-<username>.jpg was
 	// generated from; the daemon itself ignores it.
 	AvatarPrompt string `toml:"avatar_prompt"`
@@ -121,6 +125,9 @@ type Streamer struct {
 	// SessionID and Session are set for a live Streamer being recorded.
 	SessionID string
 	Session   string
+	// GoesLive is when an offline Streamer goes live, counted from the
+	// Timeline's start; zero never.
+	GoesLive time.Duration
 }
 
 type VOD struct {
@@ -235,6 +242,12 @@ func (s streamerSpec) resolve(now time.Time) (Streamer, error) {
 		added = 60 * 24 * time.Hour
 	}
 	st.Added = now.Add(-added)
+	if st.GoesLive, err = parseAgo(s.GoesLive, "goes_live"); err != nil {
+		return st, err
+	}
+	if st.GoesLive > 0 && st.Status != streamer.StatusOffline {
+		return st, fmt.Errorf("goes_live needs an offline Streamer")
+	}
 
 	if st.Status == streamer.StatusLive {
 		liveFor, err := parseAgo(s.LiveFor, "live_for")

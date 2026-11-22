@@ -1,0 +1,25 @@
+# The website hero's Take: the Dashboard while a fourth Streamer goes live and
+# starts recording. Render with:
+#   bun tools/showcase/harness/render.ts tools/showcase/shots/hero-loop.yaml
+dataset: hero
+now: 2026-09-24T20:30:00-07:00
+timezone: America/Los_Angeles
+app_version: 1.0.0
+
+defaults:
+  size: [770, 620]
+  scale: 2
+  themes: [light, dark]
+  prefs:
+    dashboard_page_size: 20
+    dashboard_column_visibility: { vods: false, monitor: false }
+
+scenes:
+  - name: dashboard
+    route: /dashboard
+    steps:
+      - wait: text=lanternfox_tv
+      - click: '[data-sidebar="trigger"]'
+      - wait: 400
+    video:
+      seconds: 8

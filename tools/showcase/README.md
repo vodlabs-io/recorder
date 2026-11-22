@@ -34,6 +34,13 @@ theme it writes `<scene>-<theme>.png` (window, chrome, shadow, transparent) and
 `<name>-<theme>.png` and, with `backdrop: true`, `<name>-<theme>-backdrop.png`.
 `--only a,b` renders a subset.
 
+A Scene with `video` is a **Take** instead: it gets its own running Demo
+daemon, the page clock runs, and once the steps are done the daemon's
+**Timeline** starts and the content is filmed for `seconds`. It writes
+`<scene>-<theme>.mp4` (H.264) and `.webm` (AV1), without chrome, plus the first
+frame as `<scene>-<theme>.content.png`. Needs `ffmpeg` with libx264 and
+libsvtav1 on PATH.
+
 ## Manual Shots
 
 Run the Demo daemon and point the real app, or `vod`, at it:
@@ -49,7 +56,10 @@ Or open the harness in any browser: `cd tools/showcase/harness && bunx vite`,
 then http://127.0.0.1:5175/#/dashboard.
 
 Flags: `--dataset DIR`, `--now RFC3339` (what the dataset's offsets count back
-from), `--freeze` (hold recording stats still), `--port`/`--ws-port`/`--http-port`.
+from), `--freeze` (hold recording stats still, and the Timeline until
+`POST /timeline`), `--port`/`--ws-port`/`--http-port`. `POST /timeline` on the
+HTTP port (re)starts the Timeline: dataset events such as `goes_live` count
+from it.
 
 ## Shot lists
 
@@ -73,6 +83,7 @@ scenes:
       - scroll: { selector: main, y: 400 }
       - eval: document.querySelector("main").scrollTo(0, 0)
       - script: ./my-step.ts     # default export: async (page) => {}
+    video: { seconds: 8, fps: 30 }   # a Take instead of a Shot (fps defaults to 30)
 compositions:
   - name: hero
     windows:                     # back to front; `at` is the top-left in points
@@ -94,7 +105,9 @@ Top level: `version` (daemon and app version shown), `uptime`, `download_dir`,
 default `offline`), `record` (default true), `bitrate` (`6Mbps`; how fast a
 recording grows and what its VODs weigh), `added`, `avatar_prompt`, `verified`.
 Live only: `live_for`, `title`, `category`, `session` (`recording`, `lagging`,
-`paused`). Offline: `last_live`, `last_live_duration`.
+`paused`). Offline: `last_live`, `last_live_duration`, and `goes_live` (an
+offset from the Timeline's start, `3s`: the Streamer goes live with its `title`
+and `category`, and when recorded starts recording 2 s later).
 
 `[[vod]]`: `id` (stable: it names the thumbnails and seeds the session ID),
 `streamer` (`platform/username`), `ago`, `duration`, `size` (default: the
