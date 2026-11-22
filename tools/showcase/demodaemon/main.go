@@ -115,7 +115,10 @@ func run(o options) error {
 		return err
 	}
 
-	d := &demo{o: o, ds: ds, kv: kv, store: vlstate.NewStore(kv), started: time.Now()}
+	d := &demo{
+		o: o, ds: ds, kv: kv, store: vlstate.NewStore(kv), started: time.Now(),
+		restart: make(chan struct{}, 1), events: make(chan func(context.Context), 16),
+	}
 	d.store.SetAddedTracker(d)
 	if err := d.writeStreamersFile(filepath.Join(tmp, "config", "streamers.toml")); err != nil {
 		return err
@@ -157,6 +160,9 @@ func run(o options) error {
 	d.reconcile(ctx)
 	d.publishStreamers(ctx)
 	d.publishArchive(ctx)
+	if !o.freeze {
+		d.startTimeline()
+	}
 
 	log.Printf("Demo daemon serving %s: nats://%s:%d, ws://%s:%d, %d Streamers, %d VODs",
 		o.dataset, o.host, o.port, o.host, o.wsPort, len(ds.Streamers), len(ds.VODs))
@@ -180,6 +186,10 @@ func run(o options) error {
 			if !o.freeze {
 				d.publishStats(ctx)
 			}
+		case <-d.restart:
+			d.startTimeline()
+		case event := <-d.events:
+			event(ctx)
 		}
 	}
 }
@@ -222,6 +232,75 @@ type demo struct {
 	strFile *vlconfig.StreamersFile
 	archive *archive
 	started time.Time
+	// The Timeline: dataset events (goes_live) timed from its start: the
+	// daemon's start unless frozen, and each POST /timeline.
+	restart chan struct{}
+	events  chan func(context.Context)
+	timers  []*time.Timer
+}
+
+// goLiveToRecording is how long a Streamer that goes live shows as live
+// before its recording starts.
+const goLiveToRecording = 2 * time.Second
+
+// startTimeline (re)schedules the dataset's events from now. A Streamer an
+// earlier run already took live stays live.
+func (d *demo) startTimeline() {
+	for _, t := range d.timers {
+		t.Stop()
+	}
+	d.timers = nil
+	for i, s := range d.ds.Streamers {
+		if s.GoesLive > 0 && s.Status == streamer.StatusOffline {
+			d.after(s.GoesLive, func(ctx context.Context) { d.goLive(ctx, i) })
+		}
+	}
+}
+
+// after runs fn on the main loop once delay has passed.
+func (d *demo) after(delay time.Duration, fn func(context.Context)) {
+	d.timers = append(d.timers, time.AfterFunc(delay, func() { d.events <- fn }))
+}
+
+// clock is the daemon's current time: the dataset's now plus the time it has
+// run, unless frozen.
+func (d *demo) clock() time.Time {
+	if d.o.freeze {
+		return d.ds.Now
+	}
+	return d.ds.Now.Add(time.Since(d.started))
+}
+
+// goLive takes an offline Streamer live and, when it is recorded, starts its
+// recording goLiveToRecording later.
+func (d *demo) goLive(ctx context.Context, i int) {
+	s := &d.ds.Streamers[i]
+	s.Status = streamer.StatusLive
+	s.LiveStart = d.clock()
+	d.store.SetStatus(ctx, streamer.StreamerState{
+		StreamerRef: streamer.StreamerRef{StreamerKey: s.Key},
+		DisplayName: s.DisplayName,
+		Status:      s.Status,
+		LiveMetadata: streamer.LiveMetadata{
+			Platform:    s.Key.Platform,
+			Title:       s.Title,
+			DisplayName: s.DisplayName,
+			Category:    s.Category,
+		},
+		AvatarURL:     d.avatarURL(s.Key),
+		LastLiveStart: s.LiveStart.Unix(),
+	}, true)
+	if !s.Record {
+		return
+	}
+	d.after(goLiveToRecording, func(ctx context.Context) {
+		// The recording's duration counts from here.
+		s.LiveStart = d.clock()
+		s.SessionID = shortID("session:goes_live:" + s.Key.String())
+		s.Session = string(recording.SessionRecording)
+		d.store.SetSessionState(ctx, s.Key, s.SessionID, recording.SessionRecording)
+		d.publishStats(ctx)
+	})
 }
 
 func (d *demo) appConfig() vlconfig.AppConfig {
@@ -334,6 +413,13 @@ func (d *demo) avatarURL(k streamer.StreamerKey) string {
 
 func (d *demo) serveImages() {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /timeline", func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case d.restart <- struct{}{}:
+		default:
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.Handle("/avatars/", http.StripPrefix("/avatars/",
 		http.FileServer(http.Dir(filepath.Join(d.ds.Dir, "images", "avatars")))))
 	addr := fmt.Sprintf("%s:%d", d.o.host, d.o.httpPort)
