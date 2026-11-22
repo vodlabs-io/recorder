@@ -1,6 +1,7 @@
 // The showcase harness's entry: the desktop app's React UI, connected to a Demo
 // daemon over NATS WebSocket instead of to vlrecd through the Electrobun
-// process. The socket URL comes from ?nats=, defaulting to the Demo daemon's.
+// process. The socket URL comes from ?nats=, defaulting to the Demo daemon's;
+// ?media= lets the app's player play VODs from the Demo daemon.
 import { setDaemonClient } from "@/lib/daemon";
 import { ShowcaseDaemonClient } from "./showcase-client";
 
@@ -9,6 +10,7 @@ setDaemonClient(
   new ShowcaseDaemonClient({
     servers: params.get("nats") ?? "ws://127.0.0.1:14223",
     appVersion: params.get("app_version") ?? "1.0.0",
+    media: params.get("media") ?? undefined,
   }),
 );
 

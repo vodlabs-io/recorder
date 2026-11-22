@@ -43,6 +43,9 @@ export interface ShowcaseDaemonClientOptions {
   servers: string | string[]
   // The version the Update and About screens report for the app.
   appVersion: string
+  // The Demo daemon's HTTP origin, e.g. "http://127.0.0.1:14224". When set,
+  // the app's player plays VODs from it.
+  media?: string
 }
 
 export class ShowcaseDaemonClient implements DaemonClient {
@@ -57,6 +60,7 @@ export class ShowcaseDaemonClient implements DaemonClient {
     browserMedia: false,
     inPagePlayer: false,
   }
+  private readonly media?: string
 
   private readonly session: DaemonSession
   private readonly servers: string | string[]
@@ -68,6 +72,8 @@ export class ShowcaseDaemonClient implements DaemonClient {
 
   constructor(opts: ShowcaseDaemonClientOptions) {
     this.servers = opts.servers
+    this.media = opts.media
+    this.capabilities.inPagePlayer = !!opts.media
     this.appVersion = opts.appVersion
     this.session = new DaemonSession({
       connect: wsconnect,
@@ -276,10 +282,15 @@ export class ShowcaseDaemonClient implements DaemonClient {
   setStartAtLogin = (enabled: boolean) =>
     Promise.resolve<StartAtLogin>({ supported: true, enabled })
   signOut = () => Promise.resolve()
-  mediaUrl = () => ""
-  previewTrackUrl = () => ""
+  mediaUrl = (dir: string, file: string) => this.mediaRoute("media", dir, file)
+  previewTrackUrl = (dir: string, file: string) => this.mediaRoute("thumbs.vtt", dir, file)
   recordingStreamUrls = () => null
-  prepareMedia = () => Promise.resolve(false)
+  prepareMedia = () => Promise.resolve(!!this.media)
+
+  private mediaRoute(route: string, dir: string, file: string): string {
+    if (!this.media) return ""
+    return `${this.media}/${route}?${new URLSearchParams({ dir, file })}`
+  }
   getFolderSuggestions = () => Promise.resolve([])
 
   getQuitPrompt = () => Promise.resolve<QuitPrompt | null>(null)

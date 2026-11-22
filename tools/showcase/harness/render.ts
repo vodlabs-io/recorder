@@ -8,7 +8,7 @@
 // Outputs, per Scene and theme, in --out (default tools/showcase/out/<list>):
 //   <scene>-<theme>.png          the window with chrome and shadow, transparent
 //   <scene>-<theme>.content.png  the window's content alone
-//   <scene>-<theme>.clip.png     one element of it, for a Scene with `clip`
+//   <scene>-<theme>.clip.png     part of it, for a Scene with `clip`
 // and for a Scene with `video`, instead of the PNGs: the content as
 // <scene>-<theme>.mp4 (H.264) and .webm (AV1), with its first frame as
 // <scene>-<theme>.content.png.
@@ -57,9 +57,12 @@ type Scene = {
   themes?: Theme[];
   prefs?: Record<string, unknown>;
   steps?: Step[];
-  // Also writes <scene>-<theme>.clip.png: the first element matching
-  // `selector`, grown by `pad` points on each side.
+  // Also writes <scene>-<theme>.clip.png: the box around every visible element
+  // matching `selector`, grown by `pad` points on each side.
   clip?: { selector: string; pad?: number };
+  // The app's player plays VODs: each file a still video of its thumbnail,
+  // with timeline previews from the Streamer's thumbnails. Needs ffmpeg.
+  player?: boolean;
   // A video Take: after the steps, the Timeline starts and the content is
   // filmed for `seconds`, with the Demo daemon and the page clock running.
   video?: { seconds: number; fps?: number };
@@ -160,6 +163,21 @@ async function runStep(page: Page, step: Step): Promise<void> {
   }
 }
 
+// unionBox is the smallest box holding every visible element matching selector.
+async function unionBox(page: Page, selector: string) {
+  const boxes = [];
+  for (const el of await page.locator(selector).all()) {
+    const b = await el.boundingBox();
+    if (b && b.width > 0 && b.height > 0) boxes.push(b);
+  }
+  if (boxes.length === 0) return null;
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  const right = Math.max(...boxes.map((b) => b.x + b.width));
+  const bottom = Math.max(...boxes.map((b) => b.y + b.height));
+  return { x, y, width: right - x, height: bottom - y };
+}
+
 // settle waits for the UI to stop changing: every image decoded, then a beat
 // for transitions.
 async function settle(page: Page): Promise<void> {
@@ -200,7 +218,7 @@ async function main(): Promise<void> {
         await page.screenshot({ path: content });
         contentShots.set(base, content);
         if (scene.clip && wanted(scene.name)) {
-          const box = await page.locator(scene.clip.selector).first().boundingBox();
+          const box = await unionBox(page, scene.clip.selector);
           if (!box) throw new Error(`${base}: no ${scene.clip.selector} to clip`);
           const pad = scene.clip.pad ?? 0;
           // Rounded inward, so an element on a half point takes no backdrop.
@@ -266,6 +284,7 @@ async function main(): Promise<void> {
     }
     else await page.clock.setFixedTime(now);
     const q = new URLSearchParams({ nats: `ws://127.0.0.1:${ports.ws}`, app_version: list.app_version ?? "1.0.0" });
+    if (scene.player) q.set("media", `http://127.0.0.1:${ports.http}`);
     await page.goto(`http://127.0.0.1:${PORTS.vite}/?${q}#${scene.route}`);
     await page.waitForTimeout(1500); // connect and receive the first snapshot
     for (const step of scene.steps ?? []) await runStep(page, step);

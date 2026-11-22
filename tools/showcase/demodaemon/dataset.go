@@ -25,6 +25,7 @@ type datasetFile struct {
 	Roots       []rootSpec     `toml:"root"`
 	Streamers   []streamerSpec `toml:"streamer"`
 	VODs        []vodSpec      `toml:"vod"`
+	Logins      []loginSpec    `toml:"login"`
 }
 
 type rootSpec struct {
@@ -84,8 +85,21 @@ type vodSpec struct {
 	Folder string `toml:"folder"`
 	// Percent is the running encode's progress, for state = encoding.
 	Percent float64 `toml:"percent"`
+	// Queue puts a merge of the VOD in the Encoding queue: queued or done.
+	Queue string `toml:"queue"`
 	// Titles are the stream titles, spread evenly across the VOD.
 	Titles []string `toml:"titles"`
+}
+
+// loginSpec is a Platform login as the Accounts screen shows it. Only its
+// non-secret status is served; there are no cookies.
+type loginSpec struct {
+	Platform string `toml:"platform"`
+	Account  string `toml:"account"`
+	// Expires is an offset forward from "now" (`27d`); empty is unknown.
+	Expires string `toml:"expires"`
+	// Expired shows the login as expired.
+	Expired bool `toml:"expired"`
 }
 
 // Dataset is a dataset resolved against one instant.
@@ -99,6 +113,15 @@ type Dataset struct {
 	Roots       []Root
 	Streamers   []Streamer
 	VODs        []VOD
+	Logins      []Login
+}
+
+// Login is a loginSpec resolved against "now".
+type Login struct {
+	Platform string
+	Account  string
+	Expires  time.Time // zero: unknown
+	Healthy  bool
 }
 
 type Root struct {
@@ -142,6 +165,7 @@ type VOD struct {
 	Reason    string
 	Root      string
 	Percent   float64
+	Queue     string
 	Titles    []string
 }
 
@@ -210,6 +234,24 @@ func (f *datasetFile) resolve(dir string, now time.Time) (*Dataset, error) {
 		}
 		ids[vod.ID] = true
 		ds.VODs = append(ds.VODs, vod)
+	}
+
+	seen := map[string]bool{}
+	for _, l := range f.Logins {
+		platform := strings.ToLower(l.Platform)
+		if platform == "" || seen[platform] {
+			return nil, fmt.Errorf("login %q: platform missing or listed twice", l.Platform)
+		}
+		seen[platform] = true
+		in, err := parseAgo(l.Expires, "expires")
+		if err != nil {
+			return nil, fmt.Errorf("login %s: %w", platform, err)
+		}
+		login := Login{Platform: platform, Account: l.Account, Healthy: !l.Expired}
+		if in > 0 {
+			login.Expires = now.Add(in)
+		}
+		ds.Logins = append(ds.Logins, login)
 	}
 	return ds, nil
 }
@@ -295,10 +337,14 @@ func (v vodSpec) resolve(now time.Time, f *datasetFile, streamers map[streamer.S
 		State:     v.State,
 		Reason:    v.Reason,
 		Percent:   v.Percent,
+		Queue:     v.Queue,
 		Titles:    v.Titles,
 	}
 	if vod.State == "" {
 		vod.State = "ready"
+	}
+	if vod.Queue != "" && vod.Queue != "queued" && vod.Queue != "done" {
+		return vod, fmt.Errorf("queue %q: want queued or done", vod.Queue)
 	}
 	ago, err := parseAgo(v.Ago, "ago")
 	if err != nil {

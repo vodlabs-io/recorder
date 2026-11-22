@@ -1,0 +1,97 @@
+# The home page's feature rows: the streamer table, the Accounts screen, the
+# VOD Archive filtered and selected, the player scrubbing a VOD, the Encoding
+# queue and the resume setting, each clipped to the part that shows the
+# feature. Render with:
+#   bun tools/showcase/harness/render.ts tools/showcase/shots/home-features.yaml
+dataset: default
+now: 2026-09-24T20:30:00-07:00
+timezone: America/Los_Angeles
+app_version: 1.0.0
+
+defaults:
+  size: [900, 900]
+  scale: 2
+  themes: [light, dark]
+  prefs:
+    dashboard_page_size: 5
+    dashboard_column_visibility: { vods: false, monitor: false, added: false }
+
+scenes:
+  - name: streamers
+    route: /dashboard
+    steps:
+      - wait: text=lanternfox_tv
+      - click: '[data-sidebar="trigger"]'
+      - click: 'role=button[name="Status"]'
+      - wait: 400
+    clip: { selector: '[data-slot="table-container"]' }
+
+  - name: accounts
+    route: /accounts
+    steps:
+      - wait: text=lampfish_archive
+      - click: '[data-sidebar="trigger"]'
+      - click: 'role=button[name="Status"]'
+      - click: 'role=button[name="Status"]'
+      - wait: 400
+    clip: { selector: 'thead, tr:has-text("Active")' }
+
+  - name: find
+    route: /vods
+    size: [1100, 800]
+    steps:
+      - wait: text=lanternfox_tv
+      - click: '[data-sidebar="trigger"]'
+      - click: 'main button:has-text("All platforms")'
+      - click: 'role=option[name="Twitch"]'
+      - hover: '[data-slot="card"] >> nth=0'
+      - click: '[aria-label^="Select "] >> nth=0'
+      - click: '[aria-label^="Select "] >> nth=1'
+      - eval: document.querySelectorAll("*").forEach((el) => el.scrollTop && el.scrollTo(0, 0))
+      - wait: 400
+    clip:
+      selector: 'input[placeholder^="Search streamers"], main button:has-text("Refresh"), :nth-match([data-slot="card"], 1), :nth-match([data-slot="card"], 3)'
+      pad: 12
+
+  - name: player
+    route: /vods
+    size: [1100, 860]
+    player: true
+    steps:
+      - wait: text=kestrelsketchbook
+      - click: '[data-sidebar="trigger"]'
+      - click: '[data-slot="card"]:has-text("kestrelsketchbook") button[title="Play"]'
+      - wait: video
+      - wait: '.media-time-slider [aria-valuemax="11520"]'
+      - eval: >-
+          new Promise((done) => {
+            const v = document.querySelector("video");
+            v.pause();
+            v.addEventListener("seeked", () => done(null), { once: true });
+            setTimeout(() => done(null), 5000);
+            v.currentTime = 2533;
+          })
+      - hover: .media-time-slider
+      - wait: 800
+    clip: { selector: '[role="dialog"]' }
+
+  - name: merge
+    route: /encoding
+    size: [1100, 600]
+    steps:
+      - wait: text=kestrelsketchbook
+      - click: '[data-sidebar="trigger"]'
+      - wait: 400
+    clip:
+      selector: ':text-is("Encoding queue"), main button:has-text("Pause queue"), main [data-slot="card"]'
+      pad: 12
+
+  - name: resume
+    route: /settings/recording
+    steps:
+      - wait: text=Resume interrupted
+      - click: '[data-sidebar="trigger"]'
+      - click: 'button:has-text("Off")'
+      - click: 'role=option[name="15 minutes (default)"]'
+      - wait: 400
+    clip: { selector: 'div.grid:has(> label:has-text("Resume interrupted"))', pad: 16 }

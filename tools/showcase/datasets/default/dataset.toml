@@ -23,6 +23,23 @@ paths = ["/Volumes/Vault/VodLabs"]
 total = "8TB"
 free = "5.3TB"
 
+# --- Logins (the Accounts screen; status only, no cookies) ------------------
+
+[[login]]
+platform = "chzzk"
+account = "lampfish_archive"
+expires = "24d"
+
+[[login]]
+platform = "soop"
+account = "quietdeck77"
+expires = "13d"
+
+[[login]]
+platform = "tiktok"
+account = "@vod.lantern"
+expires = "57d"
+
 # --- Live and recording ------------------------------------------------------
 
 [[streamer]]
@@ -64,12 +81,12 @@ avatar_prompt = "a stylized ocean wave shaped like a helmet visor, flat vector i
 
 [[streamer]]
 platform = "youtube"
-username = "tidepoolradio"
-verified = "2026-09-24"
+username = "kelpforestfm"
+verified = "2026-11-21"
 status = "live"
 live_for = "11h20m"
 bitrate = "5Mbps"
-title = "tidepool radio 🌊 lofi beats to record to"
+title = "kelp forest fm 🌊 lofi beats to record to"
 category = "Music"
 added = "203d"
 avatar_prompt = "a small jellyfish wearing headphones floating above a vintage radio, flat vector illustration avatar, bold simple shapes, centered, solid teal background, no text"
@@ -249,6 +266,7 @@ streamer = "twitch/lanternfox_tv"
 ago = "9d1h"
 duration = "5h12m"
 files = 2
+queue = "queued"
 titles = ["Hollow Knight 100% marathon", "Silksong after the marathon (part 2)"]
 
 [[vod]]
@@ -401,23 +419,24 @@ streamer = "kick/gritwave_es"
 ago = "11d"
 duration = "6h30m"
 files = 2
+queue = "queued"
 titles = ["maratón de FC 26 ⚽"]
 
 [[vod]]
 id = "tidepool-1"
-streamer = "youtube/tidepoolradio"
+streamer = "youtube/kelpforestfm"
 ago = "1d12h"
 duration = "10h"
 files = 3
-titles = ["tidepool radio 🌊 lofi beats to record to"]
+titles = ["kelp forest fm 🌊 lofi beats to record to"]
 
 [[vod]]
 id = "tidepool-2"
-streamer = "youtube/tidepoolradio"
+streamer = "youtube/kelpforestfm"
 ago = "3d12h"
 duration = "9h30m"
 files = 3
-titles = ["tidepool radio 🌊 rainy night drive edition"]
+titles = ["kelp forest fm 🌊 rainy night drive edition"]
 
 [[vod]]
 id = "haneul-1"
@@ -448,6 +467,7 @@ streamer = "soop/haneulbyeol77"
 ago = "8d10h"
 duration = "6h"
 files = 2
+queue = "done"
 titles = ["만렙 달성 기념 방송 🎉", "얼음 협곡 사냥"]
 
 [[vod]]
