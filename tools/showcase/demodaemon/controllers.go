@@ -195,21 +195,18 @@ func (a *archive) CancelMoves(context.Context, *streamer.StreamerKey) (int, erro
 	return 0, nil
 }
 
-// encodeJobs is one running merge per VOD in the encoding state.
+// encodeJobs is a running merge per VOD in the encoding state, then the
+// queued merges and the finished ones, in dataset order.
 func (a *archive) encodeJobs() []encoding.Job {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var jobs []encoding.Job
-	for _, v := range a.vods {
-		if v.State != vodindex.StateEncoding {
-			continue
-		}
+	add := func(v VOD, status string, created time.Time) {
 		inputs := make([]string, 0, v.Files)
 		for i := range max(v.Files, 2) {
 			inputs = append(inputs, fmt.Sprintf("vod%d.mp4", i+1))
 		}
-		started := a.ds.Now.Add(-4 * time.Minute)
-		jobs = append(jobs, encoding.Job{
+		job := encoding.Job{
 			ID:        int64(len(jobs) + 1),
 			Type:      "merge",
 			Source:    "manual",
@@ -220,11 +217,33 @@ func (a *archive) encodeJobs() []encoding.Job {
 			Inputs:    inputs,
 			Output:    "vod.mp4",
 			Position:  len(jobs),
-			Status:    "running",
-			Stage:     "encode",
-			CreatedAt: started.Unix(),
-			StartedAt: started.Unix(),
-		})
+			Status:    status,
+			CreatedAt: created.Unix(),
+		}
+		switch status {
+		case "running":
+			job.Stage = "encode"
+			job.StartedAt = created.Unix()
+		case "done":
+			job.StartedAt = created.Unix()
+			job.CompletedAt = created.Add(9 * time.Minute).Unix()
+		}
+		jobs = append(jobs, job)
+	}
+	for _, v := range a.vods {
+		if v.State == vodindex.StateEncoding {
+			add(v, "running", a.ds.Now.Add(-4*time.Minute))
+		}
+	}
+	for _, v := range a.vods {
+		if v.Queue == "queued" {
+			add(v, "queued", a.ds.Now.Add(-3*time.Minute))
+		}
+	}
+	for _, v := range a.vods {
+		if v.Queue == "done" {
+			add(v, "done", a.ds.Now.Add(-time.Hour))
+		}
 	}
 	return jobs
 }

@@ -64,12 +64,12 @@ avatar_prompt = "a stylized ocean wave shaped like a helmet visor, flat vector i
 
 [[streamer]]
 platform = "youtube"
-username = "tidepoolradio"
-verified = "2026-09-24"
+username = "kelpforestfm"
+verified = "2026-11-21"
 status = "live"
 live_for = "11h20m"
 bitrate = "5Mbps"
-title = "tidepool radio 🌊 lofi beats to record to"
+title = "kelp forest fm 🌊 lofi beats to record to"
 category = "Music"
 added = "165d"
 avatar_prompt = "a small jellyfish wearing headphones floating above a vintage radio, flat vector illustration avatar, bold simple shapes, centered, solid teal background, no text"
@@ -288,19 +288,19 @@ titles = ["maratón de FC 26 ⚽"]
 
 [[vod]]
 id = "tidepool-1"
-streamer = "youtube/tidepoolradio"
+streamer = "youtube/kelpforestfm"
 ago = "1d12h"
 duration = "10h"
 files = 3
-titles = ["tidepool radio 🌊 lofi beats to record to"]
+titles = ["kelp forest fm 🌊 lofi beats to record to"]
 
 [[vod]]
 id = "tidepool-2"
-streamer = "youtube/tidepoolradio"
+streamer = "youtube/kelpforestfm"
 ago = "3d12h"
 duration = "9h30m"
 files = 3
-titles = ["tidepool radio 🌊 rainy night drive edition"]
+titles = ["kelp forest fm 🌊 rainy night drive edition"]
 
 [[vod]]
 id = "haneul-1"

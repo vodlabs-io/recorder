@@ -29,6 +29,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/vodlabs-io/recorder/internal/diskspace"
 	"github.com/vodlabs-io/recorder/internal/platformauth"
+	"github.com/vodlabs-io/recorder/internal/platformlogin"
 	"github.com/vodlabs-io/recorder/internal/recording"
 	"github.com/vodlabs-io/recorder/internal/streamer"
 	"github.com/vodlabs-io/recorder/internal/version"
@@ -56,7 +57,7 @@ func main() {
 	flag.StringVar(&o.host, "host", "127.0.0.1", "listen address")
 	flag.IntVar(&o.port, "port", 14222, "NATS port: the desktop app's VLREC_NATS_URL, vod's daemon.port")
 	flag.IntVar(&o.wsPort, "ws-port", 14223, "NATS WebSocket port for the browser harness (0 disables)")
-	flag.IntVar(&o.httpPort, "http-port", 14224, "HTTP port serving avatar images (0 disables avatars)")
+	flag.IntVar(&o.httpPort, "http-port", 14224, "HTTP port serving avatar images and VOD media (0 disables both)")
 	flag.StringVar(&now, "now", "", "RFC 3339 instant the dataset's offsets count back from (default: the real time)")
 	flag.BoolVar(&o.freeze, "freeze", false, "hold live recording stats still, for pixel-stable Shots")
 	flag.Parse()
@@ -125,6 +126,10 @@ func run(o options) error {
 	}
 	d.archive = newArchive(ds)
 	d.archive.onDirty = func() { d.bumpVodsRev(ctx) }
+	d.media = &media{a: d.archive, dir: filepath.Join(tmp, "media")}
+	if err := os.MkdirAll(d.media.dir, 0o755); err != nil {
+		return err
+	}
 
 	logger, err := vllog.NewFileLogger(vlconfig.LoggerConfig{Level: "warn", Mode: "console"}, "demo")
 	if err != nil {
@@ -160,6 +165,7 @@ func run(o options) error {
 	d.reconcile(ctx)
 	d.publishStreamers(ctx)
 	d.publishArchive(ctx)
+	d.publishLogins(ctx)
 	if !o.freeze {
 		d.startTimeline()
 	}
@@ -231,6 +237,7 @@ type demo struct {
 	store   *vlstate.Store
 	strFile *vlconfig.StreamersFile
 	archive *archive
+	media   *media
 	started time.Time
 	// The Timeline: dataset events (goes_live) timed from its start: the
 	// daemon's start unless frozen, and each POST /timeline.
@@ -422,6 +429,7 @@ func (d *demo) serveImages() {
 	})
 	mux.Handle("/avatars/", http.StripPrefix("/avatars/",
 		http.FileServer(http.Dir(filepath.Join(d.ds.Dir, "images", "avatars")))))
+	d.media.routes(mux)
 	addr := fmt.Sprintf("%s:%d", d.o.host, d.o.httpPort)
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Printf("avatar server on %s: %v", addr, err)
@@ -535,6 +543,27 @@ func (d *demo) roots() []diskspace.Root {
 // publishDaemon writes the daemon-wide keys a healthy, registered, up-to-date
 // daemon would. The three JSON documents mirror unexported types in
 // internal/cloud and internal/app/daemon.
+// publishLogins writes each login's status doc, which is all the Accounts
+// screen reads. The cookie store stays empty, so no keychain is touched.
+func (d *demo) publishLogins(ctx context.Context) {
+	for _, l := range d.ds.Logins {
+		st := platformauth.Status{
+			Platform:        l.Platform,
+			Account:         l.Account,
+			CapturedAt:      d.ds.Now.Add(-12 * 24 * time.Hour).Unix(),
+			CookieCount:     14,
+			Healthy:         l.Healthy,
+			CanAuthenticate: true,
+		}
+		if !l.Expires.IsZero() {
+			st.ExpiresHint = l.Expires.Unix()
+		}
+		if err := platformlogin.Put(ctx, d.kv, st); err != nil {
+			log.Printf("login %s: %v", l.Platform, err)
+		}
+	}
+}
+
 func (d *demo) publishDaemon(ctx context.Context) {
 	d.kv.PutString(ctx, "daemon.start_time", strconv.FormatInt(d.ds.StartTime.Unix(), 10))
 	vlstate.PutDaemonVersion(ctx, d.kv, d.ds.Version)

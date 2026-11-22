@@ -84,7 +84,8 @@ scenes:
       - scroll: { selector: main, y: 400 }
       - eval: document.querySelector("main").scrollTo(0, 0)
       - script: ./my-step.ts     # default export: async (page) => {}
-    clip: { selector: '[role="dialog"]', pad: 0 }   # also write <scene>-<theme>.clip.png: that element alone
+    clip: { selector: '[role="dialog"]', pad: 0 }   # also write <scene>-<theme>.clip.png: the box around every match
+    player: true                 # the app's player plays VODs (needs ffmpeg)
     video: { seconds: 8, fps: 30 }   # a Take instead of a Shot (fps defaults to 30)
 compositions:
   - name: hero
@@ -115,8 +116,16 @@ and `category`, and when recorded starts recording 2 s later).
 `streamer` (`platform/username`), `ago`, `duration`, `size` (default: the
 Streamer's bitrate over the duration), `files` (1 → `vod.mp4`, n →
 `vod1…n.mp4`), `state` (`ready`, `processing`, `moving`, `encoding`), `reason`
-(a stalled move's cause), `percent` (encode progress), `folder` (`download`,
-`archive`), `titles`.
+(a stalled move's cause), `percent` (encode progress), `queue` (a merge in
+the Encoding queue: `queued` or `done`), `folder` (`download`, `archive`),
+`titles`.
+
+`[[login]]`: `platform`, `account`, `expires` (an offset forward, `24d`),
+`expired`. The Accounts screen shows it signed in; there are no cookies.
+
+With `player: true` the app's player plays a VOD file as a still video of its
+thumbnail, as long as the file, and the seek bar previews the Streamer's other
+thumbnails.
 
 Images: `images/avatars/<platform>-<username>.jpg` (512²) and
 `images/thumbs/<id>.jpg`, `<id>-2.jpg`, … (1024×576; a file without its own
