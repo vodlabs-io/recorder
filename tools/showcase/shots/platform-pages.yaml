@@ -1,0 +1,98 @@
+# One Shot per vodlabs.io platform page: the VOD Archive filtered to that
+# platform. Render with:
+#   bun tools/showcase/harness/render.ts tools/showcase/shots/platform-pages.yaml
+dataset: platform-pages
+now: 2026-09-24T20:30:00-07:00
+timezone: America/Los_Angeles
+app_version: 1.0.0
+
+defaults:
+  size: [1280, 800]
+  scale: 2
+  themes: [light, dark]
+
+scenes:
+  - name: tiktok
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="TikTok"]
+      - wait: 800
+  - name: twitch
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="Twitch"]
+      - wait: 800
+  - name: youtube
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="YouTube"]
+      - wait: 800
+  - name: kick
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="Kick"]
+      - wait: 800
+  - name: rumble
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="Rumble"]
+      - wait: 800
+  - name: bigo
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="Bigo"]
+      - wait: 800
+  - name: douyin
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="Douyin"]
+      - wait: 800
+  - name: bilibili
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="Bilibili"]
+      - wait: 800
+  - name: chzzk
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="CHZZK"]
+      - wait: 800
+  - name: soop
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="SOOP"]
+      - wait: 800
+  - name: twitcasting
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="TwitCasting"]
+      - wait: 800
+  - name: x
+    route: /vods
+    steps:
+      - wait: text=lanternfox_tv
+      - click: text=All platforms
+      - click: role=option[name="X"]
+      - wait: 800
