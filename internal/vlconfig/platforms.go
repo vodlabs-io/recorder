@@ -165,6 +165,11 @@ type loginFlow struct {
 	// the user follows there, so the daemon asks that far more often than it
 	// checks any one streamer. Client-authoritative, like Required.
 	LiveFeed bool `json:"live_feed,omitempty"`
+	// SignedInStreams means a signed-out check sees every broadcast but a
+	// signed-in one is handed better streams (Bilibili's source quality), so
+	// with a login stored every check and re-sign from this daemon carries it.
+	// Client-authoritative, like Required.
+	SignedInStreams bool `json:"signed_in_streams,omitempty"`
 	// SessionCookie, when set, names the cookie whose presence in the login
 	// webview means the user is signed in (e.g. "sessionid"). The desktop uses it
 	// as the primary, most reliable capture trigger; SuccessURLPattern is a
@@ -265,6 +270,14 @@ func LoginFlowFor(name string) *loginFlow {
 func LoginRequiredFor(name string) bool {
 	l := LoginFlowFor(name)
 	return l != nil && l.Required
+}
+
+// SignedInStreamsFor reports whether a platform hands a signed-in check better
+// streams than a signed-out one. False for an unknown platform and for one with
+// no login descriptor.
+func SignedInStreamsFor(name string) bool {
+	l := LoginFlowFor(name)
+	return l != nil && l.SignedInStreams
 }
 
 // LiveFeedFor reports whether a signed-in client can ask the cloud to read the
@@ -498,6 +511,7 @@ func platformEqual(a, b Platform) bool {
 			a.Login.RefreshURL == b.Login.RefreshURL &&
 			a.Login.SuccessURLPattern == b.Login.SuccessURLPattern &&
 			a.Login.Required == b.Login.Required &&
+			a.Login.SignedInStreams == b.Login.SignedInStreams &&
 			a.Login.SessionCookie == b.Login.SessionCookie &&
 			a.Login.AccountCookie == b.Login.AccountCookie &&
 			authSchemeEqual(a.Login.Auth, b.Login.Auth) &&
