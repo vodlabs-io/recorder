@@ -102,6 +102,47 @@ func TestSwagMintRefusesAWithheldStream(t *testing.T) {
 	}
 }
 
+func TestSwagMintSignsInAndTrustsTheTokenEndpoint(t *testing.T) {
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/streams/sess1/token":
+			auth = r.Header.Get("Authorization")
+			if auth == "" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			io.WriteString(w, `{"agora_token_session_id":"tok","agora_exp":1795478533}`)
+		case "/realtime/state":
+			io.WriteString(w, `{"channels":{"private-stream-rt@user1":{"state":{"session":`+swagShow+`}}}}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	withSwag(t, srv)
+	ch, _ := Parse(swagChannel)
+	ch.login = &seatLogin{headers: map[string]string{"Authorization": "Bearer jwt"}}
+	got, err := mint(context.Background(), srv.Client(), ch)
+	if err != nil || got.Token != "tok" || auth != "Bearer jwt" {
+		t.Fatalf("signed-in mint of a paid show: %+v, %v (auth %q)", got, err, auth)
+	}
+	// A paid show is the token endpoint's call, not the stream mode's.
+	if reason := swag.withheld(context.Background(), srv.Client(), ch); reason != "" {
+		t.Fatalf("withheld %q for a signed-in viewer", reason)
+	}
+}
+
+func TestSwagSignedInRefusalNamesUnpaid(t *testing.T) {
+	srv, _ := swagAPI(t, http.StatusForbidden, swagShow)
+	withSwag(t, srv)
+	ch, _ := Parse(swagChannel)
+	ch.login = &seatLogin{headers: map[string]string{"Authorization": "Bearer jwt"}}
+	_, err := mint(context.Background(), srv.Client(), ch)
+	var refused *RefusedError
+	if !errors.As(err, &refused) || refused.Reason != "not paid for" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestSwagWatch(t *testing.T) {
 	for name, c := range map[string]struct {
 		state string

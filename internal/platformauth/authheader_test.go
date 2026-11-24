@@ -221,3 +221,13 @@ func TestAuthHeadersXCSRFRepeatsCT0(t *testing.T) {
 		t.Errorf("headers without ct0 = %v", h)
 	}
 }
+
+// TestBearerCookieHeader covers SWAG's scheme: the access token copied out of
+// local storage, sent as a bearer credential.
+func TestBearerCookieHeader(t *testing.T) {
+	s := Session{Platform: "swag", Cookies: []Cookie{{Name: "vl_access_token", Value: "jwt"}}}
+	h := s.AuthHeaders(SchemeBearerCookie, []string{"vl_access_token"}, "", SignedRequest{})
+	if len(h) != 1 || h["Authorization"] != "Bearer jwt" {
+		t.Errorf("headers = %v, want only Authorization: Bearer jwt", h)
+	}
+}

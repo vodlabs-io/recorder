@@ -7,6 +7,7 @@ package agora
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -46,6 +47,28 @@ type Channel struct {
 	// Codec is the video codec the channel's broadcasters send: CodecVP8,
 	// or empty for H.264.
 	Codec string
+
+	// login signs the mint's requests in as the user; nil when signed out.
+	// Never part of the URL.
+	login *seatLogin
+}
+
+// seatLogin holds the headers that sign a request in as the user.
+type seatLogin struct {
+	headers map[string]string
+}
+
+// signedIn reports whether the channel's mint signs its requests in.
+func (c Channel) signedIn() bool { return c.login != nil && len(c.login.headers) > 0 }
+
+// signIn adds the login's headers to req.
+func (c Channel) signIn(req *http.Request) {
+	if c.login == nil {
+		return
+	}
+	for k, v := range c.login.headers {
+		req.Header.Set(k, v)
+	}
 }
 
 // CodecVP8 marks a channel carrying VP8 video. An Agora app picks one codec
@@ -91,6 +114,16 @@ func Parse(raw string) (Channel, error) {
 		return Channel{}, fmt.Errorf("agora url names no app id or channel")
 	}
 	return c, nil
+}
+
+// MintOf returns the platform whose token mint the agora:// URL raw names, or
+// empty.
+func MintOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != Scheme {
+		return ""
+	}
+	return u.Query().Get("mint")
 }
 
 // WithCodec returns the agora:// URL raw with its codec set to codec: CodecVP8,

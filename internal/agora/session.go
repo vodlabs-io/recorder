@@ -35,9 +35,19 @@ const mediaTimeout = 20 * time.Second
 // io.EOF when the broadcaster leaves, or with the error that ended the
 // session. Close, or the end of ctx, leaves the channel.
 func Open(ctx context.Context, u string, client *http.Client, logger *slog.Logger) (io.ReadCloser, error) {
+	return OpenSigned(ctx, u, client, nil, logger)
+}
+
+// OpenSigned is Open for a recorder holding a login for the channel's
+// platform: login holds the headers that sign the mint's own requests in as
+// the user, which can open a broadcast the user has paid for.
+func OpenSigned(ctx context.Context, u string, client *http.Client, login map[string]string, logger *slog.Logger) (io.ReadCloser, error) {
 	ch, err := Parse(u)
 	if err != nil {
 		return nil, err
+	}
+	if len(login) > 0 {
+		ch.login = &seatLogin{headers: login}
 	}
 	if client == nil || client.Timeout != 0 {
 		// The signalling socket outlives any whole-request timeout.

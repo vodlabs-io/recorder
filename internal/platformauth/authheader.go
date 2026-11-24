@@ -70,6 +70,14 @@ const SchemeXCSRF = "x-csrf"
 // into a cookie of the jar (see loginFlow.StorageCookies).
 const SchemeAuthorizationCookie = "authorization-cookie"
 
+// SchemeBearerCookie replays a cookie's value as a bearer credential:
+//
+//	Authorization: Bearer <cookie value>
+//
+// It is SWAG's scheme: its API reads the access token the site keeps in local
+// storage, which the desktop's login capture copies into a cookie of the jar.
+const SchemeBearerCookie = "bearer-cookie"
+
 // SignedRequest is the request a request-bound scheme signs.
 type SignedRequest struct {
 	URL  string
@@ -100,6 +108,8 @@ func (s Session) AuthHeaders(scheme string, cookieNames []string, origin string,
 		return map[string]string{"Authorization": "OAuth " + secret}
 	case strings.EqualFold(scheme, SchemeAuthorizationCookie):
 		return map[string]string{"Authorization": secret}
+	case strings.EqualFold(scheme, SchemeBearerCookie):
+		return map[string]string{"Authorization": "Bearer " + secret}
 	case strings.EqualFold(scheme, SchemeTiLiveChecksum):
 		if len(cookieNames) < 2 {
 			return nil

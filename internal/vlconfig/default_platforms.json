@@ -409,7 +409,19 @@
 	{
 		"name": "swag",
 		"display_name": "SWAG",
-		"channel_url": "https://swag.live/u/{username}/livestream"
+		"channel_url": "https://swag.live/u/{username}/livestream",
+		"login": {
+			"url": "https://swag.live/en",
+			"cookie_domains": ["swag.live"],
+			"session_cookie": "vl_access_token",
+			"storage_cookies": [
+				{"key": "_accessToken", "cookie": "vl_access_token"}
+			],
+			"auth": {
+				"scheme": "bearer-cookie",
+				"cookies": ["vl_access_token"]
+			}
+		}
 	},
 	{
 		"name": "generic",
