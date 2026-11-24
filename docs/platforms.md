@@ -50,6 +50,7 @@ account: the recorder can follow streamers there only while you are signed in.
 | Streamate | |
 | Stripchat | Yes |
 | Superlive | |
+| SWAG | |
 | Tango | |
 | TiLive | Yes |
 | TikTok | Yes |

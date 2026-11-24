@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Scheme is the URL scheme of a stream that is an Agora channel rather than
@@ -19,6 +20,7 @@ const Scheme = "agora"
 // Channel names an Agora channel and the credentials to join it as audience.
 //
 // Its URL form is agora://<app id>/<channel>?token=<t>&uid=<n>, optionally with
+// account=<a> for a token issued to a string user account,
 // mint=<platform>&room=<id>&user=<id> when the platform binds a token to one
 // viewer, and codec=vp8 for a channel whose broadcasters send VP8.
 type Channel struct {
@@ -26,6 +28,12 @@ type Channel struct {
 	Name  string
 	Token string
 	UID   uint32
+	// Account is the string user account the token was issued to; the join
+	// registers it for its numeric uid. Empty for a token issued to UID.
+	Account string
+	// Expires is when Token stops admitting the client, for a mint whose
+	// tokens are renewed during the session; zero otherwise.
+	Expires time.Time
 	// Mint names a platform whose join tokens belong to one viewer: two
 	// clients joining with the same token evict each other, so a recorder
 	// mints its own rather than sharing the one the check returned. Empty
@@ -60,13 +68,14 @@ func Parse(raw string) (Channel, error) {
 		return Channel{}, fmt.Errorf("not an agora url: scheme %q", u.Scheme)
 	}
 	c := Channel{
-		AppID: u.Host,
-		Name:  strings.TrimPrefix(u.Path, "/"),
-		Token: u.Query().Get("token"),
-		Mint:  u.Query().Get("mint"),
-		Room:  u.Query().Get("room"),
-		User:  u.Query().Get("user"),
-		Codec: u.Query().Get("codec"),
+		AppID:   u.Host,
+		Name:    strings.TrimPrefix(u.Path, "/"),
+		Token:   u.Query().Get("token"),
+		Account: u.Query().Get("account"),
+		Mint:    u.Query().Get("mint"),
+		Room:    u.Query().Get("room"),
+		User:    u.Query().Get("user"),
+		Codec:   u.Query().Get("codec"),
 	}
 	if c.Codec != "" && c.Codec != CodecVP8 {
 		return Channel{}, fmt.Errorf("agora url: unsupported codec %q", c.Codec)
@@ -112,6 +121,9 @@ func (c Channel) URL() string {
 	}
 	if c.UID != 0 {
 		q.Set("uid", strconv.FormatUint(uint64(c.UID), 10))
+	}
+	if c.Account != "" {
+		q.Set("account", c.Account)
 	}
 	if c.Mint != "" {
 		q.Set("mint", c.Mint)

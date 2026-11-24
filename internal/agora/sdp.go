@@ -1,6 +1,7 @@
 package agora
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,7 +11,7 @@ import (
 // needs: its ICE and DTLS parameters, and the SSRCs it pre-subscribed the
 // client to.
 type joinReply struct {
-	UID  uint32 `json:"uid"`
+	UID  json.RawMessage `json:"uid"`
 	Ortc struct {
 		Cname          string `json:"cname"`
 		DtlsParameters struct {

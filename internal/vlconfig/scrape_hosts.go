@@ -270,6 +270,9 @@ var scrapeDomains = map[string][]string{
 		"rutube.ru", // the API, and the stream balancer and CDN hosts
 		"rtbcdn.ru", // the stream CDN
 	},
+	"swag": {
+		"swag.live", // the API
+	},
 }
 
 // scrapeHostSuffixes is scrapeDomains flattened and deduplicated, since a host

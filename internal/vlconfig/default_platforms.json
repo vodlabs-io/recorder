@@ -407,6 +407,11 @@
 		"channel_url": "https://api.vodlabs.io/channel/rutube/{username}"
 	},
 	{
+		"name": "swag",
+		"display_name": "SWAG",
+		"channel_url": "https://swag.live/u/{username}/livestream"
+	},
+	{
 		"name": "generic",
 		"display_name": "Web",
 		"no_monitor": true,
