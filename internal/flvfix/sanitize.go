@@ -153,6 +153,10 @@ type Sanitizer struct {
 	snapshots map[string]timelineSnapshot
 	baseOut   int64 // output ts the next part's first media tag anchors to
 
+	// reanchor makes the next media tag start a new source's timeline (see
+	// Reanchor).
+	reanchor bool
+
 	eof     bool // Finish called: no more input will arrive
 	written int64
 	stats   Stats
@@ -269,6 +273,29 @@ func (s *Sanitizer) Finish() error {
 		s.consume(n)
 	}
 	return err
+}
+
+// Truncate drops input buffered after the last complete unit: the tail of a
+// connection that ended mid-tag. The next connection's bytes must not complete
+// it. A unit held for a pending rotation is kept.
+func (s *Sanitizer) Truncate() {
+	if s.pendingRotate {
+		return
+	}
+	if n := len(s.buf) - s.start; n > 0 {
+		s.stats.truncatedTailBytes += int64(n)
+		s.consume(n)
+	}
+	s.resync = false
+}
+
+// Reanchor marks the next media tag as the first of a new source whose clock
+// owes nothing to the last one (an RTC channel rejoined, counting from zero
+// again): it lands one frame after the output so far, rather than being read
+// as a replay of it.
+func (s *Sanitizer) Reanchor() {
+	s.endDedup()
+	s.reanchor = true
 }
 
 // RotateOutput finishes the config-change handshake begun by an
@@ -670,6 +697,16 @@ func (s *Sanitizer) onMedia(full []byte, stream int, keyframe bool) error {
 		return nil
 	}
 	maxOut := max(s.lastOut[streamAudio], s.lastOut[streamVideo])
+
+	if s.reanchor {
+		s.reanchor = false
+		if maxOut >= 0 {
+			s.rebase(maxOut, inTs)
+			out = inTs + s.offset
+			s.videoNeedKeyframe = true
+			s.logger.Info("Spliced a new source onto the timeline", "at_out_ms", out)
+		}
+	}
 
 	if maxOut >= 0 {
 		switch {

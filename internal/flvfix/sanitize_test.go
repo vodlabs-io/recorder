@@ -738,3 +738,57 @@ func TestConfigKeyOfMatchesWriter(t *testing.T) {
 		t.Fatalf("ConfigKeyOf garbage = %q, want empty", got)
 	}
 }
+
+func TestReanchorSplicesANewSourceStream(t *testing.T) {
+	var out bytes.Buffer
+	s := New(&out, nil, Options{})
+	s.rawTimestamps = true
+	first := stream(fileHeader(), vCfgTag(0, 0x41, 22), aCfgTag(0), gopSegment(0, 56000))
+	if _, err := s.Write(first); err != nil {
+		t.Fatal(err)
+	}
+	// A rejoined channel starts over: its own header and configs, then media
+	// from zero, which without Reanchor reads as a 56 s replay.
+	s.Truncate()
+	s.Reanchor()
+	second := stream(fileHeader(), vCfgTag(0, 0x41, 22), aCfgTag(0), gopSegment(0, 56000))
+	if _, err := s.Write(second); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	tags := parseOutput(t, out.Bytes())
+	checkInvariants(t, tags)
+	st := s.Stats()
+	if st.dedupTags != 0 || st.resets != 0 {
+		t.Fatalf("new source deduplicated or reset: %+v", st)
+	}
+	vts := mediaTimestamps(tags, tagVideo)
+	if last := vts[len(vts)-1]; last < 111000 {
+		t.Fatalf("timeline ends at %d ms, want both sources (~112 s)", last)
+	}
+}
+
+func TestTruncateDropsAPartialTagFromACutConnection(t *testing.T) {
+	var out bytes.Buffer
+	s := New(&out, nil, Options{})
+	s.rawTimestamps = true
+	first := stream(fileHeader(), vCfgTag(0, 0x41, 22), aCfgTag(0), gopSegment(0, 2000))
+	cut := vKey(2000)
+	if _, err := s.Write(append(first, cut[:len(cut)/2]...)); err != nil {
+		t.Fatal(err)
+	}
+	s.Truncate()
+	s.Reanchor()
+	if _, err := s.Write(stream(fileHeader(), vCfgTag(0, 0x41, 22), aCfgTag(0), gopSegment(0, 2000))); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	checkInvariants(t, parseOutput(t, out.Bytes()))
+	if s.Stats().truncatedTailBytes != int64(len(cut)/2) {
+		t.Fatalf("truncated %d bytes, want %d", s.Stats().truncatedTailBytes, len(cut)/2)
+	}
+}
