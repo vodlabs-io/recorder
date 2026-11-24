@@ -67,13 +67,17 @@ func lookupGateway(ctx context.Context, client *http.Client, ch Channel, sid str
 
 func queryAP(ctx context.Context, client *http.Client, host string, ch Channel, sid string) (apGrant, error) {
 	opid := time.Now().UnixNano() % 1e11
+	detail := map[string]string{"11": "CN,GLOBAL", "17": "2", "22": "CN,GLOBAL"}
+	if ch.Account != "" {
+		detail["6"] = ch.Account
+	}
 	body, err := json.Marshal(map[string]any{
 		"appid": ch.AppID, "client_ts": time.Now().UnixMilli(), "opid": opid, "sid": sid,
 		"request_bodies": []any{map[string]any{
 			"uri": 22,
 			"buffer": map[string]any{
 				"cname":       ch.Name,
-				"detail":      map[string]string{"11": "CN,GLOBAL", "17": "2", "22": "CN,GLOBAL"},
+				"detail":      detail,
 				"key":         ch.Token,
 				"service_ids": []int{11, 26},
 				"uid":         ch.UID,
@@ -137,4 +141,63 @@ func queryAP(ctx context.Context, client *http.Client, host string, ch Channel, 
 		return g, nil
 	}
 	return apGrant{}, errors.New("no gateway entry in reply")
+}
+
+// accountHosts register string user accounts, tried in order.
+var accountHosts = []string{
+	"https://sua-ap-web-1.agora.io",
+	"https://sua-web-2.ap.sd-rtn.com",
+}
+
+// registerAccount returns the numeric uid Agora assigns to the string user
+// account in app appID.
+func registerAccount(ctx context.Context, client *http.Client, appID, account, sid string) (uint32, error) {
+	body, err := json.Marshal(map[string]any{"sid": sid, "opid": 10, "appid": appID, "string_uid": account})
+	if err != nil {
+		return 0, err
+	}
+	var errs []error
+	for _, host := range accountHosts {
+		uid, err := queryAccount(ctx, client, host, body)
+		if err == nil {
+			return uid, nil
+		}
+		errs = append(errs, fmt.Errorf("%s: %w", host, err))
+	}
+	return 0, fmt.Errorf("register user account: %w", errors.Join(errs...))
+}
+
+func queryAccount(ctx context.Context, client *http.Client, host string, body []byte) (uint32, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/api/v1?action=stringuid", bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("X-Packet-Service-Type", "0")
+	req.Header.Set("X-Packet-URI", "72")
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var reply struct {
+		Code int   `json:"code"`
+		UID  int64 `json:"uid"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&reply); err != nil {
+		return 0, fmt.Errorf("decode: %w", err)
+	}
+	if reply.Code != 0 {
+		return 0, fmt.Errorf("refused with code %d", reply.Code)
+	}
+	if reply.UID <= 0 || reply.UID >= 1<<32 {
+		return 0, fmt.Errorf("invalid uid %d", reply.UID)
+	}
+	return uint32(reply.UID), nil
 }

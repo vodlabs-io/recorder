@@ -22,6 +22,8 @@ func mint(ctx context.Context, client *http.Client, ch Channel) (Channel, error)
 		return superlive.mint(ctx, client, ch)
 	case "manyvids":
 		return manyvids.mint(ctx, client, ch)
+	case "swag":
+		return swag.mint(ctx, client, ch)
 	}
 	return Channel{}, fmt.Errorf("unknown token mint %q", ch.Mint)
 }
@@ -123,11 +125,28 @@ func withheld(d superliveStream, reason string) string {
 // watcher returns a function that blocks while ch's platform still offers its
 // broadcast, or nil for a platform this package cannot ask.
 func watcher(client *http.Client, ch Channel) func(context.Context) error {
-	if ch.Mint != "superlive" || ch.Room == "" {
+	switch {
+	case ch.Mint == "superlive" && ch.Room != "":
+		return func(ctx context.Context) error {
+			return superlive.watch(ctx, client, ch, superliveWatchInterval)
+		}
+	case ch.Mint == "swag" && ch.Room != "" && ch.User != "":
+		return func(ctx context.Context) error {
+			return swag.watch(ctx, client, ch, swagWatchInterval)
+		}
+	}
+	return nil
+}
+
+// renewer returns a function that mints a fresh token for the account ch
+// joined with, for a platform whose tokens expire during a session; nil
+// otherwise.
+func renewer(client *http.Client, ch Channel) func(context.Context) (string, time.Time, error) {
+	if ch.Mint != "swag" || ch.Expires.IsZero() {
 		return nil
 	}
-	return func(ctx context.Context) error {
-		return superlive.watch(ctx, client, ch, superliveWatchInterval)
+	return func(ctx context.Context) (string, time.Time, error) {
+		return swag.renew(ctx, client, ch)
 	}
 }
 

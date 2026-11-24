@@ -67,6 +67,7 @@ func Open(ctx context.Context, u string, client *http.Client, logger *slog.Logge
 		cancel: cancel,
 		out:    pw,
 		watch:  watcher(client, ch),
+		renew:  renewer(client, ch),
 	}
 	if err := s.connect(ctx, client); err != nil {
 		s.teardown()
@@ -106,11 +107,22 @@ type session struct {
 	// broadcast and returns why; nil otherwise.
 	watch func(context.Context) error
 
+	// renew, for a token that expires during the session, mints its
+	// successor and when that expires; nil otherwise.
+	renew func(context.Context) (string, time.Time, error)
+
 	endOnce sync.Once
 }
 
 func (s *session) connect(ctx context.Context, client *http.Client) error {
 	sid := strings.ToUpper(randomHex(16))
+	if s.ch.Account != "" && s.ch.UID == 0 {
+		uid, err := registerAccount(ctx, client, s.ch.AppID, s.ch.Account, sid)
+		if err != nil {
+			return err
+		}
+		s.ch.UID = uid
+	}
 	grant, err := lookupGateway(ctx, client, s.ch, sid)
 	if err != nil {
 		return err
@@ -152,7 +164,7 @@ func (s *session) connect(ctx context.Context, client *http.Client) error {
 	if err := s.pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: answer}); err != nil {
 		return fmt.Errorf("apply gateway answer: %w", err)
 	}
-	s.logger.Info("Joined Agora channel", "uid", joined.UID, "gateway", grant.Edges[0].IP)
+	s.logger.Info("Joined Agora channel", "uid", string(joined.UID), "gateway", grant.Edges[0].IP)
 	return nil
 }
 
@@ -181,7 +193,7 @@ func (s *session) joinMessage(sid string, grant apGrant, offer localParams) map[
 	opus["rtpMap"].(map[string]any)["encodingParameters"] = 2
 	none := map[string]any{"audioCodecs": []any{}, "audioExtensions": []any{}, "videoCodecs": []any{}, "videoExtensions": []any{}}
 
-	return map[string]any{
+	msg := map[string]any{
 		"p2p_id": 1, "session_id": sid, "app_id": s.ch.AppID, "channel_key": s.ch.Token,
 		"channel_name": s.ch.Name, "sdk_version": sdkVersion, "browser": userAgent,
 		"process_id": "process-" + randomHex(16), "mode": "live", "codec": codecName, "role": "audience",
@@ -210,6 +222,10 @@ func (s *session) joinMessage(sid string, grant apGrant, offer localParams) map[
 			"version": "2",
 		},
 	}
+	if s.ch.Account != "" {
+		msg["string_uid"] = s.ch.Account
+	}
+	return msg
 }
 
 // supervise watches the gateway's notifications and the media watchdog until
@@ -224,8 +240,41 @@ func (s *session) supervise(ctx context.Context) {
 	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
+	// A token that expires during the session is renewed before it does, and
+	// at once when the gateway warns of it.
+	var renewT *time.Timer
+	var renewC <-chan time.Time
+	renewed := make(chan error, 1)
+	renewing := false
+	startRenew := func() {
+		if s.renew != nil && !renewing {
+			renewing = true
+			go func() { renewed <- s.renewToken(ctx) }()
+		}
+	}
+	if s.renew != nil {
+		renewT = time.NewTimer(renewDelay(s.ch.Expires))
+		defer renewT.Stop()
+		renewC = renewT.C
+	}
 	for {
 		select {
+		case <-renewC:
+			startRenew()
+		case err := <-renewed:
+			renewing = false
+			var refused *RefusedError
+			switch {
+			case errors.As(err, &refused):
+				s.logger.Info("Platform no longer offers the broadcast", "reason", err)
+				s.finish(err)
+				return
+			case err != nil:
+				s.logger.Warn("Agora token renewal failed", "error", err)
+				renewT.Reset(renewRetry)
+			default:
+				renewT.Reset(renewDelay(s.ch.Expires))
+			}
 		case <-ctx.Done():
 			s.finish(ctx.Err())
 			return
@@ -239,6 +288,9 @@ func (s *session) supervise(ctx context.Context) {
 			s.finish(fmt.Errorf("agora gateway closed: %w", s.sig.err))
 			return
 		case n := <-s.sig.events:
+			if n.Type == "on_token_privilege_will_expire" {
+				startRenew()
+			}
 			if err := s.onNotification(n); err != nil {
 				s.finish(err)
 				return
@@ -259,18 +311,28 @@ func (s *session) supervise(ctx context.Context) {
 
 func (s *session) onNotification(n notification) error {
 	var m struct {
-		UID       uint32 `json:"uid"`
-		ErrorCode int    `json:"error_code"`
-		Reason    int    `json:"reason"`
-		PT        *int   `json:"pt"`
+		UID       json.RawMessage `json:"uid"`
+		UintID    uint32          `json:"uint_id"`
+		ErrorCode int             `json:"error_code"`
+		Reason    int             `json:"reason"`
+		PT        *int            `json:"pt"`
 	}
 	_ = json.Unmarshal(n.Message, &m)
+	// A user who joined with a string account is named by it, with the
+	// numeric uid beside it.
+	uid := m.UintID
+	if uid == 0 {
+		var v uint32
+		if json.Unmarshal(m.UID, &v) == nil {
+			uid = v
+		}
+	}
 	switch n.Type {
 	case "on_add_video_stream", "on_add_audio_stream":
-		if s.publisher.CompareAndSwap(0, m.UID) {
-			s.logger.Debug("Receiving broadcaster", "uid", m.UID)
+		if s.publisher.CompareAndSwap(0, uid) {
+			s.logger.Debug("Receiving broadcaster", "uid", uid)
 		}
-		if n.Type == "on_add_video_stream" && m.PT != nil && *m.PT == 0 && m.UID == s.publisher.Load() {
+		if n.Type == "on_add_video_stream" && m.PT != nil && *m.PT == 0 && uid == s.publisher.Load() {
 			// Payload type 0: the video is in a codec this audience did not
 			// join with, and only the audio is forwarded.
 			want := CodecVP8
@@ -280,8 +342,8 @@ func (s *session) onNotification(n notification) error {
 			return &CodecError{Codec: want}
 		}
 	case "on_user_offline", "on_remove_stream":
-		if p := s.publisher.Load(); p != 0 && m.UID == p {
-			s.logger.Info("Broadcaster left the channel", "uid", m.UID, "event", n.Type, "reason", m.Reason)
+		if p := s.publisher.Load(); p != 0 && uid == p {
+			s.logger.Info("Broadcaster left the channel", "uid", uid, "event", n.Type, "reason", m.Reason)
 			return ErrChannelEnded
 		}
 	case "on_user_banned":
@@ -291,6 +353,34 @@ func (s *session) onNotification(n notification) error {
 	case "on_p2p_lost":
 		return errors.New("agora: gateway lost the media connection")
 	}
+	return nil
+}
+
+// renewLead is how long before a token expires its successor is minted, and
+// renewRetry how soon a failed renewal is tried again.
+const (
+	renewLead  = 20 * time.Second
+	renewRetry = 5 * time.Second
+)
+
+// renewDelay returns how long to wait before renewing a token that expires at
+// expires.
+func renewDelay(expires time.Time) time.Duration {
+	return max(time.Until(expires)-renewLead, time.Second)
+}
+
+// renewToken mints the session's next token and hands it to the gateway.
+func (s *session) renewToken(ctx context.Context) error {
+	token, expires, err := s.renew(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err := s.sig.request(ctx, "renew_token", map[string]any{"token": token}); err != nil {
+		return fmt.Errorf("renew token: %w", err)
+	}
+	// supervise reads Expires only after this returns.
+	s.ch.Token, s.ch.Expires = token, expires
+	s.logger.Debug("Renewed Agora token", "expires", expires)
 	return nil
 }
 
