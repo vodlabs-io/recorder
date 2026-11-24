@@ -23,7 +23,7 @@ type Config struct {
 	StreamURL string
 	Headers   map[string]string
 	// SeatLogin signs a seat's own requests to its platform in as the
-	// recorder's user (hlswriter only; see hlsingest.Config.SeatLogin).
+	// recorder's user (see hlsingest.Config.SeatLogin and flv.Config.SeatLogin).
 	SeatLogin map[string]string
 	UserAgent string
 	Retries   int
@@ -261,6 +261,7 @@ func flvConfig(part PartSpec, cfg *Config) flv.Config {
 		Handoff:        handoff,
 		URLTTL:         cfg.StreamURLTTL,
 		RefreshURL:     cfg.RefreshStreamURL,
+		SeatLogin:      cfg.SeatLogin,
 	}
 }
 

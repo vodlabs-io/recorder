@@ -20,6 +20,9 @@ A login lets the recorder see what that account may watch, no more:
   subscriber-only broadcasts of the streamers that account subscribes to.
 - **FC2 Live**: channels open only to signed-in viewers. Paid, premium and
   ticketed broadcasts stay locked.
+- **SWAG**: ticketed shows and private shows your account has paid for. The
+  recorder never buys anything: a show your account hasn't paid for stays
+  locked. Sign in to your own account, not as a guest.
 
 ## What happens to your login
 

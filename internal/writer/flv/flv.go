@@ -215,7 +215,7 @@ func (w *flvWriter) openStream(ctx context.Context, url string) (io.ReadCloser, 
 	}
 
 	if agora.IsURL(url) {
-		stream, err := agora.Open(streamCtx, url, w.client, w.logger)
+		stream, err := agora.OpenSigned(streamCtx, url, w.client, w.config.SeatLogin, w.logger)
 		if err != nil {
 			return fail(fmt.Errorf("failed to join channel: %w", err))
 		}

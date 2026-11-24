@@ -14,7 +14,11 @@ import (
 // swag mints SWAG viewer tokens. A token is issued per stream session to the
 // user account the request names in X-Session-ID and admits it for a minute,
 // so every recording takes its own account and renews the token while joined.
-var swag = &swagMinter{base: "https://api.swag.live/"}
+var swag = &swagMinter{base: "https://" + SwagAPIHost + "/"}
+
+// SwagAPIHost is the host that issues SWAG's tokens, and the only one a
+// SWAG login is sent to.
+const SwagAPIHost = "api.swag.live"
 
 // swagWatchInterval is how often a joined SWAG stream's state is re-read.
 const swagWatchInterval = 20 * time.Second
@@ -52,15 +56,20 @@ func (m *swagMinter) token(ctx context.Context, client *http.Client, ch Channel,
 		return "", time.Time{}, err
 	}
 	req.Header.Set("X-Session-ID", account)
+	ch.signIn(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("swag token: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusForbidden {
-		// A ticketed show, a private show and a finished session all answer
-		// 403; the stream's state says which.
-		if reason := m.withheld(ctx, client, ch); reason != "" {
+		// A show the viewer has not paid for, a private show and a finished
+		// session all answer 403; the stream's state says which.
+		reason := m.withheld(ctx, client, ch)
+		if reason == "" && ch.signedIn() {
+			reason = "not paid for"
+		}
+		if reason != "" {
 			return "", time.Time{}, &RefusedError{Platform: "swag", Reason: reason}
 		}
 	}
@@ -80,10 +89,11 @@ func (m *swagMinter) token(ctx context.Context, client *http.Client, ch Channel,
 	return reply.Token, time.Unix(reply.Exp, 0), nil
 }
 
-// withheld returns why SWAG no longer offers ch's stream session for free:
-// "finished" once the streamer is offline or in another session, the stream's
-// mode (a paid show) once it is not free; empty while it is, or when the state
-// cannot be read.
+// withheld returns why SWAG no longer offers ch's stream session to this
+// viewer: "finished" once the streamer is offline or in another session; for
+// a viewer not signed in, the stream's mode (a paid show) once it is not free.
+// Empty while it is offered, or when the state cannot be read. A signed-in
+// viewer may have paid for a show, so only the token endpoint refuses one.
 func (m *swagMinter) withheld(ctx context.Context, client *http.Client, ch Channel) string {
 	if ch.User == "" {
 		return ""
@@ -125,7 +135,7 @@ func (m *swagMinter) withheld(ctx context.Context, client *http.Client, ch Chann
 	switch {
 	case s == nil || s.SessionID != ch.Room:
 		return "finished"
-	case s.Mode != "" && s.Mode != "free":
+	case s.Mode != "" && s.Mode != "free" && !ch.signedIn():
 		return s.Mode
 	}
 	return ""
