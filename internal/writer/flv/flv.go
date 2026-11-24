@@ -53,6 +53,9 @@ type Config struct {
 	Handoff *Handoff
 	// URLTTL and RefreshURL cover an Origin that grants an FLV URL for less
 	// than a Broadcast lasts; see URLRenewer.
+	// SeatLogin holds the headers that sign an agora:// channel's token mint
+	// in as the recorder's user; nil records signed out.
+	SeatLogin  map[string]string
 	URLTTL     time.Duration
 	RefreshURL func(context.Context) (string, error)
 	// Mux, when set, wraps each part's file so the sanitized FLV is written
@@ -478,6 +481,9 @@ func (w *flvWriter) Run(ctx context.Context) error {
 	}
 
 	consecutiveErrors := 0
+	// opened is set once this part has read a stream: every later open is a
+	// reconnect within the part.
+	opened := resumed != nil
 
 	for {
 		select {
@@ -522,7 +528,16 @@ func (w *flvWriter) Run(ctx context.Context) error {
 				// Successfully connected, reset error counter
 				consecutiveErrors = 0
 			}
+			if opened && w.sanitizer != nil {
+				// The last connection may have ended mid-tag, and a rejoined
+				// RTC channel's clock starts from zero again.
+				w.sanitizer.Truncate()
+				if restartsClock(w.config.URL) {
+					w.sanitizer.Reanchor()
+				}
+			}
 		}
+		opened = true
 
 		release := w.guardStream(ctx)
 		err := w.streamToFile(ctx, stream)
@@ -578,6 +593,13 @@ func (w *flvWriter) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// restartsClock reports whether every connection to u starts its media clock
+// from zero: a real-time channel rejoined, as against an HTTP origin whose
+// timestamps continue across a reconnect.
+func restartsClock(u string) bool {
+	return agora.IsURL(u) || trtc.IsURL(u)
 }
 
 func isRecoverableError(err error) bool {
