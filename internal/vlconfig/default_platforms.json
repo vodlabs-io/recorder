@@ -99,7 +99,15 @@
 	{
 		"name": "bilibili",
 		"display_name": "Bilibili",
-		"channel_url": "https://live.bilibili.com/{username}"
+		"channel_url": "https://live.bilibili.com/{username}",
+		"login": {
+			"url": "https://passport.bilibili.com/login?gourl=https%3A%2F%2Flive.bilibili.com%2F",
+			"refresh_url": "https://live.bilibili.com/",
+			"cookie_domains": ["bilibili.com"],
+			"success_url_pattern": "^https://live\\.bilibili\\.com/",
+			"session_cookie": "SESSDATA",
+			"signed_in_streams": true
+		}
 	},
 	{
 		"name": "liveme",

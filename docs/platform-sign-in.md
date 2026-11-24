@@ -12,6 +12,8 @@ else.
 
 A login lets the recorder see what that account may watch, no more:
 
+- **Bilibili**: the streamer's original quality. Signed out, Bilibili serves
+  at most 720p.
 - **CHZZK**: 19+ broadcasts, with a Naver account that has completed CHZZK's
   identity verification. A signed-in account without it still can't watch them.
 - **SOOP**: adults-only broadcasts, with an age-verified account, and

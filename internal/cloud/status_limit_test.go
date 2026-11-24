@@ -444,3 +444,17 @@ func TestAsksSignedIn(t *testing.T) {
 		t.Error("asked signed in with no login")
 	}
 }
+
+// A platform that hands a signed-in caller better streams is asked signed in,
+// re-signs included, once a login is stored.
+func TestAsksSignedInForBetterStreams(t *testing.T) {
+	c := newSweepTestClient(t, 0, &platformauth.Session{
+		Platform: "bilibili", Cookies: []platformauth.Cookie{{Name: "SESSDATA", Value: "1", Domain: "bilibili.com"}},
+	})
+	if !c.asksSignedIn("bilibili") || !c.signsIn("bilibili", kindStream) {
+		t.Error("a platform whose login lifts its streams was not asked signed in")
+	}
+	if newSweepTestClient(t, 0, nil).signsIn("bilibili", kindStream) {
+		t.Error("re-signed signed in with no login")
+	}
+}

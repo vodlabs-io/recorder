@@ -221,8 +221,8 @@ func (c *Client) rateLimitStatusRequests(ctx context.Context) {
 		if ctx.Err() != nil || id == (streamer.StreamerRef{}) {
 			return // Context canceled
 		}
-		// A platform that tells a signed-out caller nothing is never asked signed
-		// out by a daemon holding a login: the answer would only be a wall to climb.
+		// A platform that tells a signed-out caller nothing, or hands it worse
+		// streams, is never asked signed out by a daemon holding a login.
 		if kind == kindStatus && c.asksSignedIn(id.Platform) {
 			kind = kindAuthed
 		}
@@ -254,14 +254,15 @@ func (c *Client) rateLimitStatusRequests(ctx context.Context) {
 }
 
 // asksSignedIn reports whether a status check of this platform should carry the
-// stored login from the start.
+// stored login from the start: it is login-gated, or a login lifts its streams.
 func (c *Client) asksSignedIn(platform string) bool {
-	return vlconfig.LoginRequiredFor(platform) && c.cookies != nil && c.cookies.Has(platform)
+	wants := vlconfig.LoginRequiredFor(platform) || vlconfig.SignedInStreamsFor(platform)
+	return wants && c.cookies != nil && c.cookies.Has(platform)
 }
 
 // signsIn reports whether a fetch of this kind carries the stored login: an
-// authenticated check does, and so does a re-sign where a signed-out one could
-// only ever be told the platform has nothing to say.
+// authenticated check does, and so does a re-sign wherever a status check would
+// (see asksSignedIn).
 func (c *Client) signsIn(platform string, kind requestKind) bool {
 	return kind == kindAuthed || (kind == kindStream && c.asksSignedIn(platform))
 }
