@@ -74,6 +74,18 @@ func (m *swagMinter) token(ctx context.Context, client *http.Client, ch Channel,
 		}
 	}
 	if resp.StatusCode != http.StatusOK {
+		// A login SWAG rejects answers 401, or 500 with code AUTH_ERROR.
+		var fault struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		json.NewDecoder(io.LimitReader(resp.Body, 1<<12)).Decode(&fault)
+		if resp.StatusCode == http.StatusUnauthorized || fault.Code == "AUTH_ERROR" {
+			if fault.Message != "" {
+				return "", time.Time{}, fmt.Errorf("swag token: %w (%s)", ErrBadLogin, fault.Message)
+			}
+			return "", time.Time{}, fmt.Errorf("swag token: %w", ErrBadLogin)
+		}
 		return "", time.Time{}, fmt.Errorf("swag token: status %d", resp.StatusCode)
 	}
 	var reply struct {
