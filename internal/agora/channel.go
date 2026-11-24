@@ -6,6 +6,7 @@
 package agora
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -56,6 +57,23 @@ type Channel struct {
 // seatLogin holds the headers that sign a request in as the user.
 type seatLogin struct {
 	headers map[string]string
+}
+
+// ErrBadLogin is a platform login the platform rejects or a request cannot
+// carry.
+var ErrBadLogin = errors.New("the platform login is invalid or expired; sign in again")
+
+// checkLogin reports a login header value holding control characters, which
+// no request can send.
+func checkLogin(headers map[string]string) error {
+	for k, v := range headers {
+		for i := 0; i < len(v); i++ {
+			if c := v[i]; (c < 0x20 && c != '\t') || c == 0x7f {
+				return fmt.Errorf("%w: its %s header holds a control character", ErrBadLogin, k)
+			}
+		}
+	}
+	return nil
 }
 
 // signedIn reports whether the channel's mint signs its requests in.

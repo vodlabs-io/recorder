@@ -47,6 +47,9 @@ func OpenSigned(ctx context.Context, u string, client *http.Client, login map[st
 		return nil, err
 	}
 	if len(login) > 0 {
+		if err := checkLogin(login); err != nil {
+			return nil, err
+		}
 		ch.login = &seatLogin{headers: login}
 	}
 	if client == nil || client.Timeout != 0 {
@@ -61,6 +64,9 @@ func OpenSigned(ctx context.Context, u string, client *http.Client, login map[st
 			// The shared token still joins the channel, but only to what the
 			// platform just refused: a broadcast's leftovers or a private show.
 			return nil, err
+		case err != nil && ch.Token == "":
+			// Without a token of its own the channel cannot be joined.
+			return nil, fmt.Errorf("agora: %w", err)
 		case err != nil:
 			logger.Warn("Agora token mint failed, joining with the shared token",
 				"mint", ch.Mint, "error", err)

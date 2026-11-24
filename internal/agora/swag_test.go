@@ -248,3 +248,44 @@ func TestSwagLive_Network(t *testing.T) {
 		t.Fatal("no media after the first token expired")
 	}
 }
+
+func TestSwagRejectedLoginIsBadLogin(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, `{"code":"AUTH_ERROR","message":"Signature verification failed"}`)
+	}))
+	t.Cleanup(srv.Close)
+	withSwag(t, srv)
+	ch, _ := Parse(swagChannel)
+	ch.login = &seatLogin{headers: map[string]string{"Authorization": "Bearer stale"}}
+	_, err := mint(context.Background(), srv.Client(), ch)
+	if !errors.Is(err, ErrBadLogin) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestOpenFailsWithTheMintErrorWhenTheChannelHasNoToken(t *testing.T) {
+	srv, _ := swagAPI(t, http.StatusInternalServerError, swagFree)
+	withSwag(t, srv)
+	_, err := Open(context.Background(), swagChannel, srv.Client(), slog.New(slog.DiscardHandler))
+	if err == nil || !strings.Contains(err.Error(), "swag token: status 500") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestOpenFallsBackToTheChannelsOwnToken(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // fails the mint, and then the join it falls back to
+	_, err := Open(ctx, swagChannel+"&token=shared", nil, slog.New(slog.DiscardHandler))
+	if err == nil || strings.Contains(err.Error(), "swag token") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestOpenSignedRejectsALoginNoRequestCanCarry(t *testing.T) {
+	login := map[string]string{"Authorization": "Bearer a\nb"}
+	_, err := OpenSigned(context.Background(), swagChannel, nil, login, slog.New(slog.DiscardHandler))
+	if !errors.Is(err, ErrBadLogin) {
+		t.Fatalf("err = %v", err)
+	}
+}
