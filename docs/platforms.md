@@ -68,6 +68,13 @@ On Bigo, the recorder sees when a streamer goes live without an account, but
 Bigo shows the stream itself only to signed-in viewers. To record Bigo streams,
 [sign in](platform-sign-in.md) to Bigo.
 
+On RPLAY, some streams can only be recorded by the desktop app: for those, the
+app opens RPLAY's own page in a small window for a few seconds, so the site's
+browser check passes, and asks for the stream from there. Without the desktop
+app running (the `vod` command line on its own, or the Docker image), the
+recorder still records RPLAY's other streams. Streams that RPLAY shows only to
+signed-in viewers can't be recorded.
+
 `vod platforms` lists the platforms your installed version supports. A newly
 added platform can need an app update before it appears.
 

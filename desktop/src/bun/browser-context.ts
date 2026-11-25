@@ -6,6 +6,12 @@
 // to run the request inside the platform's login webview, where the platform's
 // own JS signs it and the browser attaches its own cookies.
 //
+// Others (RPLAY) answer only requests carrying a pass that the site's own page
+// earns from a bot check. Such a request names the site's page to run from
+// (host_origin + host_page), asks for the page's window to be ordered in, since
+// the check does not run in a hidden one (render), and names where the page
+// keeps the pass (stored_header), which is then sent from the page.
+//
 // PRIVACY: the request runs with the webview's own cookies; nothing here talks to
 // the vodlabs cloud, and no cookie value is read out.
 //
@@ -14,10 +20,11 @@
 // deletes. captureCookies() in platform-login.ts skips that prefix.
 //
 // Lifecycle: one hidden window + view per partition, reused and parked on
-// about:blank between requests, which are serialised. The background login
-// refresh borrows the same view via withLoginView.
+// about:blank between requests, which are serialised. A rendered request orders
+// the window in for its duration only. The background login refresh borrows the
+// same view via withLoginView.
 
-import { BrowserWindow, BrowserView, Session } from "electrobun/main";
+import { BrowserWindow, BrowserView, Screen, Session } from "electrobun/main";
 import type { DaemonSession } from "../../../shared/daemon/session";
 import {
   PLATFORM_BROWSERFETCH_READY_SUBJECT,
@@ -44,6 +51,25 @@ type BrowserFetchRequest = {
   // has to sign. Nothing is then waited for, and headers are sent with it.
   host_page?: string;
   headers?: Record<string, string>;
+  // host_origin, with host_page, is the origin of that page when it is a
+  // parent domain of the URL's host (a site's page calling its API host). The
+  // daemon has checked it.
+  host_origin?: string;
+  // render orders the page's window in, two points wide in a screen corner,
+  // for page scripts (a bot check) that do not run in a hidden window.
+  render?: boolean;
+  // stored_header, with host_page, is a header whose value the page keeps in
+  // IndexedDB: read and sent in the page, never relayed back.
+  stored_header?: StoredHeader;
+};
+export type StoredHeader = {
+  header: string;
+  database: string;
+  store: string;
+  key: string;
+  field: string;
+  expires_field?: string;
+  wait_ms?: number;
 };
 type BrowserFetchResponse = {
   status: number;
@@ -69,6 +95,16 @@ const BLANK_URL = "about:blank";
 // Share of a request's budget that may be spent waiting for a free view; the
 // rest funds the page load and relay.
 const ACQUIRE_BUDGET = 0.4;
+// A rendered page's window is ordered in, so its scripts run as they would for
+// a person: WebKit pauses a page in a window that is hidden, off every screen
+// or under the menu bar. It is RENDER_SIZE points wide, in the primary
+// display's work area, and built there: a hidden window's resize does not land
+// before it is shown.
+const RENDER_SIZE = 2;
+// How long a page is given to store a stored_header's record by default.
+const STORED_HEADER_WAIT_MS = 15000;
+// Header names a request may not set itself: the browser's own.
+const BROWSER_HEADERS = new Set(["cookie", "user-agent", "host", "origin", "referer"]);
 // Backstop for armIdle: a view's own navigation commits in ~160ms, but a commit
 // event that never arrives must not wedge the context forever.
 const IDLE_FALLBACK_MS = 3000;
@@ -85,19 +121,37 @@ function eventUrl(e: unknown): string {
 // pageURLFor returns a real platform page (with the signing JS) to host the
 // fetch. Using the target URL's own origin keeps same-origin API calls (e.g.
 // TikTok's api-live/user/room on www.tiktok.com) truly same-origin.
-export function pageURLFor(targetURL: string, hostPage?: string): string {
-  const origin = new URL(targetURL).origin;
+// A host_origin is used only with a host_page, and only when the target's host
+// is its host or a subdomain of it; the daemon checked this too.
+export function pageURLFor(targetURL: string, hostPage?: string, hostOrigin?: string): string {
+  const target = new URL(targetURL);
+  let origin = target.origin;
+  if (hostPage && hostOrigin) {
+    const host = new URL(hostOrigin);
+    if (
+      host.protocol === "https:" &&
+      (target.host === host.host || target.host.endsWith("." + host.host))
+    ) {
+      origin = host.origin;
+    }
+  }
   return hostPage ? new URL(hostPage, origin + "/").href : origin + "/";
 }
 
 // fetchInit is the fetch options for a request's own headers. The browser sets
 // the User-Agent and cookies itself, and takes the Referer as an option.
+// A request to another origin than the page's carries no cookies, which a
+// cross-origin API need not accept.
 export function fetchInit(
   method: string,
   body: string,
   headers: Record<string, string> | undefined,
+  crossOrigin = false,
 ): Record<string, unknown> {
-  const init: Record<string, unknown> = { credentials: "include", method: method || "GET" };
+  const init: Record<string, unknown> = {
+    credentials: crossOrigin ? "same-origin" : "include",
+    method: method || "GET",
+  };
   if (body) init.body = body;
   const own: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers ?? {})) {
@@ -120,9 +174,15 @@ export function buildInjectedScript(
   extractorRegex: string,
   bare = false,
   headers?: Record<string, string>,
+  crossOrigin = false,
+  storedHeader?: StoredHeader,
 ): string {
   const targetJSON = JSON.stringify(target);
-  const initJSON = JSON.stringify(fetchInit(method, body, headers));
+  const initJSON = JSON.stringify(fetchInit(method, body, headers, crossOrigin));
+  const stored =
+    storedHeader && !BROWSER_HEADERS.has(storedHeader.header.toLowerCase()) ? storedHeader : null;
+  const storedJSON = JSON.stringify(stored);
+  const storedWait = stored?.wait_ms && stored.wait_ms > 0 ? stored.wait_ms : STORED_HEADER_WAIT_MS;
   const regexJSON = JSON.stringify(extractorRegex || "");
   const prefix = COOKIE_PREFIX + id + "_";
   const prefixJSON = JSON.stringify(prefix);
@@ -158,6 +218,45 @@ export function buildInjectedScript(
     var ready = !!(window.byted_acrawler && fetchPatched());
 
     var opts = ${initJSON};
+
+    // A header whose value the page keeps in IndexedDB: wait for the page's
+    // own scripts to store a usable record, then send it. Opening the database
+    // never creates it, so the page's own first open still sets it up.
+    var SH = ${storedJSON};
+    if (SH) {
+      function readStored() {
+        return new Promise(function (resolve) {
+          var r;
+          try { r = indexedDB.open(SH.database); } catch (e) { resolve(null); return; }
+          r.onupgradeneeded = function () { try { r.transaction.abort(); } catch (e) {} };
+          r.onerror = function () { resolve(null); };
+          r.onsuccess = function () {
+            var db = r.result;
+            try {
+              var g = db.transaction(SH.store).objectStore(SH.store).get(SH.key);
+              g.onsuccess = function () { db.close(); resolve(g.result || null); };
+              g.onerror = function () { db.close(); resolve(null); };
+            } catch (e) { db.close(); resolve(null); }
+          };
+        });
+      }
+      var value = "";
+      var until = Date.now() + ${storedWait};
+      while (Date.now() < until) {
+        var rec = await readStored();
+        var v = rec && rec[SH.field];
+        var fresh = !SH.expires_field || (rec && typeof rec[SH.expires_field] === "number" &&
+          rec[SH.expires_field] > Date.now());
+        if (typeof v === "string" && v && fresh) { value = v; break; }
+        await new Promise(function (r) { setTimeout(r, 250); });
+      }
+      if (!value) {
+        store({ status: 0, error: "page stored no " + SH.header + " within " + ${storedWait} + "ms" });
+        return;
+      }
+      opts.headers = Object.assign({}, opts.headers || {});
+      opts.headers[SH.header] = value;
+    }
 
     // The SDK's wrapper can transiently return undefined instead of a Response
     // even after the wait above, so retry once and report it plainly.
@@ -230,10 +329,11 @@ function readResult(partition: string, id: string, host: string): BrowserFetchRe
   }
 }
 
-async function loginPartition(session: DaemonSession, platform: string): Promise<string> {
+// platformPartition is the platform's webview partition: its login's, where it
+// has one, or one of its own that only these requests use.
+async function platformPartition(session: DaemonSession, platform: string): Promise<string> {
   const platforms = await session.request<PlatformInfo[]>(Subjects.platforms);
-  const info = platforms.find((p) => p.name === platform);
-  if (!info?.login) throw new Error(`platform "${platform}" does not support login`);
+  if (!platforms.some((p) => p.name === platform)) throw new Error(`unknown platform "${platform}"`);
   return partitionFor(platform);
 }
 
@@ -272,6 +372,9 @@ type Partition = {
   ctx: FetchContext | null;
   busy: boolean;
   waiters: ((ctx: FetchContext) => void)[];
+  // rendered is set once a rendered request has come for the partition: its
+  // window is then built at renderFrame().
+  rendered: boolean;
 };
 
 const partitions = new Map<string, Partition>();
@@ -279,7 +382,7 @@ const partitions = new Map<string, Partition>();
 function partitionState(partition: string): Partition {
   let p = partitions.get(partition);
   if (!p) {
-    p = { ctx: null, busy: false, waiters: [] };
+    p = { ctx: null, busy: false, waiters: [], rendered: false };
     partitions.set(partition, p);
   }
   return p;
@@ -289,12 +392,23 @@ function partitionState(partition: string): Partition {
 // handlers are attached exactly once, here — electrobun's `on()` has no `off()`,
 // so per-request handlers would accumulate in the global emitter forever.
 function createContext(partition: string, state: Partition): FetchContext {
-  const frame = { x: 0, y: 0, width: LOGIN_WINDOW.width, height: LOGIN_WINDOW.height };
+  const frame = state.rendered
+    ? renderFrame()
+    : { x: 0, y: 0, width: LOGIN_WINDOW.width, height: LOGIN_WINDOW.height };
   // The page is the window's OWN webview: a BrowserView added on top of one
   // is never painted on Windows (see partitioned-window.ts). This view is
   // hidden either way, but there is no reason to keep the broken shape.
   const { win, view } = createPartitionedWindow(
-    { title: "…", frame, url: BLANK_URL, sandbox: true, preload: MUTE_MEDIA },
+    {
+      title: "…",
+      frame,
+      url: BLANK_URL,
+      sandbox: true,
+      preload: MUTE_MEDIA,
+      // Borderless: AppKit moves a titled window when it is shown, and only a
+      // titled one can join a tab group.
+      styleMask: { Borderless: true, Titled: false, Closable: false, Miniaturizable: false, Resizable: false },
+    },
     partition,
   );
   // Never steal the user's focus: this window exists only to host the view.
@@ -466,16 +580,70 @@ async function performFetch(
   req: BrowserFetchRequest,
   timeoutMs: number,
 ): Promise<BrowserFetchResponse> {
-  const pageURL = pageURLFor(req.url, req.host_page);
-  const host = new URL(req.url).host;
+  const pageURL = pageURLFor(req.url, req.host_page, req.host_origin);
+  const crossOrigin = new URL(pageURL).origin !== new URL(req.url).origin;
   const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
   const deadline = Date.now() + timeoutMs;
-  console.log(`[browser-context] request platform=${req.platform} host=${host} page=${pageURL}`);
+  console.log(
+    `[browser-context] request platform=${req.platform} host=${new URL(req.url).host} page=${pageURL}`,
+  );
 
+  if (req.render) showRendered(ctx.win);
+  try {
+    return await fetchOnPage(ctx, partition, req, pageURL, crossOrigin, id, deadline);
+  } finally {
+    if (req.render) hideWindow(ctx.win);
+  }
+}
+
+// renderFrame is where a rendered page's window sits.
+function renderFrame(): { x: number; y: number; width: number; height: number } {
+  let area = { x: 0, y: 0, width: RENDER_SIZE, height: RENDER_SIZE };
+  try {
+    const wa = Screen.getPrimaryDisplay().workArea;
+    if (wa.width > RENDER_SIZE && wa.height > RENDER_SIZE) area = wa;
+  } catch {
+    /* no display info: the origin corner still works */
+  }
+  return {
+    x: area.x + area.width - RENDER_SIZE,
+    y: area.y + area.height - RENDER_SIZE,
+    width: RENDER_SIZE,
+    height: RENDER_SIZE,
+  };
+}
+
+// showRendered orders a context's window in, without taking focus.
+function showRendered(win: BrowserWindow): void {
+  try {
+    win.showInactive();
+  } catch (err) {
+    console.error("[browser-context] could not order the window in", err);
+  }
+}
+
+function hideWindow(win: BrowserWindow): void {
+  try {
+    win.hide();
+  } catch {
+    /* the window is gone; release() drops the context */
+  }
+}
+
+// fetchOnPage loads the host page and runs the request on it.
+async function fetchOnPage(
+  ctx: FetchContext,
+  partition: string,
+  req: BrowserFetchRequest,
+  pageURL: string,
+  crossOrigin: boolean,
+  id: string,
+  deadline: number,
+): Promise<BrowserFetchResponse> {
   try {
     // The whole budget covers page load + webmssdk init + fetch + relay, so the
     // load gets the full remaining time and whatever is left funds the relay.
-    await navigate(ctx, pageURL, timeoutMs);
+    await navigate(ctx, pageURL, deadline - Date.now());
   } catch (err) {
     return { status: 0, error: String(err) };
   }
@@ -492,9 +660,17 @@ async function performFetch(
       req.extractor_regex || "",
       Boolean(req.host_page),
       req.headers,
+      crossOrigin,
+      req.host_page ? req.stored_header : undefined,
     ),
   );
-  return await awaitResult(partition, id, host, Math.max(deadline - Date.now(), POLL_INTERVAL_MS));
+  // The result cookies are written by the page, so they land on its host.
+  return await awaitResult(
+    partition,
+    id,
+    new URL(pageURL).host,
+    Math.max(deadline - Date.now(), POLL_INTERVAL_MS),
+  );
 }
 
 // runBrowserFetch executes one request inside the partition's hidden platform
@@ -508,7 +684,7 @@ async function runBrowserFetch(
 
   let partition: string;
   try {
-    partition = await loginPartition(session, req.platform);
+    partition = await platformPartition(session, req.platform);
   } catch (err) {
     return { status: 0, error: String(err) };
   }
@@ -519,6 +695,18 @@ async function runBrowserFetch(
   // worth something.
   const timeoutMs = req.timeout_ms && req.timeout_ms > 0 ? req.timeout_ms : DEFAULT_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
+
+  if (req.render) {
+    const state = partitionState(partition);
+    if (!state.rendered) {
+      state.rendered = true;
+      // A window built for hidden use is rebuilt at the render frame once free.
+      if (state.ctx && !state.busy) {
+        state.ctx.win.close();
+        state.ctx = null;
+      }
+    }
+  }
 
   let ctx: FetchContext | null;
   try {
