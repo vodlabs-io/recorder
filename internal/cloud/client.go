@@ -68,6 +68,7 @@ type Client struct {
 	isSubscribed    bool                        // Whether the client is currently subscribed via NATS
 	initialSubDone  bool                        // Whether the first subscription cycle has concluded (success, no-op or failure)
 	subscriptions   atomic.Value                // Currently subscribed streamer IDs
+	askedIDs        atomic.Value                // Streamer IDs the latest subscription cycle asked for
 	logger          *vllog.FileLogger           // Logger for client operations
 	scraperConfig   vlconfig.ScraperConfig      // Configuration for the scrape handler
 	cond            *sync.Cond                  // Condition variable for waiting on subscription
