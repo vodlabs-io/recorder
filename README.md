@@ -2,16 +2,58 @@
   <img src="desktop/icon.png" alt="VodLabs Recorder" width="128" height="128">
 </p>
 
-<h1 align="center">VodLabs Recorder</h1>
+<h1 align="center">VodLabs Recorder: free live stream recorder</h1>
 
-![The VodLabs Recorder dashboard, recording four streamers](docs/images/dashboard-dark.png)
+<p align="center">
+  Automatically record TikTok, Twitch, YouTube, Kick and 50+ more live platforms
+  to your own disk. Desktop app for macOS, Windows and Linux, a CLI, and Docker.
+</p>
+
+<p align="center">
+  <a href="https://github.com/vodlabs-io/recorder/releases/latest"><img src="https://img.shields.io/github/v/release/vodlabs-io/recorder?label=release" alt="Latest release"></a>
+  <a href="https://github.com/vodlabs-io/recorder/releases"><img src="https://img.shields.io/github/downloads/vodlabs-io/recorder/total" alt="Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue" alt="License: PolyForm Noncommercial 1.0.0"></a>
+  <a href="https://vodlabs.io"><img src="https://img.shields.io/badge/website-vodlabs.io-informational" alt="Website: vodlabs.io"></a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/dashboard-light.png">
+  <img src="docs/images/dashboard-dark.png" alt="The VodLabs Recorder dashboard, recording four streamers">
+</picture>
 
 Add the streamers you follow, and VodLabs Recorder records each broadcast the
-moment it goes live, straight from the platform to your disk. It is a desktop
-app for macOS, Windows and Linux, plus a command-line tool, `vod`.
+moment it goes live, straight from the platform to your disk. It is free, and
+its source code is public here, under the PolyForm Noncommercial license.
 
-It records from [50+ platforms](docs/platforms.md), including TikTok,
-YouTube, Twitch and Kick.
+## Features
+
+- **Records on its own.** Follow any number of channels; every broadcast is
+  recorded from the moment it starts until it ends, then saved as one MP4.
+- **56 platforms.** TikTok, Twitch, YouTube, Kick, SOOP, Bigo, Douyin,
+  Instagram and more, plus about 55 partner sites. See the list below.
+- **Streams that need an account.** Sign in inside the app to record
+  age-restricted, subscriber-only and members-only streams on 17 platforms. Your
+  login stays encrypted on your machine.
+- **A searchable archive.** Search by streamer, filter by platform or date,
+  preview, play, merge parts and delete in bulk.
+  [More about the VOD archive](https://vodlabs.io/features/vod-archive/).
+- **Picks up after a crash.** If the app restarts mid-stream, recording carries
+  on in the same VOD when it's back within 15 minutes.
+- **Desktop, command line or Docker.** The desktop app, the `vod`
+  [command-line tool](https://vodlabs.io/features/command-line/) for scripts and
+  AI agents, or a Docker image with a web interface for a server or NAS.
+
+## Platforms
+
+Use it as a [TikTok Live recorder](https://vodlabs.io/platforms/tiktok/), a
+[Twitch stream recorder](https://vodlabs.io/platforms/twitch/), a
+[YouTube live recorder](https://vodlabs.io/platforms/youtube/) or a
+[Kick stream recorder](https://vodlabs.io/platforms/kick/), or for any of these:
+
+[17LIVE](https://vodlabs.io/platforms/17live/), [Bigo](https://vodlabs.io/platforms/bigo/), [Bilibili](https://vodlabs.io/platforms/bilibili/), BuzzCast, [CHZZK](https://vodlabs.io/platforms/chzzk/), [Douyin](https://vodlabs.io/platforms/douyin/), [Douyu](https://vodlabs.io/platforms/douyu/), [FC2 Live](https://vodlabs.io/platforms/fc2live/), [Huya](https://vodlabs.io/platforms/huya/), [Instagram](https://vodlabs.io/platforms/instagram/), [Kwai](https://vodlabs.io/platforms/kwai/), [LiveMe](https://vodlabs.io/platforms/liveme/), [MICO](https://vodlabs.io/platforms/mico/), [Mixch](https://vodlabs.io/platforms/mixch/), [Niconico](https://vodlabs.io/platforms/niconico/), [Nimo TV](https://vodlabs.io/platforms/nimotv/), [PandaLive](https://vodlabs.io/platforms/pandalive/), [Peeks](https://vodlabs.io/platforms/peeks/), [PopkonTV](https://vodlabs.io/platforms/popkontv/), RPLAY, [Rumble](https://vodlabs.io/platforms/rumble/), [RUTUBE](https://vodlabs.io/platforms/rutube/), [SOOP](https://vodlabs.io/platforms/soop/), [Superlive](https://vodlabs.io/platforms/superlive/), [Tango](https://vodlabs.io/platforms/tango/), TiLive, [TwitCasting](https://vodlabs.io/platforms/twitcasting/), [VK Video Live](https://vodlabs.io/platforms/vklive/), [X](https://vodlabs.io/platforms/x/), Xiaohongshu and YouNow.
+
+It also records 21 cam sites. [The platform list](docs/platforms.md) has all
+56, which ones support signing in, and the partner sites each one covers.
 
 ## Download
 
@@ -84,7 +126,8 @@ Builds from source use the same VodLabs service as the released app.
 
 ## More
 
-- [User guide](docs/README.md)
+- [User guide](docs/README.md), also at [vodlabs.io/docs](https://vodlabs.io/docs/)
+- [Guides](https://vodlabs.io/guides/) and [what's new in each release](https://vodlabs.io/changelog/)
 - [Contributing](CONTRIBUTING.md) and the [security policy](SECURITY.md)
 - [License](LICENSE): PolyForm Noncommercial 1.0.0. [LICENSING.md](LICENSING.md)
   explains what that allows and how to get a commercial license.
