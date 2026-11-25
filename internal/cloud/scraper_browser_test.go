@@ -119,6 +119,41 @@ func TestBrowserHostPageCarriesHeadersAndNarrowsTheReply(t *testing.T) {
 	}
 }
 
+func TestBrowserHostOriginRenderAndStoredHeaderTravel(t *testing.T) {
+	nc, _ := newTestKV(t)
+	got := answerBrowserFetch(t, nc, browserfetch.Response{Status: 200, Body: `{"keep":1}`})
+	stored := &browserfetch.StoredHeader{Header: "x-pass", Database: "db", Store: "s", Key: "k", Field: "pass"}
+	resp := scrapeThrough(t, nc, true, scrapeRequest{
+		URL: "https://api.example.com/v1/x", Method: http.MethodGet, AuthPlatform: "rplay",
+		BrowserContext: true, BrowserHostPage: "/p", BrowserHostOrigin: "https://Example.com",
+		BrowserRender: true, BrowserStoredHeader: stored, ExtractorJSON: "{keep}",
+	})
+	if resp.Error != "" || resp.Body != `{"keep":1}` {
+		t.Fatalf("reply %+v", resp)
+	}
+	req := <-got
+	if req.HostOrigin != "https://example.com" || !req.Render || req.StoredHeader == nil ||
+		req.StoredHeader.Header != "x-pass" || req.StoredHeader.Field != "pass" {
+		t.Errorf("request %+v", req)
+	}
+}
+
+func TestBrowserHostOriginMustBeAParentOfTheHost(t *testing.T) {
+	nc, _ := newTestKV(t)
+	for _, origin := range []string{
+		"https://other.com", "http://example.com", "https://api.example.com.evil.test",
+		"https://example.com/path", "https://user@example.com", "not a url",
+	} {
+		resp := scrapeThrough(t, nc, true, scrapeRequest{
+			URL: "https://api.example.com/v1/x", Method: http.MethodGet, AuthPlatform: "rplay",
+			BrowserContext: true, BrowserHostPage: "/p", BrowserHostOrigin: origin, ExtractorJSON: "{keep}",
+		})
+		if resp.Error == "" {
+			t.Errorf("%q: answered %+v", origin, resp)
+		}
+	}
+}
+
 // A request that names no host page keeps its headers to itself: a signed page
 // sets its own.
 func TestBrowserWithoutHostPageSendsNoHeaders(t *testing.T) {

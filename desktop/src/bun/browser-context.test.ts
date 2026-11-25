@@ -12,6 +12,21 @@ describe("pageURLFor", () => {
     );
   });
 
+  test("a host origin hosts the page for its own subdomain's requests", () => {
+    expect(pageURLFor("https://api.rplay.live/live/x", "/p/streams", "https://rplay.live")).toBe(
+      "https://rplay.live/p/streams",
+    );
+  });
+
+  test("a host origin that is not a parent of the request's host is ignored", () => {
+    for (const origin of ["https://other.live", "http://rplay.live", "https://api.rplay.live.evil.test"]) {
+      expect(pageURLFor("https://api.rplay.live/x", "/p", origin)).toBe("https://api.rplay.live/p");
+    }
+    expect(pageURLFor("https://api.rplay.live/x", undefined, "https://rplay.live")).toBe(
+      "https://api.rplay.live/",
+    );
+  });
+
   test("a host page can never leave the origin it is relative to by its path", () => {
     expect(new URL(pageURLFor("https://a.example/x", "robots.txt")).host).toBe("a.example");
   });
@@ -33,6 +48,10 @@ describe("fetchInit", () => {
     });
   });
 
+  test("a request to another origin than the page's sends no cookies", () => {
+    expect(fetchInit("GET", "", undefined, true).credentials).toBe("same-origin");
+  });
+
   test("a request with no headers sets none", () => {
     expect(fetchInit("POST", "body", undefined)).toEqual({
       credentials: "include",
@@ -50,6 +69,32 @@ describe("buildInjectedScript", () => {
 
   test("reports where a redirect ended up", () => {
     expect(buildInjectedScript("id", "https://a/x", "GET", "", "")).toContain("redirected_to");
+  });
+
+  test("reads a stored header's value in the page and sends it", () => {
+    const js = buildInjectedScript("id", "https://a/x", "GET", "", "", true, undefined, true, {
+      header: "x-browser-pass",
+      database: "db",
+      store: "records",
+      key: "pass",
+      field: "pass",
+      expires_field: "renewAt",
+      wait_ms: 1000,
+    });
+    expect(js).toContain('"x-browser-pass"');
+    expect(js).toContain("1000");
+    expect(() => new Function(js)).not.toThrow();
+  });
+
+  test("never sets one of the browser's own headers from storage", () => {
+    const js = buildInjectedScript("id", "https://a/x", "GET", "", "", true, undefined, false, {
+      header: "Cookie",
+      database: "db",
+      store: "s",
+      key: "k",
+      field: "f",
+    });
+    expect(js).toContain("var SH = null;");
   });
 
   test("is script a JavaScript engine can parse", () => {

@@ -145,6 +145,15 @@ type scrapeRequest struct {
 	// BrowserHostPage is the path of the document a BrowserContext request runs
 	// from, on its own origin (see browserfetch.Request.HostPage).
 	BrowserHostPage string `json:"browser_host_page,omitempty"`
+	// BrowserHostOrigin is the origin of that document when it is a parent
+	// domain of the URL's host (see browserfetch.Request.HostOrigin).
+	BrowserHostOrigin string `json:"browser_host_origin,omitempty"`
+	// BrowserRender orders that document's window in (see
+	// browserfetch.Request.Render).
+	BrowserRender bool `json:"browser_render,omitempty"`
+	// BrowserStoredHeader is a header the document keeps in its own storage
+	// (see browserfetch.StoredHeader).
+	BrowserStoredHeader *browserfetch.StoredHeader `json:"browser_stored_header,omitempty"`
 	// AuthPlatform, when set, asks this client to attach its LOCALLY stored login
 	// cookies for the named platform to the outbound request.
 	//
@@ -584,6 +593,18 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest,
 	}
 	if scrapeReq.BrowserHostPage != "" {
 		fetchReq.Headers = scrapeReq.Headers
+		fetchReq.Render = scrapeReq.BrowserRender
+		fetchReq.StoredHeader = scrapeReq.BrowserStoredHeader
+		if scrapeReq.BrowserHostOrigin != "" {
+			origin, err := h.hostOrigin(scrapeReq.BrowserHostOrigin, parsedURL)
+			if err != nil {
+				log.Warn("Refusing a browser-context host origin",
+					"platform", scrapeReq.AuthPlatform, "origin", scrapeReq.BrowserHostOrigin, "reason", err)
+				h.respondWithError(msg, err.Error())
+				return
+			}
+			fetchReq.HostOrigin = origin
+		}
 	}
 	reqData, err := json.Marshal(fetchReq)
 	if err != nil {
@@ -657,6 +678,29 @@ func (h *scrapeHandler) handleViaBrowser(msg *nats.Msg, scrapeReq scrapeRequest,
 		Headers: headers,
 		Body:    extracted,
 	})
+}
+
+// hostOrigin checks the origin a browser-context request is to run from: an
+// https origin of a host this machine may scrape, of which the request's own
+// host is that host or a subdomain. It returns the origin in canonical form.
+func (h *scrapeHandler) hostOrigin(raw string, target *url.URL) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil ||
+		(u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", errors.New("invalid browser host origin")
+	}
+	check := h.checkTarget
+	if check == nil {
+		check = checkScrapeTarget
+	}
+	if err := check(http.MethodGet, u); err != nil {
+		return "", err
+	}
+	host, own := strings.ToLower(u.Host), strings.ToLower(target.Host)
+	if own != host && !strings.HasSuffix(own, "."+host) {
+		return "", errors.New("browser host origin is not a parent of the request's host")
+	}
+	return "https://" + host, nil
 }
 
 // narrowBrowserBody keeps the named fields of a browser-context response and

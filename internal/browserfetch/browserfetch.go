@@ -47,6 +47,34 @@ type Request struct {
 	HostPage string `json:"host_page,omitempty"`
 	// Headers are sent with a request that names a HostPage.
 	Headers map[string]string `json:"headers,omitempty"`
+	// HostOrigin is the origin of the HostPage document when that is a parent
+	// domain of the URL's host, as a site's own page is for its API host. Empty
+	// means the URL's own origin.
+	HostOrigin string `json:"host_origin,omitempty"`
+	// Render orders the page's window in, two points wide in a screen corner,
+	// for page scripts (a bot check) that do not run in a hidden window.
+	Render bool `json:"render,omitempty"`
+	// StoredHeader is a header whose value the page keeps in its own storage,
+	// sent with a request that names a HostPage.
+	StoredHeader *StoredHeader `json:"stored_header,omitempty"`
+}
+
+// StoredHeader names a header whose value the page keeps in an IndexedDB
+// record. The value is read and sent in the page, to the request's own host,
+// and is never relayed back.
+type StoredHeader struct {
+	Header   string `json:"header"`
+	Database string `json:"database"`
+	Store    string `json:"store"`
+	Key      string `json:"key"`
+	// Field is the record's property holding the value.
+	Field string `json:"field"`
+	// ExpiresField, when set, is the record's property holding when the value
+	// stops being good (Unix ms). A record past it is waited out until the page
+	// stores a fresh one.
+	ExpiresField string `json:"expires_field,omitempty"`
+	// WaitMS bounds how long the page is given to store a usable record.
+	WaitMS int `json:"wait_ms,omitempty"`
 }
 
 // Response is the desktop's reply: the platform's HTTP response, or an error.
