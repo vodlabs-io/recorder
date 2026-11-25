@@ -280,6 +280,11 @@ func (c *Client) handleSubscription(ctx context.Context) {
 				c.triggerResubscribe()
 				continue
 			}
+			if id, ok := c.unaskedEntry(); ok {
+				log.Info("Streamer missing from the subscription, resubscribing", "id", id)
+				c.triggerResubscribe()
+				continue
+			}
 			ids, _ := c.subscriptions.Load().(streamer.StreamerRefs)
 			if _, remote := splitLocal(ids); len(remote) == 0 {
 				continue // Nothing keeping the connection alive, skip resubscribe checks
@@ -326,6 +331,7 @@ func (c *Client) newSubscription(ctx context.Context) (err error) {
 	// a local platform are never named to the cloud: they join the subscribed
 	// set without a round trip.
 	allIDs := slices.Concat(c.streamersFile.AllIDs(), vlstate.GetOneShotList(ctx, c.kv))
+	c.askedIDs.Store(allIDs)
 	localIDs, remoteIDs := splitLocal(allIDs)
 	var subscribedIDs streamer.StreamerRefs
 
@@ -598,6 +604,25 @@ func (c *Client) reconcileDocs(ctx context.Context, subscribedIDs streamer.Strea
 		})
 	}
 	c.store.Reconcile(ctx, seeds)
+}
+
+// unaskedEntry returns an entry of streamers.toml that the latest subscription
+// cycle neither asked for nor got back: one added after that cycle read the
+// file, whose resubscribe trigger never ran a cycle of its own. An entry the
+// cloud was asked for and refused (over capacity, say) is not one, so it does
+// not resubscribe on every tick.
+func (c *Client) unaskedEntry() (streamer.StreamerRef, bool) {
+	if c.streamersFile == nil {
+		return streamer.StreamerRef{}, false
+	}
+	asked, _ := c.askedIDs.Load().(streamer.StreamerRefs)
+	subscribed, _ := c.subscriptions.Load().(streamer.StreamerRefs)
+	for _, id := range c.streamersFile.AllIDs() {
+		if !asked.Contains(id) && !subscribed.Contains(id) {
+			return id, true
+		}
+	}
+	return streamer.StreamerRef{}, false
 }
 
 // IsSubscribed reports whether id is in the current subscription set. Callers
