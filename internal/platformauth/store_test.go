@@ -53,6 +53,47 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 }
 
+// TestExpiresHintSessionOnlyCookie proves a designated session cookie with no
+// expiry of its own leaves the hint unknown, rather than borrowing a short-lived
+// auxiliary cookie's expiry, and keeps the login healthy.
+func TestExpiresHintSessionOnlyCookie(t *testing.T) {
+	sess := Session{
+		Platform: "chzzk",
+		Healthy:  true,
+		Cookies: []Cookie{
+			{Name: "NID_AUT", Value: "x"},            // browser-session cookie
+			{Name: "aux", Value: "y", Expires: 1000}, // long past
+		},
+	}
+	if got := sess.ExpiresHint(); got != 0 {
+		t.Fatalf("ExpiresHint() = %d, want 0 (session-only cookie)", got)
+	}
+	if !sess.Status().Healthy {
+		t.Fatal("an auxiliary cookie's expiry must not mark the login unhealthy")
+	}
+
+	missing := Session{Platform: "chzzk", Cookies: []Cookie{{Name: "aux", Value: "y", Expires: 1000}}}
+	if got := missing.ExpiresHint(); got != 0 {
+		t.Fatalf("ExpiresHint() = %d, want 0 (session cookie missing)", got)
+	}
+}
+
+// TestExpiresHintNoSessionCookie proves a platform with no designated session
+// cookie falls back to the earliest expiry in the jar.
+func TestExpiresHintNoSessionCookie(t *testing.T) {
+	sess := Session{
+		Platform: "no-such-platform",
+		Cookies: []Cookie{
+			{Name: "a", Value: "x", Expires: 5000},
+			{Name: "b", Value: "y"},
+			{Name: "c", Value: "z", Expires: 4000},
+		},
+	}
+	if got := sess.ExpiresHint(); got != 4000 {
+		t.Fatalf("ExpiresHint() = %d, want 4000 (earliest)", got)
+	}
+}
+
 // TestStatusExpiredByHint proves the non-secret Status projection reports a
 // login unhealthy once its session cookie's expiry has passed — the only
 // "Expired" driver for platforms with no reliable rejected-login check signal.
