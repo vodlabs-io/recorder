@@ -17,8 +17,8 @@
 </p>
 
 <picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/dashboard-light.png">
-  <img src="docs/images/dashboard-dark.png" alt="The VodLabs Recorder dashboard, recording four streamers">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/dashboard-light.gif">
+  <img src="docs/images/dashboard-dark.gif" alt="The VodLabs Recorder dashboard: a Twitch streamer goes live and their recording starts on its own, beside two recordings already running">
 </picture>
 
 Add the streamers you follow, and VodLabs Recorder records each broadcast the
