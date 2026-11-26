@@ -42,7 +42,8 @@ function statusRank(a: PlatformLoginView | null): number {
 function formatExpiry(a: PlatformLoginView | null): string {
   if (!a) return "—"
   if (!a.healthy) return "Expired"
-  if (!a.expiresHint) return "—"
+  // No expiry date: the login lasts until the platform signs it out.
+  if (!a.expiresHint) return "No set date"
   const sec = a.expiresHint - Math.floor(Date.now() / 1000)
   if (sec <= 0) return "Expiring"
   const d = Math.floor(sec / 86400)
@@ -236,7 +237,14 @@ export function Accounts() {
                         <TableCell>
                           <StatusCell account={row.account} />
                         </TableCell>
-                        <TableCell className="text-sm tabular-nums">
+                        <TableCell
+                          className="text-sm tabular-nums"
+                          title={
+                            row.account?.healthy && !row.account.expiresHint
+                              ? "This login has no expiry date. It lasts until the platform signs you out."
+                              : undefined
+                          }
+                        >
                           {formatExpiry(row.account)}
                         </TableCell>
                         <TableCell className="text-right">

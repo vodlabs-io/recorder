@@ -110,33 +110,32 @@ func (s Session) Header() string {
 	return strings.Join(parts, "; ")
 }
 
-// ExpiresHint returns the earliest non-session cookie expiry (unix seconds), or
-// 0 when unknown. It is the expiry of the platform's designated session cookie
-// (the login descriptor's SessionCookie, e.g. TikTok's "sessionid") when
-// present, since that is what actually bounds the login's lifetime.
-//
-// It deliberately does NOT use the earliest expiry across the whole jar: jars
-// carry short-lived auxiliary tokens (e.g. TikTok's msToken) whose expiry says
-// nothing about the login and would show a misleading countdown. Platforms can
-// still invalidate sessions server-side before this, so it remains a hint.
+// ExpiresHint returns when the login runs out (unix seconds), or 0 when
+// unknown. For a platform whose login descriptor names a SessionCookie (e.g.
+// TikTok's "sessionid") it is that cookie's expiry alone, and 0 when the cookie
+// is a browser-session cookie with no expiry of its own or is missing: the
+// jar's short-lived auxiliary tokens (e.g. TikTok's msToken) say nothing about
+// the login. Only a platform with no SessionCookie falls back to the earliest
+// expiry in the jar. Platforms can still end sessions server-side sooner, so it
+// remains a hint.
 func (s Session) ExpiresHint() int64 {
-	sessionCookie := ""
-	if login := vlconfig.LoginFlowFor(s.Platform); login != nil {
-		sessionCookie = login.SessionCookie
+	if login := vlconfig.LoginFlowFor(s.Platform); login != nil && login.SessionCookie != "" {
+		for _, c := range s.Cookies {
+			if c.Name == login.SessionCookie && c.Expires > 0 {
+				return c.Expires
+			}
+		}
+		return 0
 	}
 	var earliest int64
 	for _, c := range s.Cookies {
 		if c.Expires <= 0 {
 			continue
 		}
-		if c.Name == sessionCookie {
-			return c.Expires
-		}
 		if earliest == 0 || c.Expires < earliest {
 			earliest = c.Expires
 		}
 	}
-	// No designated session cookie in the jar — fall back to the earliest.
 	return earliest
 }
 
