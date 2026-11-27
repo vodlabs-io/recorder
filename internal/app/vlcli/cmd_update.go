@@ -73,6 +73,10 @@ func (a *App) updateCLI(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if installedByHomebrew(exePath) {
+		log.Printf("CLI %s is available. vod was installed with Homebrew: run 'brew upgrade vod'", latestVersion)
+		return nil
+	}
 	tmpDir, err := os.MkdirTemp("", "vod-update-*")
 	if err != nil {
 		return err

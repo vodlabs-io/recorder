@@ -19,6 +19,14 @@ and drag **VodLabs Recorder** into **Applications**.
 
 The app is signed and notarized by Apple, so it opens without a warning.
 
+With [Homebrew](https://brew.sh), instead. Homebrew asks you to trust a cask
+from outside its own repositories first:
+
+```sh
+brew trust --cask vodlabs-io/tap/vodlabs-recorder
+brew install --cask vodlabs-io/tap/vodlabs-recorder
+```
+
 ### Windows
 
 Requires 64-bit Windows 11. Windows 10 should also work, with the Microsoft
@@ -79,6 +87,15 @@ curl -fsSL https://vodlabs.io/install.sh | VOD_VERSION=0.1.0 VOD_INSTALL_DIR="$H
 ```powershell
 $env:VOD_VERSION = '0.1.0'; irm https://vodlabs.io/install.ps1 | iex
 ```
+
+With [Homebrew](https://brew.sh) on macOS or Linux:
+
+```sh
+brew install vodlabs-io/tap/vod
+```
+
+Homebrew then keeps `vod` up to date with `brew upgrade vod`; `vod update`
+updates the daemon and tells you to run it.
 
 You can also download `cli_<os>_<arch>` and `daemon_<os>_<arch>` archives
 from a release and put `vod` and `vlrecd` on your `PATH` yourself.

@@ -77,6 +77,6 @@ Every command that takes `<url>` also accepts `<platform> <username>`.
 | `vod health` | Exit with 0 if the daemon is running and answering, 1 if not. Never starts a daemon. For scripts and container health checks. |
 | `vod doctor [<url> \| <platform> [<username>]]` | Check that this machine can record: the daemon, its connection to the VodLabs service, and whether this machine reaches the service and GitHub. Given a platform, also whether the service offers it and this machine reaches its site; given a streamer this recorder tracks, it runs a real status check. `--json` for scripts. Exits 1 if any check fails. Never starts a daemon. |
 | `vod web url`<br>`vod web token [--rotate]` | Print a sign-in link for the [Web UI](docker.md#signing-in), or its token. `--rotate` replaces the token and signs every browser out. |
-| `vod update` | Update the daemon and `vod` to the latest release. |
+| `vod update` | Update the daemon and `vod` to the latest release. A `vod` installed with Homebrew is left to `brew upgrade vod`. |
 | `vod restart` | Restart the daemon. |
 | `vod quit` | Stop all recordings and the daemon. Finished recordings are processed first unless you pass `--force`. |
