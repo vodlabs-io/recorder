@@ -198,7 +198,8 @@ func TestHeartbeatFailureLevel(t *testing.T) {
 		if got := heartbeatFailureLevel(err); got != slog.LevelWarn {
 			t.Fatalf("level = %v, want WARN (%v)", got, err)
 		}
-		if !strings.Contains(err.Error(), "clock is 2h0m0s off") {
+		// The Date header has whole seconds, so the skew can read a second over.
+		if !strings.Contains(err.Error(), "clock is 2h0m") {
 			t.Fatalf("error = %q, want it to name the clock", err)
 		}
 	})
