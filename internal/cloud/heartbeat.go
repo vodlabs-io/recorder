@@ -3,8 +3,10 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 	"time"
@@ -21,7 +23,52 @@ const (
 	// until the next interval.
 	heartbeatRetryMin = 30 * time.Second
 	heartbeatRetryMax = 30 * time.Minute
+	// clockSkewLimit is how far this machine's clock may stray from the
+	// service's before a signed request is refused for its timestamp.
+	clockSkewLimit = 30 * time.Second
 )
+
+// apiUnreachableError is a request that never got an answer from the service:
+// a DNS failure, a reset, a timeout, or a certificate this machine doesn't
+// trust (often a proxy or antivirus intercepting TLS).
+type apiUnreachableError struct{ err error }
+
+func (e *apiUnreachableError) Error() string { return e.err.Error() }
+func (e *apiUnreachableError) Unwrap() error { return e.err }
+
+// clockSkewError is a refused request whose reply was dated far from this
+// machine's clock, so the clock, not the service, needs fixing.
+type clockSkewError struct {
+	skew   time.Duration
+	status string
+}
+
+func (e *clockSkewError) Error() string {
+	return fmt.Sprintf("%s: this computer's clock is %s off; set it to the correct time",
+		e.status, e.skew.Round(time.Second))
+}
+
+// clockSkew is how far now is from the reply's Date header, or 0 when it has
+// none.
+func clockSkew(resp *http.Response, now time.Time) time.Duration {
+	date, err := http.ParseTime(resp.Header.Get("Date"))
+	if err != nil {
+		return 0
+	}
+	return now.Sub(date).Abs()
+}
+
+// heartbeatFailureLevel is the level a failed heartbeat logs at. A failure of
+// this machine's own network or clock is the user's to fix, so it is only a
+// warning and stays out of error reports.
+func heartbeatFailureLevel(err error) slog.Level {
+	var unreachable *apiUnreachableError
+	var skewed *clockSkewError
+	if errors.As(err, &unreachable) || errors.As(err, &skewed) {
+		return slog.LevelWarn
+	}
+	return slog.LevelError
+}
 
 // heartbeatResponse is the heartbeat endpoint payload: version info plus the
 // current supported-platform list.
@@ -51,7 +98,8 @@ func (c *Client) handleHeartbeat(ctx context.Context) {
 				continue
 			}
 			if err := c.sendHeartbeat(ctx); err != nil {
-				log.Error("Failed to send heartbeat", "error", err, "retry_in", retry)
+				log.Log(ctx, heartbeatFailureLevel(err), "Failed to send heartbeat",
+					"error", err, "retry_in", retry)
 				next = retry
 				retry = min(retry*2, heartbeatRetryMax)
 			} else {
@@ -92,11 +140,16 @@ func (c *Client) heartbeat(ctx context.Context) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("heartbeat request failed: %w", err)
+		return fmt.Errorf("heartbeat request failed: %w", &apiUnreachableError{err})
 	}
 	defer resp.Body.Close()
 	c.noteResponse(ctx, resp)
 
+	if resp.StatusCode == http.StatusUnauthorized {
+		if skew := clockSkew(resp, time.Now()); skew > clockSkewLimit {
+			return fmt.Errorf("heartbeat failed: %w", &clockSkewError{skew: skew, status: resp.Status})
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("heartbeat failed: %s - %s", resp.Status, string(body))

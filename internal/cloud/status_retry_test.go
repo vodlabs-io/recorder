@@ -143,6 +143,36 @@ func TestRetryStatusFetch(t *testing.T) {
 		}
 	})
 
+	// A streamer the subscription doesn't hold gets the same answer every time,
+	// so the retry stops at the first refusal and gives up on nothing.
+	t.Run("stopsAtNotSubscribed", func(t *testing.T) {
+		var calls int
+		var mu sync.Mutex
+		refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			mu.Lock()
+			calls++
+			mu.Unlock()
+			http.Error(w, "Streamer not in your subscriptions", http.StatusForbidden)
+		}))
+		defer refused.Close()
+		apiBaseURL = refused.URL
+		defer func() { apiBaseURL = srv.URL }()
+
+		l := newLimiter(statusFetchRetries)
+		h := &recordingHandler{}
+		c.retryStatusFetch(context.Background(), slog.New(h), l, id, kindStatus)
+
+		if calls != 1 {
+			t.Fatalf("fetched %d times, want 1", calls)
+		}
+		if _, ok := h.find("Giving up on status fetch"); ok {
+			t.Fatal("gave up on a streamer the subscription doesn't hold")
+		}
+		if l.fails != 0 {
+			t.Fatalf("limiter counted %d failures, want 0", l.fails)
+		}
+	})
+
 	t.Run("stopsOnContextCancel", func(t *testing.T) {
 		l := newLimiter(statusFetchRetries)
 		ctx, cancel := context.WithCancel(context.Background())

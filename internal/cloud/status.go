@@ -32,6 +32,12 @@ type streamersResponse struct {
 // check is parked until a browser context appears.
 var ErrCheckNotRunnable = errors.New("cloud could not run that check")
 
+// errNotSubscribed is the cloud refusing a single-streamer check because this
+// client's subscription doesn't hold the streamer: one removed while its check
+// was queued, or one the subscription left out. A retry gets the same answer;
+// the next subscribe settles it.
+var errNotSubscribed = errors.New("streamer not in this client's subscription")
+
 // PlatformUnreachableError is a check that failed because this machine's own
 // request to the platform failed: a reset, a timeout, a DNS failure. Its message
 // is the service's account of which host and how.
@@ -134,6 +140,9 @@ func (c *Client) fetchStatus(ctx context.Context, opts statusOpts, id ...streame
 		}
 		if resp.StatusCode == http.StatusFailedDependency {
 			return nil, &PlatformUnreachableError{Detail: strings.TrimSpace(string(body))}
+		}
+		if resp.StatusCode == http.StatusForbidden && len(id) > 0 && !c.isBlocked() {
+			return nil, fmt.Errorf("%w: %s", errNotSubscribed, strings.TrimSpace(string(body)))
 		}
 		return nil, fmt.Errorf("status failed: %s - %s", resp.Status, string(body))
 	}

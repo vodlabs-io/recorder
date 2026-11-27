@@ -2,11 +2,16 @@ package cloud
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/nats-io/nkeys"
 
 	"github.com/vodlabs-io/recorder/internal/version"
 	"github.com/vodlabs-io/recorder/internal/vlconfig"
@@ -125,4 +130,94 @@ func TestHeartbeatResponseDecode(t *testing.T) {
 	if !slices.Equal(names, []string{"tiktok", "kick"}) {
 		t.Errorf("supported_platforms = %v, want [tiktok kick]", names)
 	}
+}
+
+// A heartbeat this machine's own network or clock defeats is the user's to
+// fix, so it logs as a warning and the Sentry bridge (which reports ERROR)
+// leaves it out. Any other failure stays an error.
+func TestHeartbeatFailureLevel(t *testing.T) {
+	key, err := nkeys.CreateUser()
+	if err != nil {
+		t.Fatalf("create user key: %v", err)
+	}
+	seed, err := key.Seed()
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	origURL := apiBaseURL
+	t.Cleanup(func() { apiBaseURL = origURL })
+
+	heartbeatWith := func(t *testing.T, h http.HandlerFunc) error {
+		t.Helper()
+		srv := httptest.NewServer(h)
+		t.Cleanup(srv.Close)
+		apiBaseURL = srv.URL
+		c := testClient(t)
+		c.nkeySeed = string(seed)
+		c.httpClient = srv.Client()
+		return c.heartbeat(t.Context())
+	}
+
+	t.Run("unreachable", func(t *testing.T) {
+		srv := httptest.NewServer(http.NotFoundHandler())
+		srv.Close() // nothing listens: the request never gets an answer
+		apiBaseURL = srv.URL
+		c := testClient(t)
+		c.nkeySeed = string(seed)
+		c.httpClient = &http.Client{}
+		err := c.heartbeat(t.Context())
+		if err == nil {
+			t.Fatal("heartbeat to a closed server succeeded")
+		}
+		if got := heartbeatFailureLevel(err); got != slog.LevelWarn {
+			t.Fatalf("level = %v, want WARN (%v)", got, err)
+		}
+	})
+
+	t.Run("untrustedCertificate", func(t *testing.T) {
+		srv := httptest.NewTLSServer(http.NotFoundHandler())
+		t.Cleanup(srv.Close)
+		apiBaseURL = srv.URL
+		c := testClient(t)
+		c.nkeySeed = string(seed)
+		c.httpClient = &http.Client{} // doesn't trust the test certificate
+		err := c.heartbeat(t.Context())
+		if err == nil {
+			t.Fatal("heartbeat past an untrusted certificate succeeded")
+		}
+		if got := heartbeatFailureLevel(err); got != slog.LevelWarn {
+			t.Fatalf("level = %v, want WARN (%v)", got, err)
+		}
+	})
+
+	t.Run("clockOff", func(t *testing.T) {
+		err := heartbeatWith(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Date", time.Now().Add(-2*time.Hour).UTC().Format(http.TimeFormat))
+			http.Error(w, "Timestamp expired or in future", http.StatusUnauthorized)
+		})
+		if got := heartbeatFailureLevel(err); got != slog.LevelWarn {
+			t.Fatalf("level = %v, want WARN (%v)", got, err)
+		}
+		if !strings.Contains(err.Error(), "clock is 2h0m0s off") {
+			t.Fatalf("error = %q, want it to name the clock", err)
+		}
+	})
+
+	t.Run("refusedWithClockRight", func(t *testing.T) {
+		err := heartbeatWith(t, func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "Invalid signature", http.StatusUnauthorized)
+		})
+		if got := heartbeatFailureLevel(err); got != slog.LevelError {
+			t.Fatalf("level = %v, want ERROR (%v)", got, err)
+		}
+	})
+
+	t.Run("serverError", func(t *testing.T) {
+		err := heartbeatWith(t, func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "boom", http.StatusInternalServerError)
+		})
+		if got := heartbeatFailureLevel(err); got != slog.LevelError {
+			t.Fatalf("level = %v, want ERROR (%v)", got, err)
+		}
+	})
 }
