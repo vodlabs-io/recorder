@@ -110,16 +110,22 @@ func (s *Service) handlePlatformLoginSet(req micro.Request) {
 	s.logger.With("func", "handlePlatformLoginSet").Info("Stored platform login",
 		"platform", payload.Platform, "cookie_count", len(cookies))
 
-	// Reply before the nudge: it reads every tracked streamer doc of the
-	// platform, and the desktop app's periodic login refresh gives up on this
-	// request after 5s, logging the refresh as failed though the login was
-	// stored.
 	respond(req, OK(sess.Status()))
 
 	// A fresh login should unlock tracked streamers already stuck at a login
-	// wall, without waiting for the next poll or a daemon restart.
-	s.nudgeRestrictedStreamers(context.Background(), payload.Platform)
+	// wall, without waiting for the next poll or a daemon restart. The nudge
+	// runs off the handler goroutine with a deadline: requests to this
+	// endpoint are served one at a time, so a key listing that never ends
+	// would leave every later sign-in and login refresh unanswered.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), nudgeTimeout)
+		defer cancel()
+		s.nudgeRestrictedStreamers(ctx, payload.Platform)
+	}()
 }
+
+// nudgeTimeout bounds one post-sign-in re-check sweep.
+const nudgeTimeout = 30 * time.Second
 
 // keepHealth carries prev's health over to sess when both hold the same
 // session cookie: a refresh re-storing the jar is the same login, and keeps

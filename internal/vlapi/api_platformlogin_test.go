@@ -344,3 +344,53 @@ func TestAccountLoginRejectsUnknownPlatform(t *testing.T) {
 		t.Fatal("expected set to be rejected for a platform without login support")
 	}
 }
+
+// stallingListKV is a KV whose key listing never finishes until its context
+// ends, like a watcher that missed its initial-values marker.
+type stallingListKV struct{ jetstream.KeyValue }
+
+type stallingLister struct{ keys chan string }
+
+func (l stallingLister) Keys() <-chan string { return l.keys }
+func (l stallingLister) Stop() error         { return nil }
+
+func (kv stallingListKV) ListKeysFiltered(ctx context.Context, _ ...string) (jetstream.KeyLister, error) {
+	l := stallingLister{keys: make(chan string)}
+	go func() {
+		<-ctx.Done()
+		close(l.keys)
+	}()
+	return l, nil
+}
+
+// TestAccountLoginSetSurvivesStalledNudge covers a re-check nudge whose key
+// listing never ends: later sign-ins and background refreshes must still get
+// a reply.
+func TestAccountLoginSetSurvivesStalledNudge(t *testing.T) {
+	keyring.MockInit()
+
+	nc, kv := newTestNATSKV(t)
+	store := platformauth.NewStore(
+		platformauth.WithFilePath(filepath.Join(t.TempDir(), "cookies.json")),
+	)
+	logger, err := vllog.NewFileLogger(vlconfig.LoggerConfig{Mode: "off", Level: "error"}, "test")
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	if _, err := Init(
+		nc, vlconfig.AppConfig{}, nil, nil, nil, nil, logger,
+		testSignals(), make(chan streamer.StreamerRef, 4),
+		stallingListKV{kv}, nil, StreamerFuncs{}, store, nil,
+	); err != nil {
+		t.Fatalf("vlapi init: %v", err)
+	}
+
+	for i := range 3 {
+		if _, err := Request[setLoginRequest, platformauth.Status](nc, "platformlogin.set", setLoginRequest{
+			Platform:     "twitch",
+			CookieHeader: "auth-token=secretvalue; login=someviewer",
+		}); err != nil {
+			t.Fatalf("set #%d: %v", i+1, err)
+		}
+	}
+}
