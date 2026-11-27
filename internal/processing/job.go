@@ -2,6 +2,7 @@ package processing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/vodlabs-io/recorder/internal/diskspace"
 	"github.com/vodlabs-io/recorder/internal/ffmpeg"
 	"github.com/vodlabs-io/recorder/internal/provenance"
 	"github.com/vodlabs-io/recorder/internal/recording"
@@ -145,7 +147,13 @@ func (j *job) process(ctx context.Context, logger *slog.Logger, s *Service) erro
 		}
 		j.vod.ProcessState = recording.ProcessFailed
 
-		logger.Error("Job processing failed", "error", err)
+		// A full disk is the user's to fix and the job's error says so, so it
+		// is only a warning and stays out of error reports.
+		level := slog.LevelError
+		if errors.Is(err, errDiskFull) || diskspace.IsNoSpace(err) {
+			level = slog.LevelWarn
+		}
+		logger.Log(ctx, level, "Job processing failed", "error", err)
 		if updateErr := j.updateStatus(ctx, db, "failed", err.Error()); updateErr != nil {
 			return updateErr
 		}
@@ -201,6 +209,9 @@ func (j *job) runFFmpeg(ctx context.Context, args []string, outputPath string, l
 	if err != nil {
 		if removeErr := os.Remove(outputPath); removeErr != nil && !os.IsNotExist(removeErr) {
 			logger.Warn("Failed to remove partial output after error", "error", removeErr)
+		}
+		if ffmpegNoSpace(err) {
+			return fmt.Errorf("ffmpeg failed: %w (%w)", errDiskFull, err)
 		}
 		return fmt.Errorf("ffmpeg failed: %w", err)
 	}
