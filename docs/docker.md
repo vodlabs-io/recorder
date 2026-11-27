@@ -5,7 +5,9 @@ the same daemon the desktop app uses, with the app's interface served as a
 web page, the **Web UI**, that you open from any browser on your network.
 
 The image is `ghcr.io/vodlabs-io/recorder`, for `linux/amd64` and
-`linux/arm64`.
+`linux/arm64`. The same image is on Docker Hub as
+[`vodlabsio/recorder`](https://hub.docker.com/r/vodlabsio/recorder), with the
+same tags and digests; use whichever registry you prefer.
 
 ## Quick start
 
@@ -304,6 +306,9 @@ workflow, with the [GitHub CLI](https://cli.github.com):
 ```sh
 gh attestation verify oci://ghcr.io/vodlabs-io/recorder:latest --repo vodlabs-io/recorder
 ```
+
+The same command checks the Docker Hub copy:
+`oci://docker.io/vodlabsio/recorder:latest`.
 
 ## Hardening
 
