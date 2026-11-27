@@ -384,6 +384,10 @@ func (c *Client) serve(
 		if errors.Is(err, errBlocked) {
 			return // every status is fetched again once the block lifts
 		}
+		if errors.Is(err, errNotSubscribed) {
+			log.Info("Status check refused: not in this client's subscription", "id", id, "kind", kind)
+			return
+		}
 		if err != nil {
 			started, holding := l.noteFailure(time.Now(), id.StreamerKey)
 			if holding {
@@ -539,6 +543,10 @@ func (c *Client) retryStatusFetch(
 
 		str, err := c.fetchSingleStatus(ctx, id, c.signsIn(id.Platform, kind), kind == kindStream)
 		if errors.Is(err, errBlocked) {
+			return
+		}
+		if errors.Is(err, errNotSubscribed) {
+			log.Info("Status check refused: not in this client's subscription", "id", id, "kind", kind)
 			return
 		}
 		if err != nil {
