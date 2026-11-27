@@ -1,0 +1,48 @@
+name: mirror-image
+
+# Copies an already-released image from ghcr.io/vodlabs-io/recorder to Docker
+# Hub (docker.io/vodlabsio/recorder) without rebuilding it, so both registries
+# serve the same digest, and the release build's provenance attestation, looked
+# up by digest, verifies the copy too. The release workflow pushes new releases
+# to both; this is for releases made before that, or to repair a tag.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to copy, without the v (e.g. 0.0.30)"
+        required: true
+      latest:
+        description: "Also move the 0.0 and latest tags to it"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Copy the image
+        env:
+          VERSION: ${{ inputs.version }}
+          LATEST: ${{ inputs.latest }}
+        run: |
+          set -euo pipefail
+          src="ghcr.io/vodlabs-io/recorder:${VERSION}"
+          dst="docker.io/vodlabsio/recorder"
+          tags=(-t "${dst}:${VERSION}")
+          if [ "$LATEST" = "true" ]; then
+            tags+=(-t "${dst}:${VERSION%.*}" -t "${dst}:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" "$src"
+          docker buildx imagetools inspect "${dst}:${VERSION}"
+
