@@ -5,7 +5,9 @@
 Download the installer for your system from the
 [latest release](https://github.com/vodlabs-io/recorder/releases/latest).
 After that, the app updates itself: the **Update** page shows when a new
-version is ready.
+version is ready. When a package manager installed the app into a folder you
+can't write to, the **Update** page still shows new versions and leaves
+installing them to the package manager.
 
 On first launch the app downloads the latest recorder daemon (`vlrecd`), so
 it needs an internet connection the first time it starts. If you installed
@@ -95,7 +97,9 @@ brew install vodlabs-io/tap/vod
 ```
 
 Homebrew then keeps `vod` up to date with `brew upgrade vod`; `vod update`
-updates the daemon and tells you to run it.
+updates the daemon and tells you to run it. The same goes for any package
+manager: `vod update` never replaces a `vod` that a package manager installed,
+or one it can't write to, and says how to update it instead.
 
 You can also download `cli_<os>_<arch>` and `daemon_<os>_<arch>` archives
 from a release and put `vod` and `vlrecd` on your `PATH` yourself.
