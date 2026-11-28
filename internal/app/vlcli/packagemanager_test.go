@@ -15,6 +15,7 @@ func TestManagedBy(t *testing.T) {
 		`C:\Users\ana\scoop\apps\vod\0.0.30\vod.exe`:           "scoop update vod",
 		`D:\Scoop\apps\vod\current\vod.exe`:                    "scoop update vod",
 		`C:\Users\ana\AppData\Local\Microsoft\WinGet\Packages\VodLabs.vod_Microsoft.Winget.Source_8wekyb3d8bbwe\vod.exe`: "winget upgrade VodLabs.vod",
+		`C:\Users\ana\AppData\Local\Microsoft\WinGet\Packages\VodLabs.vod__DefaultSource\vod.exe`:                        "winget upgrade VodLabs.vod",
 		`C:\ProgramData\chocolatey\lib\vod\tools\vod.exe`:                                                                "choco upgrade vod",
 		"/usr/bin/vod":                                            "your system's package manager",
 		"/Users/ana/.local/bin/vod":                               "",
