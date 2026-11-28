@@ -346,7 +346,10 @@ func (h *scrapeHandler) fetchDirect(msg *nats.Msg, scrapeReq scrapeRequest, pars
 	// cloud, which only ever names the platform.
 	if scrapeReq.AuthPlatform != "" && h.cookies != nil {
 		if login := vlconfig.LoginFlowFor(scrapeReq.AuthPlatform); login != nil && login.AllowsHost(parsedURL.Host) {
-			if sess, ok := h.cookies.Get(scrapeReq.AuthPlatform); ok {
+			if sess, ok, err := h.cookies.Fresh(ctx, h.httpClient, scrapeReq.AuthPlatform); ok {
+				if err != nil {
+					log.Warn("Could not renew the platform login", "platform", scrapeReq.AuthPlatform, "error", err)
+				}
 				req.Header.Set("Cookie", sess.Header())
 				log.Info("Attached platform login for authenticated check",
 					"platform", scrapeReq.AuthPlatform,

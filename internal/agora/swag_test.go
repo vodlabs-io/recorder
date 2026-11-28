@@ -264,6 +264,31 @@ func TestSwagRejectedLoginIsBadLogin(t *testing.T) {
 	}
 }
 
+func TestSwagRejectedLoginFallsBackToSignedOut(t *testing.T) {
+	var signed, unsigned int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			signed++
+			w.WriteHeader(http.StatusInternalServerError)
+			io.WriteString(w, `{"code":"AUTH_ERROR","message":"Signature has expired"}`)
+			return
+		}
+		unsigned++
+		io.WriteString(w, `{"agora_token_session_id":"tok","agora_exp":1795478533}`)
+	}))
+	t.Cleanup(srv.Close)
+	withSwag(t, srv)
+	ch, _ := Parse(swagChannel)
+	ch.login = &seatLogin{headers: map[string]string{"Authorization": "Bearer stale"}}
+	minted, err := mint(context.Background(), srv.Client(), ch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if minted.Token != "tok" || signed != 1 || unsigned != 1 {
+		t.Fatalf("token %q after %d signed and %d unsigned requests", minted.Token, signed, unsigned)
+	}
+}
+
 func TestOpenFailsWithTheMintErrorWhenTheChannelHasNoToken(t *testing.T) {
 	srv, _ := swagAPI(t, http.StatusInternalServerError, swagFree)
 	withSwag(t, srv)

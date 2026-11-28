@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -361,9 +362,12 @@ func (w *worker) seatLogin() map[string]string {
 	if host == "" || login == nil || !login.AllowsHost(host) {
 		return nil
 	}
-	sess, ok := w.cookies.Get(str.Platform)
+	sess, ok, err := w.cookies.Fresh(context.Background(), nil, str.Platform)
 	if !ok {
 		return nil
+	}
+	if err != nil {
+		w.logger.Warn("Could not renew the platform login", "platform", str.Platform, "error", err)
 	}
 	if login.Auth == nil {
 		w.logger.Info("Signing the stream's seat in with the platform login",

@@ -22,7 +22,8 @@ A login lets the recorder see what that account may watch, no more:
   ticketed broadcasts stay locked.
 - **SWAG**: ticketed shows and private shows your account has paid for. The
   recorder never buys anything: a show your account hasn't paid for stays
-  locked. Sign in to your own account, not as a guest.
+  locked. Sign in to your own account, not as a guest. If SWAG rejects the
+  login, free streams still record signed out.
 
 ## What happens to your login
 

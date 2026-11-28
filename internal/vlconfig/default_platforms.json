@@ -415,11 +415,17 @@
 			"cookie_domains": ["swag.live"],
 			"session_cookie": "vl_access_token",
 			"storage_cookies": [
-				{"key": "_accessToken", "cookie": "vl_access_token"}
+				{"key": "_accessToken", "cookie": "vl_access_token"},
+				{"key": "_refreshToken", "cookie": "vl_refresh_token"}
 			],
 			"auth": {
 				"scheme": "bearer-cookie",
-				"cookies": ["vl_access_token"]
+				"cookies": ["vl_access_token"],
+				"renew": {
+					"url": "https://api.swag.live/auth/tokens",
+					"cookie": "vl_refresh_token",
+					"field": "access_token"
+				}
 			}
 		}
 	},
