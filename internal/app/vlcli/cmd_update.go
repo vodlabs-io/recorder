@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/urfave/cli/v3"
@@ -73,8 +74,16 @@ func (a *App) updateCLI(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if installedByHomebrew(exePath) {
-		log.Printf("CLI %s is available. vod was installed with Homebrew: run 'brew upgrade vod'", latestVersion)
+	if name, update := managedBy(exePath); name != "" {
+		if update == name {
+			log.Printf("CLI %s is available. vod was installed by %s: update it there", latestVersion, name)
+		} else {
+			log.Printf("CLI %s is available. vod was installed with %s: run '%s'", latestVersion, name, update)
+		}
+		return nil
+	}
+	if !dirWritable(filepath.Dir(exePath)) {
+		log.Printf("CLI %s is available, but %s can't be replaced: update vod the way you installed it", latestVersion, exePath)
 		return nil
 	}
 	tmpDir, err := os.MkdirTemp("", "vod-update-*")

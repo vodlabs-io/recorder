@@ -1,6 +1,7 @@
 import { Updater } from "electrobun/main";
 import type { AppUpdateStatus } from "../../../shared/types";
 import { devBuildInfo, devBuildMessage } from "./dev-build";
+import { installFolderWritable, PACKAGE_MANAGER_MESSAGE } from "./install-folder";
 import { notifyOnce } from "./update-notify";
 
 // MARK: App self-update
@@ -41,6 +42,9 @@ export class AppUpdater {
   private onChange: () => void = () => {};
   // Coalesces an overlapping manual check and periodic tick into one run.
   private checking: Promise<AppUpdateStatus> | null = null;
+  // A read-only install folder means a package manager owns the app: checks
+  // still report a newer version, but nothing is downloaded or installed.
+  private managed = !installFolderWritable(process.execPath);
 
   setOnChange(cb: () => void): void {
     this.onChange = cb;
@@ -136,6 +140,15 @@ export class AppUpdater {
       const res = await Updater.checkForUpdate();
       if (res.error) {
         this.set({ phase: "error", message: res.error, progress: null });
+        return this.status;
+      }
+      if (this.managed) {
+        this.set({
+          phase: "disabled",
+          availableVersion: res.updateAvailable ? res.version : null,
+          message: PACKAGE_MANAGER_MESSAGE,
+          progress: null,
+        });
         return this.status;
       }
       if (!res.updateAvailable) {
