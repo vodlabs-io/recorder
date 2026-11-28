@@ -48,7 +48,18 @@ func (m *swagMinter) renew(ctx context.Context, client *http.Client, ch Channel)
 	return m.token(ctx, client, ch, ch.Account)
 }
 
+// token mints a token for account. When SWAG rejects the login, it mints one
+// signed out, which still opens a free stream.
 func (m *swagMinter) token(ctx context.Context, client *http.Client, ch Channel, account string) (string, time.Time, error) {
+	token, expires, err := m.tokenAs(ctx, client, ch, account)
+	if errors.Is(err, ErrBadLogin) && ch.signedIn() {
+		ch.login = nil
+		return m.tokenAs(ctx, client, ch, account)
+	}
+	return token, expires, err
+}
+
+func (m *swagMinter) tokenAs(ctx context.Context, client *http.Client, ch Channel, account string) (string, time.Time, error) {
 	ctx, cancel := context.WithTimeout(ctx, swagRequestTimeout)
 	defer cancel()
 	req, err := m.request(ctx, "streams/"+url.PathEscape(ch.Room)+"/token")

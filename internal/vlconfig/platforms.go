@@ -213,6 +213,18 @@ type authScheme struct {
 	// Origin is the origin the signature is bound to, sent alongside as
 	// X-Origin. Empty means the scheme has no origin to bind.
 	Origin string `json:"origin,omitempty"`
+	// Renew, when set, lets the daemon renew the scheme's token itself once
+	// it has expired, from a longer-lived token the jar also holds.
+	Renew *TokenRenewal `json:"renew,omitempty"`
+}
+
+// TokenRenewal describes how a short-lived bearer token is renewed: a POST to
+// URL carrying the jar's Cookie as a bearer credential, answered by JSON whose
+// Field holds the new token. URL must be on the login's CookieDomains.
+type TokenRenewal struct {
+	URL    string `json:"url"`
+	Cookie string `json:"cookie"`
+	Field  string `json:"field"`
 }
 
 // AllowsHost reports whether cookies for this platform may be attached to a
@@ -524,7 +536,8 @@ func authSchemeEqual(a, b *authScheme) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.Scheme == b.Scheme && a.Origin == b.Origin && slices.Equal(a.Cookies, b.Cookies)
+	return a.Scheme == b.Scheme && a.Origin == b.Origin && slices.Equal(a.Cookies, b.Cookies) &&
+		(a.Renew == nil) == (b.Renew == nil) && (a.Renew == nil || *a.Renew == *b.Renew)
 }
 
 // rateLimitEqual compares two optional rate limits by value.
